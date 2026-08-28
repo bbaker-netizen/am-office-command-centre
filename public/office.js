@@ -2335,18 +2335,36 @@
           <h2>Sign-in is not switched on yet</h2>
           <p>Until somebody here has a PIN, the app still works the old way: a name picked off a list, which anybody can pick. Issue the first PIN below and from then on nobody gets in without their own four digits.</p>
         </div>`}
-        <div class="user-list">
-          ${(S.catalog.users || []).map(u => `<div class="user-row">
-            <div><strong>${esc(u.name)}</strong>
-              <div class="muted small">${u.pin && u.pin.hash
-                ? 'PIN issued' + (u.pinSetAt ? ' ' + esc(fmtWhen(u.pinSetAt)) : '') + (u.pinSetBy ? ' by ' + esc(u.pinSetBy) : '')
-                : 'no PIN yet, cannot sign in'}</div></div>
-            <div class="row tight">
-              <button class="btn-ghost upin" data-n="${esc(u.name)}">${u.pin && u.pin.hash ? 'Reset the PIN' : 'Issue a PIN'}</button>
-              <button class="btn-ghost utog" data-n="${esc(u.name)}">${u.active === false ? 'Turn back on' : 'Take access away'}</button>
-            </div>
-          </div>`).join('')}
-        </div>
+        ${(() => {
+          /* Names that were only ever typed in to try the thing out can come
+             straight off the list. A name that has actually done something
+             cannot, because the log says "Zach took NEG-44 to the Park job" and
+             deleting Zach would leave that sentence pointing at nobody. Those
+             go quiet instead, and fold away out of the daily list. */
+          const did = new Set(S.events.map(e => e.by).filter(Boolean));
+          const all = S.catalog.users || [];
+          const here = all.filter(u => u.active !== false);
+          const gone = all.filter(u => u.active === false);
+          const row = u => {
+            const used = did.has(u.name);
+            return `<div class="user-row">
+              <div><strong>${esc(u.name)}</strong>
+                <div class="muted small">${u.pin && u.pin.hash
+                  ? 'PIN issued' + (u.pinSetAt ? ' ' + esc(fmtWhen(u.pinSetAt)) : '') + (u.pinSetBy ? ' by ' + esc(u.pinSetBy) : '')
+                  : 'no PIN yet, cannot sign in'}${used ? ' · has movements against this name' : ' · has never done anything in the app'}</div></div>
+              <div class="row tight">
+                <button class="btn-ghost upin" data-n="${esc(u.name)}">${u.pin && u.pin.hash ? 'Reset the PIN' : 'Issue a PIN'}</button>
+                <button class="btn-ghost utog" data-n="${esc(u.name)}">${u.active === false ? 'Turn back on' : 'Take access away'}</button>
+                ${used ? '' : `<button class="btn-ghost udel" data-n="${esc(u.name)}">Remove</button>`}
+              </div>
+            </div>`;
+          };
+          return `<div class="user-list">${here.map(row).join('') || '<p class="muted">Nobody on the list yet.</p>'}</div>
+            ${gone.length ? `<details class="grp-fold">
+              <summary><span class="grp">No longer here</span><span class="grp-tally">${gone.length}</span></summary>
+              <div class="user-list">${gone.map(row).join('')}</div>
+            </details>` : ''}`;
+        })()}
         <div class="who-add"><input id="uNew" placeholder="Add somebody"><button class="btn" id="uAdd">Add</button></div>
         ${AM.why('A PIN is shown once, here, when it is issued. Nobody can read it back afterwards, including this screen, so if somebody forgets theirs it gets reset rather than looked up. On their own phone they can put a fingerprint behind it the first time they sign in.', 'What happens when somebody forgets their PIN')}
       </div>
@@ -2452,9 +2470,39 @@
       u.active = u.active === false;
       await AM.saveCatalog(); AM.render();
     });
+    /* Taking a name off for good. Only offered where nothing in the log carries
+       that name, and it still asks, because the one thing worse than a test
+       name on the list is a real person quietly disappearing off it. */
+    $$('.udel').forEach(b => b.onclick = async () => {
+      const name = b.dataset.n;
+      if (S.events.some(e => e.by === name)) {
+        AM.toast('That name has movements against it now, so it stays. Take its access away instead.', 'warn');
+        return;
+      }
+      if (name === S.me) { AM.toast('That is the name this phone is signed in as.', 'warn'); return; }
+      AM.modal(`
+        <h3>Remove ${esc(name)}?</h3>
+        <p class="muted small">Nothing in the app was ever done under this name, so there is nothing to lose. It comes straight off the list.</p>
+        <div class="row"><button class="btn big" id="udYes">Remove ${esc(name)}</button>
+        <button class="btn-ghost" onclick="AM.closeModal()">Keep it</button></div>
+      `, el => {
+        $('#udYes', el).onclick = async () => {
+          S.catalog.users = S.catalog.users.filter(x => x.name !== name);
+          await AM.saveCatalog();
+          AM.closeModal();
+          AM.toast(name + ' is off the list.');
+          AM.render();
+        };
+      });
+    });
+
     $('#uAdd').onclick = async () => {
       const n = $('#uNew').value.trim(); if (!n) return;
+      if ((S.catalog.users || []).some(x => x.name.toLowerCase() === n.toLowerCase())) {
+        AM.toast('That name is already on the list.', 'warn'); return;
+      }
       S.catalog.users.push({ id: AM.uid(), name: n, active: true });
+      $('#uNew').value = '';
       await AM.saveCatalog(); AM.render();
     };
 

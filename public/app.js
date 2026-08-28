@@ -758,11 +758,21 @@ function renderTabs() {
      screens and not others reads as broken, not as tidy. */
   const settings =
     `<button class="tab-set" data-h="#/setup" ${AM.isSettings(S.route) ? 'aria-current="true"' : ''}>Settings</button>`;
+  /* On a phone these used to wrap onto four lines and eat a third of the
+     screen before any of the work showed. The tabs now scroll sideways in one
+     line, and Settings and the door to the other side are pinned outside the
+     scroller, so the two controls people hunt for are always where they were
+     left. */
   $('#tabs').innerHTML =
-    tabs.map(([h, label]) =>
-      `<button data-h="${h}" ${S.route === h ? 'aria-current="true"' : ''}>${esc(label)}</button>`
-    ).join('') + `<span class="tabs-gap"></span>` + settings + swap;
+    `<div class="tab-scroll">` +
+      tabs.map(([h, label]) =>
+        `<button data-h="${h}" ${S.route === h ? 'aria-current="true"' : ''}>${esc(label)}</button>`
+      ).join('') +
+    `</div><div class="tab-fixed">` + settings + swap + `</div>`;
   $$('#tabs button').forEach(b => b.onclick = () => go(b.dataset.h));
+  // Keep the tab you are on in view when the bar is scrolled.
+  const cur = $('#tabs .tab-scroll button[aria-current="true"]');
+  if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 function renderStatus() {
@@ -788,6 +798,27 @@ function go(hash) {
 AM.go = go;
 AM.routeOf = routeOf;
 
+/* ------------------------------------------------------------ wide tables ---
+   The office tables have up to nine columns. On a desk that is fine. On a phone
+   a nine column table either crushes every column into a sliver or shoves the
+   whole page sideways, and the second one is what was happening.
+
+   Rather than remembering a wrapper at fifteen call sites, and forgetting it on
+   the sixteenth, every table gets one here after the screen is drawn. The table
+   scrolls sideways inside its own box and the page does not move. Done once, in
+   one place, so a table added later is handled without anybody thinking about
+   it. */
+function wrapTables(view) {
+  for (const t of $$('table.tbl', view)) {
+    if (t.parentElement && t.parentElement.classList.contains('tbl-scroll')) continue;
+    const box = document.createElement('div');
+    box.className = 'tbl-scroll';
+    t.parentNode.insertBefore(box, t);
+    box.appendChild(t);
+  }
+}
+AM.wrapTables = wrapTables;
+
 function render() {
   if (!S.catalog) return;
   if (S.locked) { renderLock(); return; }
@@ -799,6 +830,7 @@ function render() {
   const fn = AM.screens[r] || AM.screens['#/'];
   try {
     view.innerHTML = fn();
+    wrapTables(view);
     const after = AM.after[r];
     if (after) after();
   } catch (e) {

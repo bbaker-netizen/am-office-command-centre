@@ -50,14 +50,20 @@ header.topbar {
 .wordmark span { opacity: .6; font-weight: normal; }
 @media (max-width: 700px) { .wordmark { display: none; } }
 
-nav.tabs { display: flex; gap: 2px; flex: 1; flex-wrap: wrap; align-items: center; }
+nav.tabs { display: flex; gap: 6px; flex: 1; align-items: center; min-width: 0; }
+/* The work scrolls; Settings and the door do not. */
+.tab-scroll {
+  display: flex; gap: 2px; align-items: center; flex: 1; min-width: 0;
+  overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.tab-scroll::-webkit-scrollbar { display: none; }
+.tab-fixed { display: flex; gap: 6px; align-items: center; flex: none; }
 nav.tabs button {
   background: transparent; border: 0; color: rgba(255,255,255,.74);
   font-size: 14px; padding: 8px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap;
 }
 nav.tabs button:hover { background: rgba(255,255,255,.10); color: #fff; }
 nav.tabs button[aria-current="true"] { background: rgba(255,255,255,.18); color: #fff; font-weight: bold; }
-nav.tabs .tabs-gap { flex: 1; min-width: 14px; }
 /* Reads as a door, not as a status light. It used to sit next to the name and
    the online pill and everybody scanned straight past it. */
 nav.tabs .tab-swap {
@@ -368,6 +374,22 @@ button.hint:hover { background: #e4ebf1; }
 code { background: var(--line-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
 /* ------------------------------------------------------------------ tables */
+/* A wide table scrolls inside its own box rather than pushing the page
+   sideways. The shadow on the right edge is the only hint anybody gets that
+   there is more of it, so it stays. */
+.tbl-scroll {
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  margin-top: 8px; max-width: 100%;
+}
+.tbl-scroll > .tbl { margin-top: 0; }
+@media (max-width: 700px) {
+  .tbl-scroll { background:
+      linear-gradient(90deg, var(--panel) 30%, rgba(255,255,255,0)) left / 24px 100% no-repeat,
+      linear-gradient(90deg, rgba(255,255,255,0), var(--panel) 70%) right / 24px 100% no-repeat,
+      radial-gradient(farthest-side at 100% 50%, rgba(18,33,46,.16), transparent) right / 10px 100% no-repeat;
+    background-attachment: local, local, scroll; }
+  .tbl-scroll > .tbl { min-width: 560px; }
+}
 .tbl { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
 .tbl th { text-align: left; background: var(--line-2); padding: 9px 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-2); }
 .tbl td { padding: 9px 10px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
