@@ -50,6 +50,17 @@ header.topbar {
 .wordmark span { opacity: .6; font-weight: normal; }
 @media (max-width: 700px) { .wordmark { display: none; } }
 
+/* On a phone the logo and who-you-are share the top line and the tabs get a
+   line of their own underneath. Squeezing all three onto one row is what had
+   the tabs collapsing to nothing and "Back to the shop" printing on top of the
+   sync pill. */
+@media (max-width: 700px) {
+  .topbar-inner { row-gap: 4px; padding-bottom: 4px; }
+  .brandmark { order: 1; }
+  .statusbar { order: 2; margin-left: auto; }
+  nav.tabs { order: 3; flex-basis: 100%; width: 100%; }
+}
+
 nav.tabs { display: flex; gap: 6px; flex: 1; align-items: center; min-width: 0; }
 /* The work scrolls; Settings and the door do not. */
 .tab-scroll {
