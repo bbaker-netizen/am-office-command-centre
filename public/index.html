@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1917">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="A&amp;M Inventory">
+<title>A&amp;M Inventory</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="am-logo.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%231a1917'/><text x='50' y='70' font-size='54' font-family='Arial' font-weight='bold' fill='%23329dbb' text-anchor='middle'>A</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brandmark" href="#/" title="A&amp;M Abatement Services">
+      <img src="am-logo.png" alt="A&amp;M Abatement Services" onerror="this.remove()">
+      <span class="wordmark">A&amp;M <span>Inventory</span></span>
+    </a>
+    <nav class="tabs" id="tabs"></nav>
+    <div class="statusbar" id="statusbar"></div>
+  </div>
+</header>
+
+<main id="view">
+  <div class="loading">Opening the shop…</div>
+</main>
+
+<div id="scanlayer" hidden></div>
+<div id="modal" hidden></div>
+<div id="toast" hidden></div>
+
+<footer class="foot" id="foot"></footer>
+
+<script src="vendor/html5-qrcode.min.js"></script>
+<script src="vendor/qrcode.min.js"></script>
+<script src="seed.js"></script>
+<script src="sop.js"></script>
+<script src="app.js"></script>
+<script src="crew.js"></script>
+<script src="office.js"></script>
+<script src="tour.js"></script>
+<script>window.AM && AM.boot();</script>
+</body>
+</html>
