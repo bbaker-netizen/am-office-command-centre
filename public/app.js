@@ -747,8 +747,12 @@ AM.isSettings = r => SETTINGS_ROUTES.includes(r);
 function renderTabs() {
   const office = AM.isOffice(S.route);
   const tabs = office ? OFFICE_TABS : CREW_TABS;
+  /* "Back to the shop" is 135 pixels of a 375 pixel phone, and every one of
+     them is a pixel of tab nobody can read. It says the short thing on a phone
+     and the whole thing where there is room. */
+  const narrow = window.matchMedia('(max-width: 700px)').matches;
   const swap = office
-    ? `<button class="tab-swap" data-h="#/">Back to the shop</button>`
+    ? `<button class="tab-swap" data-h="#/">${narrow ? 'The shop' : 'Back to the shop'}</button>`
     : `<button class="tab-swap" data-h="#/dash" data-tour="office">Office</button>`;
   /* Settings sits in the same place on both sides, always.
      It used to appear only on the office side, on the theory that the crew have
