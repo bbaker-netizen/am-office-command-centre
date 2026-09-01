@@ -534,19 +534,86 @@ function buzz(ms = 30) { try { navigator.vibrate && navigator.vibrate(ms); } cat
 AM.buzz = buzz;
 
 /* A short click on a good scan. Gloves and ear defenders mean the eyes are the
-   last thing to confirm anything, so the phone has to say it another way. */
+   last thing to confirm anything, so the phone has to say it another way.
+
+   THE BEEP, AND WHY IT KEPT GOING QUIET
+   A phone will not make a sound until the person has touched the screen. The
+   old version built the sound machine the first time it needed a beep, and the
+   first time it needed a beep was inside a camera callback rather than a tap.
+   So the phone handed back a silent one, and it stayed silent for the rest of
+   the day. On top of that, iOS puts the sound machine to sleep every time the
+   app goes to the background or a call comes in, and it does not wake up on
+   its own.
+
+   So it is built on the first tap anywhere in the app, woken again on every
+   tap after that, and every beep asks it to wake before it plays. Do not move
+   the building of it back inside beep(). */
 let audioCtx = null;
-function beep(ok = true) {
+let audioPrimed = false;
+
+function audioUnlock() {
   try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-    o.frequency.value = ok ? 880 : 220;
-    g.gain.value = 0.06;
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start(); o.stop(audioCtx.currentTime + (ok ? 0.08 : 0.22));
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!audioCtx) audioCtx = new Ctx();
+    if (audioCtx.state !== 'running' && audioCtx.resume) audioCtx.resume();
+    if (!audioPrimed) {
+      /* A silent blip. Some phones only really open the speaker once something
+         has actually been pushed through it. */
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      g.gain.value = 0.0001;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + 0.01);
+      audioPrimed = true;
+    }
   } catch (e) {}
 }
+AM.audioUnlock = audioUnlock;
+
+/* Every tap, not only the first. The first builds it; the rest wake it after
+   the phone has been in a pocket. */
+['pointerdown', 'touchend', 'keydown'].forEach(ev =>
+  window.addEventListener(ev, audioUnlock, { capture: true, passive: true }));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) audioUnlock(); });
+
+/* Ramped on and off rather than switched, because a square edge on a phone
+   speaker is a click nobody hears over a running negative air unit. */
+function tone(freq, secs, at) {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(0.22, at + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + secs);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(at); o.stop(at + secs + 0.02);
+}
+
+/* One shape of sound per outcome, and the buzz always fires, because a phone
+   on silent in a pocket is the normal state of a phone on a site. */
+function play(shape, fallbackBuzz) {
+  try {
+    audioUnlock();
+    if (!audioCtx) { buzz(fallbackBuzz); return; }
+    const go = () => { try { shape(audioCtx.currentTime + 0.01); } catch (e) {} };
+    if (audioCtx.state === 'running') go();
+    else if (audioCtx.resume) audioCtx.resume().then(go).catch(() => {});
+  } catch (e) {}
+}
+
+function beep(ok = true) {
+  if (ok) play(t => tone(880, 0.09, t), 30);
+  else play(t => { tone(300, 0.14, t); tone(200, 0.18, t + 0.16); }, 120);
+  buzz(ok ? 30 : 120);
+}
 AM.beep = beep;
+
+/* Already counted. Two quick clicks, deliberately neither the good beep nor
+   the bad one: nothing has gone wrong, it is just on the list already. */
+function beepDup() {
+  play(t => { tone(660, 0.06, t); tone(660, 0.06, t + 0.09); }, 60);
+  buzz(60);
+}
+AM.beepDup = beepDup;
 
 /* -------------------------------------------------------------------- modal */
 
@@ -643,10 +710,21 @@ async function openScanner(onCode, opts = {}) {
   scanner = new Html5Qrcode('reader', { verbose: false });
   const config = { fps: 12, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
 
+  /* ONE CODE, ONE HIT
+     A phone held steady on a tag re-reads it twelve times a second, so the
+     same code inside the window is the same scan, not a second one. It was a
+     second and a half, which is less than the time it takes to look up from
+     the tag, and that is where a lot of the double counting came from.
+
+     The second guard matters more: the camera keeps running behind a quantity
+     pad or a warning, and it will happily read the same tag four more times
+     while somebody is typing into it. Nothing lands while a modal is open. */
   let lastCode = '', lastAt = 0;
   const handle = text => {
     const t = Date.now();
-    if (text === lastCode && t - lastAt < 1400) return;   // one code, one hit
+    const m = $('#modal');
+    if (m && !m.hidden) return;
+    if (text === lastCode && t - lastAt < 2500) return;
     lastCode = text; lastAt = t;
     onCode(String(text).trim());
   };

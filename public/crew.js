@@ -64,25 +64,108 @@
     session = { mode, jobId, lines: [] };
   }
 
-  function sessionRow(r, n, scanned) {
-    return `<div class="line ${scanned ? '' : 'unscanned'}">
+  /* The same row twice over: a line in the running feed inside the camera,
+     where it is just confirmation and nothing is tappable, and a line on the
+     load list, where it can still be corrected. Only the second one carries
+     the buttons. */
+  function sessionRow(r, n, scanned, editable) {
+    return `<div class="line ${scanned ? '' : 'unscanned'}${editable ? ' editable' : ''}">
       <div class="line-main">
         <strong>${esc(nameOf(r))}</strong>
         <span class="line-id">${esc(r.item.id)}</span>
       </div>
       <div class="line-qty">${esc(qty(n))}${r.kind === 'stock' ? ' ' + esc(r.item.uom || '') : ''}</div>
       ${scanned ? '' : '<div class="line-flag">typed in</div>'}
+      ${editable ? `<div class="line-fix">
+        ${r.kind === 'stock' ? `<button class="ln-fix" data-id="${esc(r.item.id)}">Fix the count</button>` : ''}
+        <button class="ln-rm" data-id="${esc(r.item.id)}">Take it off</button>
+      </div>` : ''}
     </div>`;
   }
 
-  /* Adds a line, or bumps the one already there. Scanning the same code twice
-     means two of them, which is what happens when somebody is loading a van. */
+  /* Adds a line, or bumps the one already there.
+
+     A SERIALISED MACHINE IS ONE MACHINE
+     Scanning a shelf card twice means two boxes, because there are two boxes,
+     and that is exactly what happens when somebody is loading a van. Scanning
+     a machine twice does not mean two machines: there is only ever one NEG-44,
+     and a camera resting on a tag re-reads it whether anybody meant it to or
+     not. So bulk stock adds up and a machine is refused, with a sound of its
+     own so nobody thinks the scan missed and tries again. */
   function addLine(r, n, scanned) {
     const existing = session.lines.find(l => l.id === r.item.id);
+    if (existing && r.kind === 'unit') {
+      AM.beepDup();
+      AM.toast(`${nameOf(r)} is already on this load.`, 'warn');
+      return;
+    }
     if (existing) { existing.qty += n; if (!scanned) existing.scanned = false; }
     else session.lines.push({ id: r.item.id, kind: r.kind, qty: n, scanned: !!scanned });
-    AM.beep(true); AM.buzz();
+    AM.beep(true);
     AM.scanFeed(sessionRow(r, n, scanned));
+  }
+
+  /* It is on another job. Not an error and not a refusal: the machine is in
+     somebody's hand at a van door, so the app offers the one action that keeps
+     the book straight, which is a move. Cost picks up on this job from now and
+     the old job's line settles. */
+  function alreadyOutModal(r, at) {
+    AM.modal(`
+      <h3>${esc(nameOf(r))} is out on ${esc(jobLabel(at.jobId))}</h3>
+      <p class="muted small">It has not come back through the shop. If it is here in front of you, move it across rather than checking it out twice, and ${esc(jobLabel(at.jobId))} stops waiting for it.</p>
+      <div class="row"><button class="btn big" id="aoMove">Move it to ${esc(jobLabel(session.jobId))}</button>
+      <button class="btn-ghost" onclick="AM.closeModal()">Leave it alone</button></div>
+    `, el => {
+      $('#aoMove', el).onclick = async () => {
+        await AM.record({ type: 'TRANSFER', itemId: r.item.id, fromJobId: at.jobId,
+          toJobId: session.jobId, qty: 1, scanned: true });
+        AM.closeModal();
+        AM.beep(true);
+        AM.toast(`Moved off ${jobLabel(at.jobId)}. It is on this job now, so it is not on the list below.`);
+      };
+    });
+  }
+
+  /* THE MANUAL FIX
+     The camera is not always right and neither is the man holding it. If three
+     beeps went and two boxes went in the van, he has to be able to say two
+     without starting the load again. Nothing on this list has reached the book
+     yet, so this is an edit and not a movement. Once it is sent, a correction
+     is a movement, and that lives on the tear down screen. */
+  function fixLineModal(id) {
+    const l = session.lines.find(x => x.id === id);
+    const r = findItem(id);
+    if (!l || !r) return;
+    const step = partialOK(r.item) ? 0.25 : 1;
+    AM.modal(`
+      <h3>${esc(nameOf(r))}</h3>
+      <p class="muted small">On the list: ${esc(qty(l.qty))}${r.item.uom ? ' ' + esc(r.item.uom) : ''}. Set it to what actually went in the van.</p>
+      <label class="fld">How many<input id="lnN" type="number" inputmode="decimal" step="${step}" min="0" value="${l.qty}"></label>
+      <div class="row"><button class="btn big" id="lnGo">Set it</button>
+      <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button></div>
+    `, el => {
+      const go = () => {
+        let v = parseFloat($('#lnN', el).value);
+        if (!isFinite(v) || v < 0) { AM.toast('Put a number in.', 'warn'); return; }
+        v = Math.round(v * 100) / 100;
+        AM.closeModal();
+        if (v === 0) { removeLine(id); return; }
+        l.qty = v;
+        AM.toast('Set to ' + qty(v));
+        AM.render();
+      };
+      $('#lnGo', el).onclick = go;
+      const i = $('#lnN', el);
+      if (i) { i.onkeydown = e => { if (e.key === 'Enter') go(); };
+        setTimeout(() => { i.focus(); i.select && i.select(); }, 60); }
+    });
+  }
+
+  function removeLine(id) {
+    const r = findItem(id);
+    session.lines = session.lines.filter(x => x.id !== id);
+    AM.toast((r ? nameOf(r) : id) + ' off the list.');
+    AM.render();
   }
 
   /* Bulk stock needs a number. Serialised machines never do: one code, one
@@ -135,6 +218,21 @@
         AM.record({ type: 'FOUND', itemId: r.item.id, note: 'turned up, scanned back into use' });
         AM.toast(`${nameOf(r)} was on the lost list. Off it now.`, 'ok');
       }
+      /* Already out. One machine cannot be on two jobs at once, and sending it
+         out a second time puts it out twice in the book while leaving a line
+         standing open on the job it never came back from. Same job is a plain
+         double scan and is simply refused. A different job is a real machine
+         standing on a real site, so it is offered as a move, which settles the
+         old job's line the way a return would. */
+      if (at && at.where === 'job') {
+        AM.beepDup();
+        if (!session || at.jobId === session.jobId) {
+          AM.toast(`${nameOf(r)} is already out on this job.`, 'warn');
+          return;
+        }
+        alreadyOutModal(r, at);
+        return;
+      }
     }
     if (r.kind === 'stock') askQty(r, n => addLine(r, n, scanned));
     else addLine(r, 1, scanned);
@@ -170,7 +268,7 @@
       };
       draw('');
       $('#plq', el).oninput = e => draw(e.target.value);
-      setTimeout(() => $('#plq', el).focus(), 60);
+      setTimeout(() => { const el_ = $('#plq', el); el_ && el_.focus(); }, 60);
     });
   }
   AM.pickList = pickList;
@@ -472,7 +570,7 @@
         AM.closeModal();
         AM.toast(late ? 'Sent. It is after two though, so ring the shop as well.' : 'Sent. The shop has it for the morning.', late ? 'warn' : 'ok');
       };
-      setTimeout(() => $('#rqWhat', el).focus(), 60);
+      setTimeout(() => { const el_ = $('#rqWhat', el); el_ && el_.focus(); }, 60);
     });
   }
 
@@ -962,7 +1060,7 @@
         if (after) after();
         AM.render();
       };
-      setTimeout(() => $('#inQty', el).focus(), 60);
+      setTimeout(() => { const el_ = $('#inQty', el); el_ && el_.focus(); }, 60);
     });
   }
 
@@ -1286,7 +1384,7 @@
       };
       $('#njAb', el).onclick = () => make('abatement');
       $('#njRe', el).onclick = () => make('restoration');
-      setTimeout(() => $('#njName', el).focus(), 60);
+      setTimeout(() => { const el_ = $('#njName', el); el_ && el_.focus(); }, 60);
     });
   }
 
@@ -1354,7 +1452,7 @@
         })()}
         ${session.lines.length ? `<div class="ret-list" data-tour="session">${session.lines.map(l => {
           const r = findItem(l.id);
-          return r ? sessionRow(r, l.qty, l.scanned) : '';
+          return r ? sessionRow(r, l.qty, l.scanned, true) : '';
         }).join('')}</div>` : '<p class="muted">Nothing on the list yet.</p>'}
         <div class="row">
           <button class="btn big" id="ssDone" data-tour="send" ${session.lines.length ? '' : 'disabled'}>Send it to the job</button>
@@ -1399,7 +1497,7 @@
             AM.render();
             openOutScanner();
           };
-          setTimeout(() => $('#pmWhy', el).focus(), 60);
+          setTimeout(() => { const el_ = $('#pmWhy', el); el_ && el_.focus(); }, 60);
         });
       };
       return;
@@ -1430,6 +1528,8 @@
     };
     $('#ssList').onclick = () => pickList(id => { handleCode(id, false); AM.render(); });
     $('#ssCancel').onclick = () => { session = null; AM.render(); };
+    $$('.ln-fix').forEach(b => b.onclick = () => fixLineModal(b.dataset.id));
+    $$('.ln-rm').forEach(b => b.onclick = () => removeLine(b.dataset.id));
     $('#ssDone').onclick = async () => {
       const blocked = [];
       for (const l of session.lines) {

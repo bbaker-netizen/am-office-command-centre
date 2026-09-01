@@ -316,7 +316,7 @@
           AM.closeModal();
           AM.toast('Written off and off the fleet.', 'warn');
         };
-        setTimeout(() => $('#woNote', el).focus(), 60);
+        setTimeout(() => { const el_ = $('#woNote', el); el_ && el_.focus(); }, 60);
       });
     });
   };
@@ -914,7 +914,7 @@
         if (after) after();
         AM.render();
       };
-      setTimeout(() => $('#rvQty', el).focus(), 60);
+      setTimeout(() => { const el_ = $('#rvQty', el); el_ && el_.focus(); }, 60);
     });
   }
   AM.receiveModal = receiveModal;

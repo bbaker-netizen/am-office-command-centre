@@ -265,6 +265,20 @@ main { min-height: 60vh; }
 .inc.fix { border-color: var(--line); color: var(--muted); font-weight: normal; }
 .inc.fix:hover { background: var(--line-2); color: var(--ink); }
 
+/* Correcting a line before the load is sent. Full width under the row rather
+   than squeezed beside the number, because these get pressed in gloves at a
+   van door and a 40px target is the floor. */
+.line.editable { flex-wrap: wrap; }
+.line.editable .line-main { flex: 1 1 180px; }
+.line-fix { display: flex; gap: 6px; flex: 1 1 100%; margin-top: 4px; }
+.line-fix button {
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+  padding: 9px 13px; border-radius: 7px; cursor: pointer; min-height: 40px; font: inherit;
+}
+.line-fix button:hover { background: var(--line-2); color: var(--ink); }
+.line-fix .ln-rm { border-color: var(--bad); color: var(--bad); }
+.line-fix .ln-rm:hover { background: var(--bad); color: #fff; }
+
 /* The counter. Thumb-sized on purpose: this gets used at a van door, in
    gloves, in the dark, by somebody who wants to be driving home. */
 .ret-count { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
