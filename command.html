@@ -1,0 +1,1924 @@
+<!doctype html><html lang="en-CA"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>A&M Office Command Centre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ink:#1a1917; --ink-2:#4a4844; --ink-3:#77746d;
+  --rule:#ddd9d2; --rule-soft:#eae7e1;
+  --ground:#f4f3ef; --panel:#fff; --panel-2:#faf9f6; --bar:#1a1917; --bar-ink:#f4f3ef; --bar-3:#9a968e;
+  --cyan:#329dbb; --cyan-deep:#1f7691; --cyan-wash:#e6f2f6;
+  --stop:#b3341f; --stop-wash:#fbeeeb;
+  --caution:#a86c0e; --caution-wash:#fcf3e3;
+  --clear:#3f7d4e; --clear-wash:#ecf4ed;
+  --shadow:0 1px 2px rgba(26,25,23,.05), 0 8px 24px -16px rgba(26,25,23,.28);
+  --scrim:rgba(26,25,23,.38);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ink:#f2efe9; --ink-2:#b8b3aa; --ink-3:#8b867d;
+  --rule:#33312d; --rule-soft:#282622;
+  --ground:#121110; --panel:#1c1b19; --panel-2:#211f1d; --bar:#0b0b0a; --bar-ink:#f2efe9; --bar-3:#8b867d;
+  --cyan:#5cc0dc; --cyan-deep:#8ad5ea; --cyan-wash:#12333d;
+  --stop:#e8735a; --stop-wash:#3a1c16;
+  --caution:#e0a445; --caution-wash:#382a12;
+  --clear:#77bd87; --clear-wash:#1a2e1f;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  --scrim:rgba(0,0,0,.6);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --ink:#f2efe9; --ink-2:#b8b3aa; --ink-3:#8b867d;
+  --rule:#33312d; --rule-soft:#282622;
+  --ground:#121110; --panel:#1c1b19; --panel-2:#211f1d; --bar:#0b0b0a; --bar-ink:#f2efe9; --bar-3:#8b867d;
+  --cyan:#5cc0dc; --cyan-deep:#8ad5ea; --cyan-wash:#12333d;
+  --stop:#e8735a; --stop-wash:#3a1c16;
+  --caution:#e0a445; --caution-wash:#382a12;
+  --clear:#77bd87; --clear-wash:#1a2e1f;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  --scrim:rgba(0,0,0,.6);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:Archivo,Arial,"Helvetica Neue",sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.num{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+a{color:var(--cyan-deep)}
+button{font:inherit;color:inherit}
+
+/* top bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bar);color:var(--bar-ink)}
+.top .in{max-width:1240px;margin:0 auto;padding-block:12px;padding-left:20px;padding-right:20px;
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px}
+.mark{display:flex;align-items:baseline;gap:8px;flex:none}
+.mark .am{font-weight:800;font-size:24px;letter-spacing:-.03em;line-height:1}
+.mark .am b{color:var(--cyan)}
+.who{display:flex;flex-direction:column;line-height:1.25;min-width:0;flex:0 1 auto;padding-left:16px;border-left:1px solid #3a3834}
+.who b{font-size:15px;font-weight:700}
+.who span{font-size:11px;color:var(--bar-3)}
+.find{position:relative;flex:1 1 240px;min-width:0;max-width:420px;margin-left:auto}
+.find input{width:100%;font:inherit;font-size:14px;padding:8px 12px;border-radius:3px;border:1px solid #3a3834;
+  background:#262522;color:var(--bar-ink)}
+.find input::placeholder{color:var(--bar-3)}
+.find input:focus{outline:2px solid var(--cyan);outline-offset:0;border-color:transparent}
+.hits{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--panel);color:var(--ink);border:1px solid var(--rule);
+  border-radius:3px;box-shadow:var(--shadow);max-height:60vh;overflow:auto;z-index:30}
+.hits button{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--rule-soft);padding:9px 12px;cursor:pointer}
+.hits button:first-child{border-top:0}
+.hits button:hover,.hits button:focus{background:var(--cyan-wash);outline:none}
+.hits small{display:block;color:var(--ink-3);font-size:12px}
+.live{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--bar-3);flex:none}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--bar-3);flex:none}
+.dot.ok{background:#77bd87}.dot.warn{background:#e0a445}.dot.bad{background:#e8735a}
+.refresh{font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--bar-ink);
+  border:1px solid #4a4844;border-radius:3px;padding:7px 12px}
+.refresh:hover{border-color:var(--cyan)}
+.refresh[disabled]{opacity:.5;cursor:default}
+
+/* tabs */
+.tabsWrap{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--topH,62px));z-index:15;background:var(--panel);border-bottom:1px solid var(--rule)}
+.tabs{max-width:1240px;margin:0 auto;padding-left:20px;padding-right:20px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:thin}
+.tabs .grp{align-self:center;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);
+  padding:0 6px 0 14px;white-space:nowrap}
+.tabs .grp:first-child{padding-left:0}
+.tab{position:relative;background:none;border:0;border-bottom:3px solid transparent;padding:13px 10px 11px;cursor:pointer;
+  font-size:14px;font-weight:600;color:var(--ink-2);white-space:nowrap;display:flex;align-items:center;gap:7px}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--cyan)}
+.badge{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;min-width:20px;padding:1px 6px;border-radius:10px;
+  text-align:center;background:var(--rule-soft);color:var(--ink-3)}
+.badge.stop{background:var(--stop);color:#fff}
+.badge.caution{background:var(--caution-wash);color:var(--caution)}
+
+/* content */
+main{max-width:1240px;margin:0 auto;padding-block:22px 72px;padding-left:20px;padding-right:20px}
+.tabhead{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px;margin-bottom:14px}
+.tabhead h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
+.tabhead p{margin:0;font-size:13px;color:var(--ink-3);flex:1 1 320px}
+.verdict{padding:15px 18px;background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--ink-3);border-radius:3px;box-shadow:var(--shadow);margin-bottom:16px}
+.verdict.stop{border-left-color:var(--stop)}.verdict.caution{border-left-color:var(--caution)}.verdict.clear{border-left-color:var(--clear)}
+.verdict p{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.verdict .meta{margin-top:4px;font-size:13px;color:var(--ink-3)}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(400px,100%),1fr))}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow);padding:18px 20px;min-width:0}
+.card.wide{grid-column:1/-1}
+.card h2{margin:0 0 2px;font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+.card .lede{margin:0 0 12px;font-size:13px;color:var(--ink-3)}
+.big{font-size:32px;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin:6px 0 4px}
+.big.stop{color:var(--stop)}.big.caution{color:var(--caution)}.big.clear{color:var(--clear)}
+.sub{font-size:13px;color:var(--ink-2);margin:0 0 12px}
+.sub:last-child{margin-bottom:0}
+
+/* kpis */
+.kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--rule);border-radius:3px;padding:14px 16px;min-width:0;text-align:left;cursor:pointer;box-shadow:var(--shadow)}
+.kpi:hover{border-color:var(--cyan)}
+.kpi .k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.kpi .v{font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1.15;margin-top:6px}
+.kpi .v.stop{color:var(--stop)}.kpi .v.caution{color:var(--caution)}.kpi .v.clear{color:var(--clear)}
+.kpi .s{font-size:12px;color:var(--ink-3);margin-top:3px}
+
+/* flow strip */
+.flow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;margin-bottom:16px;background:var(--panel);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow);overflow:hidden}
+.flow button{background:none;border:0;border-left:1px solid var(--rule-soft);padding:14px 12px;text-align:left;cursor:pointer;min-width:0}
+.flow button:first-child{border-left:0}
+.flow button:hover{background:var(--cyan-wash)}
+.flow .n{font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.flow .l{font-size:12px;font-weight:600;color:var(--ink-2);margin-top:2px}
+.flow .fx{font-size:11px;color:var(--ink-3)}
+.flow .step{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan-deep)}
+@media (max-width:760px){ .flow{grid-template-columns:repeat(2,minmax(0,1fr))} .flow button{border-top:1px solid var(--rule-soft)} }
+
+/* alerts */
+.alerts{list-style:none;margin:0;padding:0}
+.alerts li{display:grid;grid-template-columns:auto 1fr auto;gap:10px 12px;align-items:start;padding:11px 0;border-top:1px solid var(--rule-soft)}
+.alerts li:first-child{border-top:0}
+.alerts .t{font-size:14px;font-weight:600}
+.alerts .m{font-size:12px;color:var(--ink-3);margin-top:2px}
+.go{background:none;border:1px solid var(--rule);border-radius:3px;padding:4px 10px;font-size:12px;font-weight:600;color:var(--cyan-deep);cursor:pointer;white-space:nowrap}
+.go:hover{border-color:var(--cyan)}
+
+/* tables */
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:700;padding:7px 8px;background:var(--panel-2);white-space:nowrap}
+tbody td{padding:8px;border-top:1px solid var(--rule-soft);vertical-align:top}
+tbody tr:nth-child(even){background:var(--panel-2)}
+tbody tr[data-job]{cursor:pointer}
+tbody tr[data-job]:hover{background:var(--cyan-wash)}
+td.r,th.r{text-align:right}
+td .nm{font-weight:600}
+td .sm{display:block;font-size:12px;color:var(--ink-3)}
+.tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:2px;
+  background:var(--cyan-wash);color:var(--cyan-deep);white-space:nowrap}
+.tag.stop{background:var(--stop-wash);color:var(--stop)}
+.tag.caution{background:var(--caution-wash);color:var(--caution)}
+.tag.clear{background:var(--clear-wash);color:var(--clear)}
+.tag.mute{background:var(--rule-soft);color:var(--ink-3)}
+.more{margin-top:8px;font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* bars */
+.bars{margin:4px 0 0;padding:0;list-style:none}
+.bars li{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:6px 0;border-top:1px solid var(--rule-soft);font-size:13px}
+.bars li:first-child{border-top:0}
+.bars li.click{cursor:pointer}
+.bars li.click:hover span:first-child{color:var(--cyan-deep)}
+.bars .track{grid-column:1/-1;height:6px;background:var(--rule-soft);border-radius:3px;overflow:hidden;display:flex}
+.bars .fill{height:100%;background:var(--cyan)}
+.bars .fill.c1{background:var(--cyan)}.bars .fill.c2{background:var(--cyan-deep)}.bars .fill.c3{background:var(--caution)}
+.bars .fill.c4{background:var(--stop)}.bars .fill.c5{background:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--ink-3);margin:8px 0 0}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+/* chips */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.chip{background:var(--panel);border:1px solid var(--rule);border-radius:20px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--panel)}
+.pmcards{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));margin-bottom:16px}
+.pmcard{background:var(--panel);border:1px solid var(--rule);border-radius:3px;padding:14px 16px;cursor:pointer;text-align:left;min-width:0}
+.pmcard:hover{border-color:var(--cyan)}
+.pmcard[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.pmcard b{font-size:16px}
+.pmcard dl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin:8px 0 0;font-size:13px}
+.pmcard dt{color:var(--ink-3)}.pmcard dd{margin:0;text-align:right}
+
+/* states */
+.state{padding:13px 14px;border-radius:3px;background:var(--panel-2);color:var(--ink-3);font-size:13px}
+.state.err{background:var(--stop-wash);color:var(--stop)}
+.state.wait{background:var(--caution-wash);color:var(--caution)}
+.state.ok{background:var(--clear-wash);color:var(--clear)}
+.callout{padding:14px 16px;border-radius:3px;background:var(--cyan-wash);color:var(--ink-2);font-size:13px;margin-top:12px}
+.callout b{color:var(--ink)}
+.note{margin-top:22px;padding:15px 18px;background:var(--panel-2);border:1px solid var(--rule);border-radius:3px;font-size:13px;color:var(--ink-2)}
+.note b{color:var(--ink)}
+.foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--rule);font-size:11px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:8px 14px}
+.foot .sp{flex:1 1 auto}
+
+/* finance controls */
+.ctl{display:grid;gap:10px 16px;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));margin:4px 0 14px}
+.fld{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink-2);min-width:0}
+.fld b{color:var(--ink)}
+.fld select,.fld input[type=date],.fld input[type=datetime-local],.fld input[type=number]{font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);color:var(--ink);width:100%}
+.fld input[type=range]{width:100%;accent-color:var(--cyan)}
+details.sub summary{cursor:pointer;color:var(--cyan-deep);font-weight:600}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--panel);z-index:41;box-shadow:-12px 0 40px -20px rgba(0,0,0,.5);
+  display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.drawer header{display:flex;align-items:flex-start;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--rule)}
+.drawer header h2{margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em;flex:1;min-width:0;text-wrap:balance}
+.drawer header small{display:block;font-size:12px;font-weight:600;color:var(--ink-3);letter-spacing:.04em}
+.x{background:none;border:1px solid var(--rule);border-radius:3px;width:34px;height:34px;cursor:pointer;font-size:18px;line-height:1;flex:none}
+.drawer .body{overflow:auto;padding:16px 20px 30px;flex:1}
+.facts{display:grid;grid-template-columns:minmax(120px,40%) 1fr;gap:0;margin:0 0 16px;font-size:13px}
+.facts dt,.facts dd{padding:7px 0;border-top:1px solid var(--rule-soft);margin:0}
+.facts dt{color:var(--ink-3);padding-right:12px}
+.facts dd{min-width:0;overflow-wrap:anywhere}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 16px}
+.btn{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:9px 14px;border-radius:3px;text-decoration:none;
+  background:var(--ink);color:var(--panel);border:1px solid var(--ink);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn:hover{background:var(--cyan-deep);border-color:var(--cyan-deep);color:#fff}
+.drawer h3{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin:18px 0 6px}
+@media (max-width:620px){ .who{border-left:0;padding-left:0} .find{flex-basis:100%;max-width:none;order:5} .big{font-size:28px} .tabhead h1{font-size:21px} }
+</style>
+</head><body><header class="top" id="top">
+  <div class="in">
+    <div class="mark"><div class="am">A<b>&amp;</b>M</div></div>
+    <div class="who"><b id="roleTitle">Command centre</b><span id="roleWho"></span></div>
+    <div class="find">
+      <input id="find" type="search" placeholder="Find a job by number, name, client or address" autocomplete="off" aria-label="Find a job">
+      <div class="hits" id="hits" hidden></div>
+    </div>
+    <div class="live"><span class="dot" id="conndot"></span><span id="connlabel">Connecting</span></div>
+    <button class="refresh" id="refresh" disabled>Refresh</button>
+  </div>
+</header>
+<div class="tabsWrap"><nav class="tabs" id="tabs" role="tablist" aria-label="Sections"></nav></div>
+<main id="main"><div class="state">Opening the command centre.</div></main>
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="dtitle">
+  <header><h2 id="dtitle"></h2><button class="x" id="dclose" aria-label="Close">&times;</button></header>
+  <div class="body" id="dbody"></div>
+</aside>
+<script>
+/* A&M command centre. One source, three pages: Craig, the office (Jen) and the field (Amir).
+   Reads live from JobTread, QuickBooks and Gmail through the viewer's own connections.
+   It stores nothing and changes nothing. Every "change" button opens the owning system. */
+let ROLE = "office";
+const PLATFORM = "app";   /* "claude" for the Claude pages, "app" inside the A&M app */
+const ORG = "22PRQFH4cHFm";
+const JT = "JobTread", QB = "Intuit QuickBooks", GM = "Gmail";
+const FY_START = "2026-04-01";
+const YEAR_SALES = 8000000; /* roughly what A&M does in a year, for the pace line only */
+
+const ROLES = {
+  craig:  { title:"Craig's command centre", who:"Every section of A&M in one place",
+            tabs:["overview","estimating","dispatch","money","buying","records","projects","sites","closeout","equipment","drafts"], qb:true, gmail:true },
+  office: { title:"Office command centre", who:"Estimating, dispatch, money and records",
+            tabs:["overview","estimating","dispatch","money","buying","records"], qb:true, gmail:false },
+  field:  { title:"Field command centre", who:"Projects, sites, closeout and equipment",
+            tabs:["overview","projects","sites","closeout","equipment"], qb:false, gmail:false }
+};
+const TABS = {
+  overview:  { label:"Overview",     group:"" },
+  estimating:{ label:"Estimating",   group:"Office" },
+  dispatch:  { label:"Dispatch",     group:"Office" },
+  money:     { label:"Money",        group:"Office" },
+  buying:    { label:"Buying",       group:"Office" },
+  records:   { label:"Records",      group:"Office" },
+  projects:  { label:"Projects",     group:"Field" },
+  sites:     { label:"Sites",        group:"Field" },
+  closeout:  { label:"Closeout",     group:"Field" },
+  equipment: { label:"Equipment",    group:"Field" },
+  drafts:    { label:"To send", group:"Assistants" }
+};
+let CFG = ROLES[ROLE] || ROLES.craig;
+
+/* JobTread status list, read from JobTread on 2026-10-06. Twenty five values.
+   If JobTread gains or renames a status, the Records tab names it instead of skipping it. */
+const STAGES = [
+  { key:"lead",  label:"New leads",       statuses:["New Lead","Uploaded Without Plans","Uploaded With Plans"] },
+  { key:"est",   label:"Being estimated", statuses:["Estimating","Site Visit Scheduled","Pending Estimate Review","Estimate Review Completed"] },
+  { key:"out",   label:"Quote out",       statuses:["Estimate Sent","Pending","Follow Up Required"] },
+  { key:"won",   label:"Won, no date",    statuses:["Bid Accepted","Upcoming To Be Scheduled","Scheduling required"] },
+  { key:"sched", label:"Scheduled",       statuses:["Scheduled (Date promised)","Turnover Meeting Required","NOP"] },
+  { key:"site",  label:"On site",         statuses:["Site work"] },
+  { key:"close", label:"Closing out",     statuses:["Loose Ends Required","Job Complete by A&M","PM Approvals","Invoicing","Job Post Mortem"] }
+];
+const DONE = ["Closed Won","Not Bid","File Closed Bid Lost"];
+const ALLSTATUS = STAGES.flatMap(s => s.statuses).concat(DONE);
+const PRE = STAGES.slice(0,3).flatMap(s => s.statuses);
+const POST = STAGES.slice(3).flatMap(s => s.statuses);
+const stageOf = s => { for(const g of STAGES) if(g.statuses.includes(s)) return g.key; return DONE.includes(s) ? "done" : "unknown"; };
+
+/* ---------- small helpers ---------- */
+const $ = id => document.getElementById(id);
+const E = s => String(s === undefined || s === null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const M = v => (v === null || v === undefined || isNaN(v)) ? "n/a" : (v < 0 ? "-$" : "$") + Math.abs(Math.round(v)).toLocaleString("en-CA");
+const MK = v => {
+  if(v === null || v === undefined || isNaN(v)) return "n/a";
+  const a = Math.abs(v), s = v < 0 ? "-$" : "$";
+  if(a >= 1e6) return s + (a/1e6).toFixed(a >= 1e7 ? 1 : 2) + "M";
+  if(a >= 1e4) return s + Math.round(a/1e3) + "k";
+  return s + Math.round(a).toLocaleString("en-CA");
+};
+const plural = (n, one, many) => n + " " + (n === 1 ? one : (many || one + "s"));
+const F = v => Array.isArray(v) ? v[0] : v;
+const ALL = v => v === undefined || v === null ? [] : (Array.isArray(v) ? v : [v]);
+function dOnly(s){
+  if(!s) return null;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)){ const p = s.split("-").map(Number); return new Date(p[0], p[1]-1, p[2]); }
+  const d = new Date(s); return isNaN(d) ? null : d;
+}
+function today(){ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
+function daysTo(s){ const d = dOnly(s); if(!d) return null; return Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - today()) / 86400000); }
+function daysSince(s){ const v = daysTo(s); return v === null ? null : -v; }
+function iso(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function showDate(s){ const d = dOnly(s); return d ? iso(d) : ""; }
+function showWhen(s){
+  const d = dOnly(s); if(!d) return "";
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return iso(d);
+  return iso(d) + " " + d.toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit",timeZone:"America/Edmonton"});
+}
+function rel(n, past, future){
+  if(n === null) return "No date";
+  if(n === 0) return "Today";
+  if(n === 1) return future ? "Tomorrow" : "In 1 day";
+  if(n === -1) return "Yesterday";
+  return n > 0 ? "In " + n + " days" : (-n) + " days ago";
+}
+function store(k, v){ try{ if(v === undefined) return localStorage.getItem("am." + k); localStorage.setItem("am." + k, v); }catch(e){ return null; } }
+
+/* ---------- job helpers ---------- */
+const st = j => F(j["Status"]) || "No status";
+const pm = j => F(j["Project Manager"]) || "";
+const types = j => ALL(j["Job Type"]);
+const startOf = j => F(j["Expected Date of Project Start"]) || "";
+const risk = j => F(j["Risk Level"]) || "";
+const isAsb = j => types(j).join(" ").toLowerCase().includes("asbestos") || ["Low Risk","Moderate Risk","High Risk","Glovebag"].includes(risk(j));
+const crew = j => { const v = parseFloat(F(j["Number of Guys Required"])); return isNaN(v) ? null : v; };
+const dur = j => { const v = parseFloat(F(j["Estimated Days of Work"])); return isNaN(v) ? null : v; };
+const isOpen = j => !j._closed && !DONE.includes(st(j));
+const isSpecial = j => /^99-/.test(j._number || "") || /^test\b/i.test(j._name || "") || /\(overhead\)/i.test(j._name || "") || /^office work$/i.test(j._name || "");
+const live = () => (S.jobs || []).filter(j => isOpen(j) && !isSpecial(j));
+const jtUrl = id => "https://app.jobtread.com/jobs/" + encodeURIComponent(id);
+function jobCell(j){
+  return '<span class="nm">' + E(j._number) + ' ' + E(j._name) + '</span><span class="sm">' + E(j._cust || j._addr || "") + '</span>';
+}
+function stTag(j){
+  const g = stageOf(st(j));
+  const cls = g === "unknown" ? "stop" : (g === "close" ? "caution" : "mute");
+  return '<span class="tag ' + cls + '">' + E(st(j)) + '</span>';
+}
+let tblN = 0; const EXPANDED = {};
+function tbl(head, rows, empty, limit){
+  const id = current + ":" + (++tblN);
+  if(!rows.length) return '<div class="state ok">' + E(empty || "Nothing here right now.") + '</div>';
+  const lim = EXPANDED[id] ? rows.length : (limit || 12);
+  const shown = rows.slice(0, lim);
+  return '<div class="scroll"><table><thead><tr>' + head + '</tr></thead><tbody>' + shown.join("") + '</tbody></table></div>' +
+    (rows.length > lim ? '<div class="more">Showing ' + lim + ' of ' + rows.length + '. <button class="go" data-expand="' + E(id) + '">Show all ' + rows.length + '</button></div>' : "");
+}
+function bars(list, onclick){
+  const max = Math.max(0, ...list.map(x => x[1]));
+  if(!max) return '<div class="state">Nothing to show.</div>';
+  return '<ul class="bars">' + list.map(x =>
+    '<li' + (x[2] ? ' class="click" data-list="' + E(x[2]) + '"' : '') + '><span>' + E(x[0]) + '</span><span class="num">' + (x[3] || x[1]) + '</span>' +
+    '<span class="track"><span class="fill" style="width:' + Math.max(2, Math.round(x[1]/max*100)) + '%"></span></span></li>').join("") + '</ul>';
+}
+function wait(what){ return '<div class="state">Reading ' + E(what) + '.</div>'; }
+function errCopy(e){
+  const c = e && e.code;
+  if(c === "server_not_connected") return "That system is not connected for you yet. Connect it in Claude, then press Refresh.";
+  if(c === "needs_reauth") return "Your sign in to that system has run out. Sign in again, then press Refresh.";
+  if(c === "not_granted" || c === "capability_disabled" || c === "not_in_manifest") return "This page has not been allowed to read that system. Allow it when asked, then press Refresh.";
+  if(c === "approval_required") return "This read is waiting for you to approve it.";
+  if(c === "rate_limited") return "That system is busy. Press Refresh in a minute.";
+  if(c === "not_connected" || c === "role" || c === "upstream" || c === "auth") return (e && e.message) ? String(e.message) : "That read did not come back.";
+  return (e && e.message) ? String(e.message) : "That read did not come back.";
+}
+function failBox(e, what){ return '<div class="state err">' + E(what ? what + ": " : "") + E(errCopy(e)) + '</div>'; }
+
+/* ---------- state ---------- */
+const S = { mcp:null, jobs:null, jobTotal:null, jobsShort:false, jobsErr:null, stamp:null,
+            orders:null, ordersErr:null, bs:null, bsErr:null, ar:null, arErr:null, ap:null, apErr:null,
+            pl:null, plErr:null, drafts:null, draftsErr:null, draftsMore:false };
+let unsubs = [];
+let current = null;
+
+function flat(job){
+  const o = {};
+  const n = (job.customFieldValues && job.customFieldValues.nodes) || [];
+  for(const x of n){
+    const k = x.customField && x.customField.name; if(!k) continue;
+    if(o[k] === undefined) o[k] = x.value;
+    else if(Array.isArray(o[k])) o[k].push(x.value);
+    else o[k] = [o[k], x.value];
+  }
+  o._id = job.id; o._name = job.name; o._number = job.number;
+  o._created = job.createdAt; o._closed = job.closedOn;
+  o._addr = (job.location && job.location.address) || "";
+  o._cust = (job.location && job.location.account && job.location.account.name) || "";
+  return o;
+}
+
+/* JobTread hands back 100 jobs at a time with a token for the next lot.
+   The page walks every lot and checks what it got against the total JobTread reports,
+   so a short read is said out loud instead of quietly undercounting. */
+function grabJobs(token, acc){
+  const args = { size:100 }; if(token) args.page = token;
+  return S.mcp.callTool(JT, "query", { query:{ organization:{ "$":{ id:ORG },
+      jobs:{ "$":args, count:{}, nextPage:{}, nodes:{
+        id:{}, name:{}, number:{}, createdAt:{}, closedOn:{},
+        location:{ address:{}, account:{ name:{} } },
+        customFieldValues:{ "$":{ size:100 }, nodes:{ value:{}, customField:{ name:{} } } }
+      } } } } }, { cache:{ staleTime:120000 } })
+  .then(res => {
+    const jb = res && res.payload && res.payload.organization && res.payload.organization.jobs;
+    if(!jb || !jb.nodes) throw { code:"tool_error", message:"JobTread did not return a job list." };
+    acc.rows = acc.rows.concat(jb.nodes);
+    if(acc.total === null && typeof jb.count === "number") acc.total = jb.count;
+    if(acc.stamp === null) acc.stamp = res.cache && res.cache.storedAt;
+    if(jb.nextPage && acc.rows.length < 5000) return grabJobs(jb.nextPage, acc);
+    return acc;
+  });
+}
+/* Quotes built in JobTread are "customer order" documents: draft, pending, approved or denied. */
+function grabOrders(token, acc){
+  const args = { size:100, where:["type","customerOrder"] }; if(token) args.page = token;
+  return S.mcp.callTool(JT, "query", { query:{ organization:{ "$":{ id:ORG },
+      orders:{ "_":"documents", "$":args, nextPage:{}, nodes:{
+        id:{}, name:{}, status:{}, price:{}, issueDate:{}, createdAt:{}, job:{ id:{} }
+      } } } } }, { cache:{ staleTime:120000 } })
+  .then(res => {
+    const d = res && res.payload && res.payload.organization && res.payload.organization.orders;
+    if(!d || !d.nodes) throw { code:"tool_error", message:"JobTread did not return its quotes." };
+    acc = acc.concat(d.nodes);
+    if(d.nextPage && acc.length < 5000) return grabOrders(d.nextPage, acc);
+    return acc;
+  });
+}
+function grabDrafts(token, acc, pages){
+  const args = { pageSize:50, view:"DRAFT_VIEW_FULL" }; if(token) args.pageToken = token;
+  return S.mcp.callTool(GM, "list_drafts", args, { cache:{ staleTime:120000 } }).then(res => {
+    const p = (res && res.payload) || {};
+    acc = acc.concat(p.drafts || []);
+    if(p.nextPageToken && pages < 3) return grabDrafts(p.nextPageToken, acc, pages + 1);
+    S.draftsMore = !!p.nextPageToken;
+    return acc;
+  });
+}
+
+function loadAll(){
+  unsubs.forEach(u => { try{ u(); }catch(e){} }); unsubs = [];
+  grabJobs(null, { rows:[], total:null, stamp:null }).then(acc => {
+    S.jobs = acc.rows.map(flat); S.jobTotal = acc.total; S.stamp = acc.stamp; S.jobsErr = null;
+    S.jobsShort = acc.total !== null && acc.rows.length < acc.total;
+    render();
+  }).catch(e => { S.jobsErr = e; render(); });
+  grabOrders(null, []).then(o => { S.orders = o; S.ordersErr = null; render(); })
+    .catch(e => { S.ordersErr = e; render(); });
+
+  if(CFG.qb){
+    const today_ = iso(new Date());
+    const watch = (tool, input, key, opts) => unsubs.push(S.mcp.watchTool(QB, tool, input, ev => {
+      if(ev.type === "error"){ S[key + "Err"] = ev.error; if(["not_granted","needs_reauth","server_not_connected"].includes(ev.error && ev.error.code)) S.M[key] = null; render(); return; }
+      const p = ev.result && ev.result.payload;
+      if(!p){ S[key + "Err"] = { code:"tool_error", message:"That report came back empty." }; render(); return; }
+      S.M[key] = key === "bs" ? normBS(p) : key === "pl" ? normPL(p) : agingOf(p);
+      S[key + "Err"] = null; render();
+    }, opts));
+    /* QuickBooks wants the connection checked before any report. */
+    S.mcp.callTool(QB, "company_info", {}, { cache:{ staleTime:300000 } }).catch(() => {}).then(() => {
+      watch("qbo_accounting_get_balance_sheet", { start_date:today_, end_date:today_ }, "bs", { cache:{ staleTime:180000 }, refetchInterval:600000 });
+      watch("qbo_accounting_get_ar_aging_summary", {}, "ar", { cache:{ staleTime:180000 }, refetchInterval:600000 });
+      watch("qbo_accounting_get_ap_aging_summary", {}, "ap", { cache:{ staleTime:180000 }, refetchInterval:600000 });
+      watch("profit_loss_quickbooks_account", { periodStart:FY_START, periodEnd:today_ }, "pl", { cache:{ staleTime:300000 }, refetchInterval:900000 });
+    });
+  }
+  if(CFG.tabs.includes("buying")) loadBuyingClaude();
+  if(CFG.gmail){
+    grabDrafts(null, [], 0).then(d => { S.drafts = d; S.draftsErr = null; render(); })
+      .catch(e => { S.draftsErr = e; render(); });
+  }
+}
+
+/* ---------- each tab registers: render() -> html, alerts() -> [{lvl,text,meta,tab}] ---------- */
+const VIEWS = {};
+const LV = { stop:0, caution:1, info:2 };
+function alertsFor(tab){
+  try{ return (VIEWS[tab] && VIEWS[tab].alerts) ? VIEWS[tab].alerts().map(a => Object.assign({ tab }, a)) : []; }
+  catch(e){ return []; }
+}
+function verdictHtml(list, calm, calmMeta){
+  const a = list.slice().sort((x, y) => LV[x.lvl] - LV[y.lvl]);
+  if(!a.length) return '<div class="verdict clear"><p>' + E(calm) + '</p>' + (calmMeta ? '<div class="meta">' + E(calmMeta) + '</div>' : '') + '</div>';
+  const top = a[0];
+  return '<div class="verdict ' + top.lvl + '"><p>' + E(top.text) + '</p><div class="meta">' + E(top.meta || "") +
+    (a.length > 1 ? (top.meta ? " " : "") + plural(a.length - 1, "more thing") + " below." : "") + '</div></div>';
+}
+function head(title, lede){ return '<div class="tabhead"><h1>' + E(title) + '</h1><p>' + E(lede) + '</p></div>'; }
+
+/* ---------- shell ---------- */
+function drawTabs(){
+  let html = "", lastGrp = null;
+  CFG.tabs.forEach(t => {
+    const def = TABS[t];
+    if(ROLE === "craig" && def.group !== lastGrp && def.group){ html += '<span class="grp">' + E(def.group) + '</span>'; }
+    lastGrp = def.group;
+    const al = t === "overview" ? [] : alertsFor(t);
+    const stops = al.filter(a => a.lvl === "stop").length, cautions = al.filter(a => a.lvl === "caution").length;
+    const badge = stops ? '<span class="badge stop">' + stops + '</span>' : (cautions ? '<span class="badge caution">' + cautions + '</span>' : '');
+    html += '<button class="tab" role="tab" data-tab="' + t + '" aria-selected="' + (t === current) + '">' + E(def.label) + badge + '</button>';
+  });
+  $("tabs").innerHTML = html;
+}
+function render(){
+  drawTabs(); tblN = 0;
+  const v = VIEWS[current];
+  let html;
+  try{ html = v ? v.render() : '<div class="state">Nothing here.</div>'; }
+  catch(e){ html = '<div class="state err">This tab hit a fault while drawing: ' + E(e && e.message) + '. Press Refresh. If it keeps happening, tell Bruce.</div>'; }
+  $("main").innerHTML = html + footer();
+  const n = S.jobs ? S.jobs.length : 0;
+  $("connlabel").textContent = S.jobs ? ("Live · " + n + " jobs" + (S.stamp ? " · " + new Date(S.stamp).toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit"}) : "")) : (S.jobsErr ? "JobTread not answering" : "Reading");
+  $("conndot").className = "dot " + (S.jobsErr ? "bad" : (S.jobs ? (S.jobsShort ? "warn" : "ok") : ""));
+  if(drawerState && drawerState.kind === "list") openList(drawerState.key, true);
+}
+function footer(){
+  return '<div class="note"><b>Where these numbers come from.</b> Read live from ' +
+    (CFG.qb ? "JobTread and QuickBooks" : "JobTread") + (PLATFORM === "app" ? ", plus the shop's own stock records," : "") + (CFG.gmail ? ", plus your Gmail drafts," : "") +
+    (PLATFORM === "app" ? ' through the A&amp;M app, every few minutes or when you press Refresh.' : ' using your own sign in, every time the page opens or you press Refresh.') + ' Nothing is copied or stored here and nothing here changes either system. ' +
+    'To change a job, open it and press <b>Open in JobTread</b>. Site photos live in Encircle and safety records live in SiteDocs, so neither is shown here. All money is Canadian dollars.</div>' +
+    '<div class="foot"><span>A&amp;M Abatement Services Ltd</span><span>' + E(CFG.title) + '</span><span class="sp"></span><span>Reads live, stores nothing, changes nothing</span></div>';
+}
+function go(tab){
+  if(!CFG.tabs.includes(tab)) tab = "overview";
+  current = tab; store("tab." + ROLE, tab);
+  try{ history.replaceState(null, "", "#" + tab); }catch(e){}
+  render(); window.scrollTo(0, 0);
+}
+
+/* ---------- drawer: one job, or a list of jobs ---------- */
+let drawerState = null, lastFocus = null;
+function openDrawer(title, html){
+  lastFocus = document.activeElement;
+  $("dtitle").innerHTML = title; $("dbody").innerHTML = html;
+  $("scrim").hidden = false; $("drawer").hidden = false; $("dclose").focus();
+}
+function closeDrawer(){
+  drawerState = null; $("scrim").hidden = true; $("drawer").hidden = true;
+  if(lastFocus && lastFocus.focus) try{ lastFocus.focus(); }catch(e){}
+}
+const LISTS = {}; /* key -> {title, jobs()} registered by tabs */
+let openList = function(){};
+const HIDE = { "Entry Code":1 };
+const ORDERFIELDS = ["Status","Project Manager","Job Type","Risk Level","Expected Date of Project Start","Estimated Days of Work","Number of Guys Required",
+  "Bid Type","Bid Due Date and Time","Site Visit Date and Time","Estimating branch","Lead Score","NOP Filed Date and Time","NOP Expires",
+  "PO Status","Customer PO","Site Contact Phone Number","Site Access Notes","Type of Loss","Job Lost Reason"];
+function openJob(id){
+  const j = (S.jobs || []).find(x => x._id === id); if(!j) return;
+  drawerState = { kind:"job", id };
+  const keys = Object.keys(j).filter(k => k[0] !== "_");
+  keys.sort((a, b) => { const ia = ORDERFIELDS.indexOf(a), ib = ORDERFIELDS.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b); });
+  let facts = '<dt>Client</dt><dd>' + E(j._cust || "Not set") + '</dd><dt>Site</dt><dd>' + E(j._addr || "Not set") + '</dd>';
+  keys.forEach(k => {
+    let v = j[k];
+    if(HIDE[k]){ v = v ? "On file in JobTread" : ""; }
+    else if(Array.isArray(v)) v = v.join(", ");
+    if(typeof v === "string" && /^\d{4}-\d{2}-\d{2}(T|$)/.test(v)) v = showWhen(v);
+    facts += '<dt>' + E(k) + '</dt><dd>' + E(v === "" || v === null || v === undefined ? "Empty" : v) + '</dd>';
+  });
+  facts += '<dt>Opened in JobTread</dt><dd>' + E(showDate(j._created)) + '</dd>';
+  const quotes = (S.orders || []).filter(o => o.job && o.job.id === id);
+  const qhtml = quotes.length ? '<div class="scroll"><table><thead><tr><th>Quote</th><th>State</th><th class="r">Before GST</th></tr></thead><tbody>' +
+    quotes.map(o => '<tr><td>' + E(o.name || "Quote") + '<span class="sm">' + E(showDate(o.issueDate) || "Not issued") + '</span></td><td><span class="tag ' +
+      (o.status === "approved" ? "clear" : o.status === "denied" ? "stop" : o.status === "pending" ? "" : "mute") + '">' + E(o.status) + '</span></td><td class="r num">' + M(o.price) + '</td></tr>').join("") +
+    '</tbody></table></div>' : '<div class="state">No quote built in JobTread for this job.</div>';
+  const gaps = gapsOf(j);
+  openDrawer('<small>' + E(j._number) + ' · ' + E(st(j)) + '</small>' + E(j._name),
+    '<div class="actions"><a class="btn" href="' + jtUrl(j._id) + '" target="_blank" rel="noopener">Open in JobTread</a>' +
+    (drawerStateBack ? '<button class="btn ghost" data-back="1">Back to the list</button>' : '') + '</div>' +
+    (gaps.length ? '<div class="state wait" style="margin-bottom:14px">Missing in JobTread: ' + E(gaps.join(", ")) + '. ' + (PLATFORM === "app" ? "Fill them in below and save." : "Fill these in JobTread and press Refresh here.") + '</div>' : '') +
+    (PLATFORM === "app" && ROLE !== "crew" && typeof editForm === "function" ? editForm(j) : '') +
+    '<dl class="facts">' + facts + '</dl><h3>Quotes</h3>' + qhtml);
+}
+let drawerStateBack = null;
+
+/* What a job should carry for its stage, so gaps are visible in one place. */
+function gapsOf(j){
+  const g = [], s = st(j), stage = stageOf(s);
+  if(stage === "unknown") g.push("a status this page recognizes");
+  if(!types(j).length) g.push("Job Type");
+  if(["won","sched","site","close"].includes(stage) && !pm(j)) g.push("Project Manager");
+  if(["sched","site"].includes(stage) && !startOf(j)) g.push("Expected Date of Project Start");
+  if(["sched","site"].includes(stage) && crew(j) === null) g.push("Number of Guys Required");
+  if(["sched","site"].includes(stage) && dur(j) === null) g.push("Estimated Days of Work");
+  if(isAsb(j) && ["won","sched","site"].includes(stage) && !risk(j)) g.push("Risk Level");
+  if(stage === "out" && !F(j["Bid Type"])) g.push("Bid Type");
+  return g;
+}
+
+/* ---------- search ---------- */
+function searchJobs(q){
+  q = q.trim().toLowerCase(); if(q.length < 2 || !S.jobs) return [];
+  const parts = q.split(/\s+/);
+  return S.jobs.filter(j => {
+    const hay = (j._number + " " + j._name + " " + j._cust + " " + j._addr).toLowerCase();
+    return parts.every(p => hay.includes(p));
+  }).sort((a, b) => (isOpen(b) - isOpen(a)) || String(b._number).localeCompare(String(a._number))).slice(0, 10);
+}
+
+/* ---------- wiring ---------- */
+document.addEventListener("click", ev => {
+  const t = ev.target.closest("[data-tab],[data-job],[data-list],[data-go],[data-pm],[data-back],[data-hit],[data-expand]");
+  if(!t) return;
+  if(t.dataset.expand){ const y = window.scrollY; EXPANDED[t.dataset.expand] = 1; render(); window.scrollTo(0, y); return; }
+  if(t.dataset.hit){ $("hits").hidden = true; $("find").value = ""; drawerStateBack = null; openJob(t.dataset.hit); return; }
+  if(t.dataset.tab){ go(t.dataset.tab); return; }
+  if(t.dataset.go){ closeDrawer(); go(t.dataset.go); return; }
+  if(t.dataset.pm !== undefined){ PMSEL = t.dataset.pm; store("pm", PMSEL); render(); return; }
+  if(t.dataset.back){ const k = drawerStateBack; drawerStateBack = null; if(k) openList(k); return; }
+  if(t.dataset.list){ drawerStateBack = null; openList(t.dataset.list); return; }
+  if(t.dataset.job){ drawerStateBack = (drawerState && drawerState.kind === "list") ? drawerState.key : null; openJob(t.dataset.job); return; }
+});
+document.addEventListener("keydown", ev => {
+  if(ev.key === "Escape"){ if(!$("drawer").hidden) closeDrawer(); $("hits").hidden = true; }
+  if(ev.key === "Enter"){ const t = ev.target.closest && ev.target.closest("tr[data-job],li[data-list],tr[data-mail-open]"); if(t) t.click(); }
+});
+$("dclose").addEventListener("click", closeDrawer);
+$("scrim").addEventListener("click", closeDrawer);
+$("find").addEventListener("input", () => {
+  const hits = searchJobs($("find").value);
+  if(!$("find").value.trim()){ $("hits").hidden = true; return; }
+  $("hits").innerHTML = hits.length ? hits.map(j => '<button data-hit="' + E(j._id) + '"><b>' + E(j._number) + '</b> ' + E(j._name) +
+    '<small>' + E(st(j)) + (j._cust ? ' · ' + E(j._cust) : '') + '</small></button>').join("")
+    : '<div class="state">' + (S.jobs ? "No job matches that." : "Still reading JobTread.") + '</div>';
+  $("hits").hidden = false;
+});
+document.addEventListener("click", ev => { if(!ev.target.closest(".find")) $("hits").hidden = true; }, true);
+function sizeTop(){ document.documentElement.style.setProperty("--topH", $("top").offsetHeight + "px"); }
+window.addEventListener("resize", sizeTop);
+
+function start(){
+  if(PLATFORM === "app") return startApp();
+  $("roleTitle").textContent = CFG.title; $("roleWho").textContent = CFG.who; sizeTop();
+  const h = (location.hash || "").replace("#", "");
+  current = CFG.tabs.includes(h) ? h : (CFG.tabs.includes(store("tab." + ROLE)) ? store("tab." + ROLE) : "overview");
+  render();
+  claude.use("mcp").then(mcp => {
+    if(!mcp){ allDown({ code:"not_granted" }); return; }
+    S.mcp = mcp;
+    $("refresh").disabled = false;
+    loadAll();
+    $("refresh").addEventListener("click", () => {
+      const b = $("refresh"); b.disabled = true; b.textContent = "Refreshing";
+      Promise.resolve(mcp.invalidate()).catch(() => {}).then(() => { loadAll(); setTimeout(() => { b.disabled = false; b.textContent = "Refresh"; }, 1500); });
+    });
+  }).catch(() => allDown({ code:"upstream_error" }));
+}
+function allDown(e){
+  $("conndot").className = "dot bad"; $("connlabel").textContent = "Not connected";
+  S.jobsErr = e; S.ordersErr = e; if(CFG.qb){ S.bsErr = S.arErr = S.apErr = S.plErr = e; } if(CFG.gmail) S.draftsErr = e;
+  render();
+}
+let PMSEL = store("pm"); if(PMSEL === null || PMSEL === undefined) PMSEL = "*";
+
+/* ---------- QuickBooks readers ----------
+   The receivables aging report lists each customer, then that customer's jobs underneath,
+   then a "Total for" row. Adding every row counts a customer two or three times, which is how
+   the report's own summary said 2.7 million on 6 October when the balance sheet said 2.0 million.
+   Only the customer rows themselves are added here: no dot in the row id, and not a total row.
+   The result is then checked against the balance sheet, and any gap is said out loud. */
+const BK = ["Current","1-30","31-60","61-90","91+"];
+const BKLAB = { "Current":"Not due yet", "1-30":"1 to 30 days late", "31-60":"31 to 60 days late", "61-90":"61 to 90 days late", "91+":"Over 90 days late" };
+function agingOf(p){
+  const rows = (p && p.reportData && p.reportData.rows) || [];
+  const out = { list:[], tot:{ Current:0, "1-30":0, "31-60":0, "61-90":0, "91+":0, Total:0 } };
+  rows.forEach(r => {
+    const m = r.metadata || {}, id = String(m.id || ""), ty = m.type || [];
+    if(id.indexOf(".") > -1 || ty.indexOf("TOTAL") > -1) return;
+    const c = {}; let name = "";
+    (r.cells || []).forEach((x, i) => { const k = String(x.name || "").replace(/\s+/g, ""); if(i === 0) name = x.value; c[k] = Number(x.value) || 0; });
+    if(/^Total\b/i.test(String(name))) return;
+    const row = { name:String(name || ""), b:{}, total:c.Total || 0 };
+    BK.forEach(k => { row.b[k] = c[k] || 0; out.tot[k] += row.b[k]; });
+    row.late = BK.slice(1).reduce((s, k) => s + row.b[k], 0);
+    row.old = row.b["61-90"] + row.b["91+"];
+    out.tot.Total += row.total;
+    out.list.push(row);
+  });
+  out.tot.Late = BK.slice(1).reduce((s, k) => s + out.tot[k], 0);
+  return out;
+}
+/* Everything below the readers works from one plain shape, S.M, whichever way the
+   numbers arrived: through Claude's QuickBooks connector, or from the A&M app's
+   own server. bs, ar, ap and pl are each null until they arrive. */
+function bsValRaw(p, nameRe){
+  const rows = (p && p.reportData && p.reportData.rows) || [];
+  for(const r of rows){
+    let name = "", tot = null;
+    (r.cells || []).forEach(x => { if(x.name === "ACCOUNT_NAME") name = x.value; if(x.name === "DETAIL_NATURAL_HOME_AMOUNT__TOTAL") tot = Number(x.value); });
+    if(nameRe.test(String(name))) return tot;
+  }
+  return null;
+}
+function normBS(p){
+  if(!p || !p.summary) return null;
+  const s = p.summary;
+  return {
+    cash: s.assetBreakdown ? s.assetBreakdown.cash : null,
+    arBS: s.assetBreakdown ? s.assetBreakdown.accountsReceivable : null,
+    apBS: s.liabilityBreakdown ? s.liabilityBreakdown.accountsPayable : null,
+    ratio: s.ratios ? s.ratios.currentRatio : null,
+    wc: s.ratios ? s.ratios.workingCapital : null,
+    holdbacks: bsValRaw(p, /^Holdbacks Receivable/i),
+    inventory: bsValRaw(p, /^Inventory Asset$/i),
+    tools: bsValRaw(p, /^Tools and Equipment$/i),
+    vehicles: bsValRaw(p, /^Vehicles$/i)
+  };
+}
+function normPL(p){
+  if(!p) return null;
+  const rows = (p.reportData && ((p.reportData.data && p.reportData.data.rows) || p.reportData.rows)) || [];
+  const cells = r => { const o = {}; (r.cells || []).forEach(x => { o[x.name] = x.value; }); return o; };
+  let payroll = null, consulting = null, labour = 0, labourSeen = false, expenses = null;
+  rows.forEach(r => {
+    const c = cells(r), a = String(c.ACCOUNT_NAME || ""), v = Number(c.DETAIL_NATURAL_HOME_AMOUNT__TOTAL) || 0;
+    const top = String((r.metadata || {}).id || "").indexOf(".") === -1;
+    if(/^Total for .*Payroll Expenses/i.test(a)) payroll = v;
+    if(/Consulting Fees/i.test(a) && !/^Total for/i.test(a)) consulting = v;
+    if(/labou?r\s+cos/i.test(a) && !/^Total for/i.test(a)){ labour += v; labourSeen = true; }
+    if(top && a === "Expenses") expenses = v;
+  });
+  const income = Number(p.totalIncome) || 0, gp = Number(p.grossProfit) || 0;
+  return { income, gp, cogs: income - gp, expenses, payroll, labour: labourSeen ? labour : null, consulting };
+}
+S.M = { bs:null, ar:null, ap:null, pl:null };
+
+function booksCheck(){
+  const p = S.M.pl;
+  if(!p) return null;
+  const income = Number(p.income) || 0, gp = Number(p.gp) || 0;
+  const payroll = p.payroll, labour = p.labour, consulting = p.consulting;
+  const faults = [];
+  if(payroll != null && labour != null && payroll > labour * 1.5)
+    faults.push("Wages of " + M(payroll) + " sit in overhead, while only " + M(labour) + " of labour sits in the cost of doing the work. Most crew pay is landing in the wrong place, so the margin reads better than it is.");
+  if(consulting != null && consulting > 50000)
+    faults.push("Consulting fees of " + M(consulting) + " sit in overhead and need sorting out.");
+  return { income, gp, margin: income > 0 ? gp / income * 100 : null, payroll, labour, consulting, expenses: p.expenses, cogs: p.cogs, faults };
+}
+function moneyNums(){
+  const b = S.M.bs || {};
+  return { ...b, ar: S.M.ar || undefined, ap: S.M.ap || undefined, ready: !!(S.M.bs || S.M.ar || S.M.ap) };
+}
+const TOBILL = ["Loose Ends Required","Job Complete by A&M","PM Approvals","Invoicing"];
+const approvedFor = id => (S.orders || []).filter(o => o.job && o.job.id === id && o.status === "approved").reduce((s, o) => s + (Number(o.price) || 0), 0);
+
+/* ---------- pieces lifted from the old finance console, rebuilt on live QuickBooks ----------
+   The console typed most of its numbers in by hand and had faults: it ignored the line
+   of credit already drawn, assumed a 40% margin, and compared sales per calendar day with
+   break even per working day. These read the books instead, and say what they assume. */
+const FIN = { lateIn:50, lateOut:50, collectWeeks:5, wage:30, cpp:5.95, ei:2.3, wcb:4, hol:4, ben:50, hrs:80, cppCredit:8 };
+const finKey = "fin." + ROLE;
+try{ const saved = JSON.parse(localStorage.getItem(finKey) || "null"); if(saved) Object.assign(FIN, saved); }catch(e){}
+function finSave(){ try{ localStorage.setItem(finKey, JSON.stringify(FIN)); }catch(e){} }
+
+function plDays(){ return Math.max(1, daysSince(FY_START) + 1); }
+
+/* Break even: the sales a year needs before the business stops losing money. */
+function breakEvenHtml(){
+  if(!S.M.pl) return S.plErr ? failBox(S.plErr, "Profit and loss") : wait("profit and loss");
+  const b = booksCheck(), exp = b.expenses;
+  if(exp === null || !b || !b.income) return '<div class="state">QuickBooks did not return the running costs this time.</div>';
+  const days = plDays(), overheadYear = exp / days * 365, margin = b.gp / b.income;
+  const be = margin > 0 ? overheadYear / margin : null, pace = b.income / days * 365;
+  const at285 = overheadYear / 0.285;
+  return '<div class="big num ' + (be !== null && pace < be ? "stop" : "") + '">' + MK(be) + '</div>' +
+    '<p class="sub">a year in sales just to cover running costs. Running costs (overhead, everything that is not the direct cost of a job) are ' + M(exp) + ' since 1 April, about ' + MK(overheadYear) +
+    ' a year. Divide that by the margin QuickBooks shows, ' + (margin * 100).toFixed(1) + '%, and that is break even. Sales are on pace for ' + MK(pace) + '.</p>' +
+    tbl('<th>&nbsp;</th><th class="r">A year</th>', [
+      '<tr><td>Break even at the QuickBooks margin<span class="sm">' + (margin * 100).toFixed(1) + '%</span></td><td class="r num">' + MK(be) + '</td></tr>',
+      '<tr><td>Break even at the planning margin<span class="sm">28.5%, what A&amp;M plans on across the mix</span></td><td class="r num">' + MK(at285) + '</td></tr>',
+      '<tr><td>Sales at this year\'s pace</td><td class="r num">' + MK(pace) + '</td></tr>'
+    ]) +
+    (b.faults.length ? '<p class="sub" style="margin-top:10px">Both lines move once crew wages are taken out of running costs and put into job costs: running costs go down and the margin goes down with them. Until then, read this as a rough guide.</p>' : '');
+}
+
+/* A rough 13-week view of the bank balance. QuickBooks' detail reports come through
+   the connector cut off at 50 lines, so due dates cannot be read invoice by invoice.
+   This works from the aging totals and this year's pace instead, and shows every
+   assumption so anybody can change them. */
+function runway(){
+  const n = moneyNums(), b = booksCheck();
+  if(!S.M.bs || !n.ar || !n.ap || !b) return null;
+  const days = plDays();
+  const weeklySales = b.income / days * 7 * 1.05;            /* with 5% GST, as invoiced */
+  const wagesYTD = (b.payroll || 0) + (b.labour || 0);
+  const weeklyWages = wagesYTD / days * 7;
+  const cogs = b.income - b.gp, exp = b.expenses || 0;
+  const weeklyOther = Math.max(0, (cogs + exp - wagesYTD) / days * 7 * 1.05);
+  const W = 13, rows = [];
+  let bal = n.cash || 0, low = { bal, wk:0 };
+  for(let w = 1; w <= W; w++){
+    let inn = 0, out = 0;
+    if(w <= 4) inn += n.ar.tot.Current / 4;
+    if(w <= 8) inn += n.ar.tot.Late * FIN.lateIn / 100 / 8;
+    if(w > FIN.collectWeeks) inn += weeklySales;
+    if(w <= 4) out += n.ap.tot.Current / 4 + n.ap.tot.Late * FIN.lateOut / 100 / 4;
+    out += weeklyWages;
+    if(w > 4) out += weeklyOther;
+    bal += inn - out;
+    if(bal < low.bal) low = { bal, wk:w };
+    const ws = new Date(today()); ws.setDate(ws.getDate() + (w - 1) * 7 - ((ws.getDay() + 6) % 7));
+    rows.push({ w, ws, inn, out, bal });
+  }
+  return { rows, low, weeklySales, weeklyWages, weeklyOther, start:n.cash || 0 };
+}
+function runwayChart(r){
+  const W = 640, H = 170, pl = 64, pr = 12, pt = 12, pb = 26;
+  const vals = [r.start].concat(r.rows.map(x => x.bal));
+  const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals), span = (hi - lo) || 1;
+  const x = i => pl + i * (W - pl - pr) / (vals.length - 1), y = v => pt + (hi - v) / span * (H - pt - pb);
+  const pts = vals.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
+  const ticks = [hi, (hi + lo) / 2, lo];
+  return '<div class="scroll"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="min-width:420px;max-width:720px;display:block" role="img" aria-label="Bank balance over 13 weeks">' +
+    ticks.map(t => '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y(t).toFixed(1) + '" y2="' + y(t).toFixed(1) + '" stroke="var(--rule-soft)"/>' +
+      '<text x="' + (pl - 6) + '" y="' + (y(t) + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="var(--ink-3)" font-family="IBM Plex Mono,monospace">' + E(MK(t)) + '</text>').join("") +
+    '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y(0).toFixed(1) + '" y2="' + y(0).toFixed(1) + '" stroke="var(--ink-3)" stroke-dasharray="3 3"/>' +
+    '<polyline points="' + pts + '" fill="none" stroke="var(--cyan)" stroke-width="2.5"/>' +
+    vals.map((v, i) => '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(v).toFixed(1) + '" r="3" fill="' + (v < 0 ? "var(--stop)" : "var(--cyan)") + '"/>').join("") +
+    [0, 4, 8, 13].map(i => '<text x="' + x(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="' + (i === 0 ? "start" : i === 13 ? "end" : "middle") + '" font-size="11" fill="var(--ink-3)">' + (i === 0 ? "Today" : "Week " + i) + '</text>').join("") +
+    '</svg></div>';
+}
+function runwayOut(){
+  const r = runway();
+  if(!r) return (S.bsErr || S.arErr || S.apErr || S.plErr) ? failBox(S.bsErr || S.arErr || S.apErr || S.plErr, "QuickBooks") : wait("QuickBooks");
+  const end = r.rows[r.rows.length - 1].bal;
+  return '<p class="sub">Starts at today\'s bank balance of ' + M(r.start) + '. The lowest point is <b>' + M(r.low.bal) + '</b>' + (r.low.wk ? ' in week ' + r.low.wk : ' today') + ', and week 13 ends near ' + M(end) + '.</p>' +
+    runwayChart(r) +
+    tbl('<th>Week of</th><th class="r">In</th><th class="r">Out</th><th class="r">Bank at the end</th>', r.rows.map(x =>
+      '<tr><td class="num">' + iso(x.ws) + '</td><td class="r num">' + MK(x.inn) + '</td><td class="r num">' + MK(x.out) + '</td><td class="r num" style="' + (x.bal < 0 ? "color:var(--stop)" : "") + '">' + MK(x.bal) + '</td></tr>'), "", 13) +
+    '<p class="lede" style="margin-top:10px">What this assumes: customer money not yet due arrives over the next four weeks. Bills not yet due are paid over the next four weeks. ' +
+    'Wages run at this year\'s pace, about ' + MK(r.weeklyWages) + ' a week, every week. New work is invoiced at this year\'s pace (' + MK(r.weeklySales) + ' a week with GST) and paid ' + FIN.collectWeeks + ' weeks later. ' +
+    'Other job costs and running costs (' + MK(r.weeklyOther) + ' a week with GST) start being paid from week 5, once today\'s bills are cleared. It leaves out the line of credit, GST and tax remittances, loan payments and anything one-off. It is a draft to argue with, not a forecast.</p>';
+}
+function runwayHtml(){
+  const ctl = (k, label, min, max, step, unit) => '<label class="fld"><span>' + E(label) + ' <b class="num" id="v-' + k + '">' + FIN[k] + unit + '</b></span>' +
+    '<input type="range" data-fin="' + k + '" data-unit="' + unit + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + FIN[k] + '"></label>';
+  return '<div class="ctl">' + ctl("lateIn", "Late customer money collected in the next 8 weeks", 0, 100, 5, "%") +
+    ctl("lateOut", "Late bills paid in the next 4 weeks", 0, 100, 5, "%") +
+    ctl("collectWeeks", "Weeks from doing work to being paid", 3, 10, 1, "") + '</div><div id="runwayOut">' + runwayOut() + '</div>';
+}
+
+/* Labour cost ladder: what an hour of a person really costs once the employer's share is added. */
+function ladderRow(wage){
+  const pay = wage * FIN.hrs;
+  const cpp = Math.max(0, FIN.cpp / 100 * pay - FIN.cppCredit), ei = FIN.ei / 100 * pay, hol = FIN.hol / 100 * pay, wcb = FIN.wcb / 100 * pay;
+  const total = pay + cpp + ei + hol + wcb + FIN.ben;
+  return { wage, reg: total / FIN.hrs, ot: total / FIN.hrs * 1.5, load: total / pay - 1 };
+}
+function ladderOut(){
+  const me = ladderRow(Number(FIN.wage) || 0);
+  const steps = []; for(let w = 20; w <= 40; w += 2) steps.push(ladderRow(w));
+  return '<div class="big num">$' + me.reg.toFixed(2) + '<span style="font-size:15px;color:var(--ink-3)"> an hour</span></div>' +
+    '<p class="sub">is what a person on $' + Number(FIN.wage).toFixed(2) + ' an hour really costs A&amp;M, ' + Math.round(me.load * 100) + '% more than the wage. On overtime at time and a half it is about $' + me.ot.toFixed(2) + '.</p>' +
+    tbl('<th class="r">Wage</th><th class="r">Real cost an hour</th><th class="r">Overtime</th>', steps.map(s =>
+      '<tr><td class="r num">$' + s.wage + '</td><td class="r num">$' + s.reg.toFixed(2) + '</td><td class="r num">$' + s.ot.toFixed(2) + '</td></tr>'), "", 11);
+}
+function ladderHtml(){
+  const num = (k, label, step) => '<label class="fld"><span>' + E(label) + '</span><input type="number" data-fin="' + k + '" step="' + step + '" value="' + FIN[k] + '"></label>';
+  return '<div class="ctl">' + num("wage", "Wage an hour ($)", "0.25") + '</div>' +
+    '<details class="sub"><summary>Rates used (from the old finance console, confirm with the bookkeeper)</summary><div class="ctl" style="margin-top:8px">' +
+    num("cpp", "CPP %", "0.01") + num("ei", "EI, employer %", "0.01") + num("wcb", "WCB %", "0.01") + num("hol", "Holiday pay %", "0.1") + num("ben", "Benefits a pay ($)", "1") + num("hrs", "Hours a pay", "1") +
+    '</div><p class="lede">Not included: the yearly caps on CPP and EI, the second CPP tier, stat holidays beyond holiday pay, travel time, or hours paid but not billed. Each of those pushes the real cost up.</p></details>' +
+    '<div id="ladderOut">' + ladderOut() + '</div>';
+}
+
+document.addEventListener("input", ev => {
+  const t = ev.target; if(!t || !t.dataset || !t.dataset.fin) return;
+  const v = Number(t.value); if(isNaN(v)) return;
+  FIN[t.dataset.fin] = v; finSave();
+  const lab = document.getElementById("v-" + t.dataset.fin); if(lab) lab.textContent = v + (t.dataset.unit || "");
+  const ro = document.getElementById("runwayOut"); if(ro && ["lateIn","lateOut","collectWeeks"].includes(t.dataset.fin)) ro.innerHTML = runwayOut();
+  const lo = document.getElementById("ladderOut"); if(lo && !["lateIn","lateOut","collectWeeks"].includes(t.dataset.fin)) lo.innerHTML = ladderOut();
+});
+
+/* ---------- inside the A&M app: data comes from the app's own server ----------
+   Same sign-in as the shop screens. The token the app saved on this device is
+   read straight from its storage, so nobody signs in twice. What each person can
+   see is decided on the server by their role; this page only draws it. */
+let TOKEN = "";
+function idbToken(){
+  return new Promise(res => {
+    try{
+      const rq = indexedDB.open("am-inventory", 1);
+      rq.onupgradeneeded = () => {
+        /* Same shape the app makes, so opening here first never breaks it. */
+        const d = rq.result;
+        if(!d.objectStoreNames.contains("kv")) d.createObjectStore("kv");
+        if(!d.objectStoreNames.contains("events")) d.createObjectStore("events", { keyPath:"id" });
+        if(!d.objectStoreNames.contains("outbox")) d.createObjectStore("outbox", { keyPath:"id" });
+      };
+      rq.onsuccess = () => {
+        try{
+          const g = rq.result.transaction("kv", "readonly").objectStore("kv").get("token");
+          g.onsuccess = () => res(g.result || ""); g.onerror = () => res("");
+        }catch(e){ res(""); }
+      };
+      rq.onerror = () => res("");
+    }catch(e){ res(""); }
+  });
+}
+function api(part, fresh){
+  return fetch("/api/command?part=" + part + (fresh ? "&fresh=1" : ""), { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
+    .then(async r => {
+      const b = await r.json().catch(() => ({}));
+      if(!r.ok) throw { code: b.error || ("http_" + r.status), message: b.message || ("The app answered " + r.status + "."), status: r.status };
+      return b;
+    });
+}
+function appLoad(fresh){
+  api("jobs", fresh).then(d => {
+    S.jobs = (d.nodes || []).map(flat); S.jobTotal = d.total; S.stamp = d.storedAt;
+    S.jobsShort = d.total != null && (d.nodes || []).length < d.total;
+    S.orders = d.orders || []; S.jobsErr = S.ordersErr = null; render();
+  }).catch(e => { S.jobsErr = S.ordersErr = e; render(); });
+  if(CFG.qb) api("money", fresh).then(d => {
+    S.M.bs = d.bs; S.M.ar = d.ar; S.M.ap = d.ap; S.M.pl = d.pl;
+    S.bsErr = S.arErr = S.apErr = S.plErr = null; render();
+  }).catch(e => { S.bsErr = S.arErr = S.apErr = S.plErr = e; render(); });
+  api("inventory", fresh).then(d => { S.inv = d; S.invErr = null; render(); })
+    .catch(e => { S.invErr = e; render(); });
+  if(CFG.tabs.includes("drafts")) loadMail();
+  if(CFG.tabs.includes("buying")) api("buying", fresh).then(d => { S.buy = d; render(); })
+    .catch(e => { S.buy = { errors:{ jobtread: errCopy(e), quickbooks: errCopy(e) } }; render(); });
+}
+function appStop(title, text){
+  $("main").innerHTML = '<div class="tabhead"><h1>' + E(title) + '</h1></div><div class="verdict caution"><p>' + E(text) + '</p>' +
+    '<div class="meta"><a href="/">Open the A&amp;M app</a> and sign in, then come back here.</div></div>';
+  $("conndot").className = "dot warn"; $("connlabel").textContent = "Not signed in";
+}
+async function startApp(){
+  sizeTop();
+  const back = document.createElement("a");
+  back.className = "refresh"; back.href = "/"; back.textContent = "Shop screens"; back.style.textDecoration = "none";
+  $("refresh").parentNode.insertBefore(back, $("refresh"));
+  TOKEN = await idbToken();
+  if(!TOKEN) return appStop("Sign in first", "This device has not signed in to the A&M app yet.");
+  let me;
+  try{ me = await api("me"); }
+  catch(e){
+    if(e.status === 401) return appStop("Sign in again", e.message || "Your sign-in has run out.");
+    return appStop("Cannot reach the app", e.message || "The app did not answer. Check for signal and reload.");
+  }
+  if(me.role === "crew") return appStop("Not part of your screens", "The command centre is for the office and field leads. Your screens are the shop screens. If you need this, ask Jen.");
+  ROLE = me.role === "owner" ? "craig" : me.role;
+  /* The assistants' emails are sent from the app by the owner and the office. */
+  const tabs = ROLES[ROLE].tabs.filter(t => t !== "drafts").concat(["owner", "office"].includes(me.role) ? ["drafts"] : []);
+  CFG = { ...ROLES[ROLE], tabs, gmail:false };
+  const first = String(me.name || "").split(" ")[0];
+  if(me.role === "owner") CFG.title = (first ? first + "'s" : "Owner's") + " command centre";
+  S.meName = first;
+  document.title = CFG.title;
+  $("roleTitle").textContent = CFG.title; $("roleWho").textContent = CFG.who; sizeTop();
+  const h = (location.hash || "").replace("#", "");
+  current = CFG.tabs.includes(h) ? h : (CFG.tabs.includes(store("tab." + ROLE)) ? store("tab." + ROLE) : "overview");
+  render();
+  appLoad(false);
+  $("refresh").disabled = false;
+  $("refresh").addEventListener("click", () => {
+    const b = $("refresh"); b.disabled = true; b.textContent = "Refreshing";
+    appLoad(true); setTimeout(() => { b.disabled = false; b.textContent = "Refresh"; }, 1500);
+  });
+  setInterval(() => { if(!document.hidden) appLoad(false); }, 300000);
+}
+
+/* ---------- changing a job from the drawer (app only) ---------- */
+let LAST_SAVED = null;
+function apiPost(body){
+  return fetch("/api/command", { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) })
+    .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || ("http_" + r.status), message: b.message || ("The app answered " + r.status + ".") }; return b; });
+}
+const EDIT_FIELDS = [
+  ["Status", "select", () => ALLSTATUS],
+  ["Project Manager", "select", () => PMS],
+  ["Expected Date of Project Start", "date"],
+  ["Number of Guys Required", "select", () => Array.from({ length: 12 }, (_, i) => String(i + 1))],
+  ["Estimated Days of Work", "number"],
+  ["Risk Level", "select", () => ["Low Risk", "Glovebag", "Moderate Risk", "High Risk"]],
+  ["NOP Filed Date and Time", "datetime"],
+  ["NOP Expires", "date"]
+];
+function editForm(j){
+  const v = k => F(j[k]);
+  const local = s => { const d = dOnly(s); if(!d) return ""; const p = n => String(n).padStart(2, "0"); return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes()); };
+  return '<h3>Change this job</h3><p class="sub">Saved straight to JobTread under your name. JobTread does not email anybody about it.</p><div class="ctl" id="editForm" data-id="' + E(j._id) + '">' +
+    EDIT_FIELDS.map(([k, t, opts]) => {
+      const cur = v(k);
+      let input;
+      if(t === "select"){ const list = opts().slice(); if(cur && !list.includes(String(cur))) list.unshift(String(cur));
+        input = '<select data-f="' + E(k) + '" data-was="' + E(cur || "") + '"><option value="">Not set</option>' + list.map(o => '<option' + (String(cur) === o ? " selected" : "") + '>' + E(o) + '</option>').join("") + '</select>'; }
+      else if(t === "date") input = '<input type="date" data-f="' + E(k) + '" data-was="' + E(cur || "") + '" value="' + E(cur || "") + '">';
+      else if(t === "datetime") input = '<input type="datetime-local" data-f="' + E(k) + '" data-was="' + E(local(cur)) + '" value="' + E(local(cur)) + '">';
+      else input = '<input type="number" min="0" step="0.5" data-f="' + E(k) + '" data-was="' + E(cur == null ? "" : cur) + '" value="' + E(cur == null ? "" : cur) + '">';
+      return '<label class="fld"><span>' + E(k) + '</span>' + input + '</label>';
+    }).join("") + '</div><div class="actions"><button class="btn" id="editSave">Save to JobTread</button><span class="sub" id="editMsg" style="align-self:center;margin:0">' +
+    (LAST_SAVED && LAST_SAVED.id === j._id && Date.now() - LAST_SAVED.at < 120000 ? '<span class="tag clear">Saved</span> ' + E(LAST_SAVED.text) : '') + '</span></div>';
+}
+document.addEventListener("click", ev => {
+  const b = ev.target.closest && ev.target.closest("#editSave"); if(!b) return;
+  const form = $("editForm"); if(!form) return;
+  const changes = {};
+  form.querySelectorAll("[data-f]").forEach(el => {
+    if(String(el.value) === String(el.dataset.was)) return;
+    let val = el.value;
+    if(el.type === "datetime-local" && val) val = new Date(val).toISOString();
+    changes[el.dataset.f] = val === "" ? null : val;
+  });
+  const msg = $("editMsg");
+  if(!Object.keys(changes).length){ msg.textContent = "Nothing has changed."; return; }
+  b.disabled = true; msg.textContent = "Saving to JobTread…";
+  apiPost({ jobId: form.dataset.id, changes }).then(r => {
+    msg.textContent = "Saved: " + (r.changed || []).join("; ") + ".";
+    const id = form.dataset.id;
+    LAST_SAVED = { id, at: Date.now(), text: (r.changed || []).join("; ") + "." };
+    api("jobs", true).then(d => { S.jobs = (d.nodes || []).map(flat); S.stamp = d.storedAt; S.orders = d.orders || S.orders; render(); if(drawerState && drawerState.kind === "job" && drawerState.id === id) openJob(id); });
+  }).catch(e => { msg.textContent = errCopy(e); b.disabled = false; });
+});
+
+
+/* ---------- the assistants' emails: read, send or discard (app only) ---------- */
+function mailCall(params, body){
+  const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) }
+                    : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
+  return fetch("/api/mail" + (params ? "?" + params : ""), opts).then(async r => {
+    const b = await r.json().catch(() => ({}));
+    if(!r.ok) throw { code: b.error || ("http_" + r.status), message: b.message || ("The app answered " + r.status + ".") };
+    return b;
+  });
+}
+function loadMail(){
+  mailCall("action=status").then(st => {
+    S.mailStatus = st; S.mailErr = null; render();
+    if(st.connected) return mailCall("action=list").then(l => { S.drafts = l.drafts; S.draftsErr = null; render(); });
+  }).catch(e => { S.mailErr = e; S.draftsErr = e; render(); });
+}
+function mailConnect(){
+  mailCall("action=connect&mode=url").then(r => { location.href = r.url; }).catch(e => { S.mailErr = e; render(); });
+}
+function openMail(id){
+  const d = (S.drafts || []).find(x => x.id === id); if(!d) return;
+  drawerState = { kind:"mail", id };
+  openDrawer('<small>To ' + E(d.to || "nobody yet") + '</small>' + E(d.subject || "(no subject)"), '<div class="state">Reading the email.</div>');
+  mailCall("action=get&id=" + encodeURIComponent(id)).then(full => {
+    if(!drawerState || drawerState.id !== id) return;
+    $("dbody").innerHTML =
+      '<dl class="facts"><dt>From</dt><dd>' + E((S.mailStatus && S.mailStatus.mailbox) || "") + '</dd><dt>To</dt><dd>' + E(full.to || "Nobody yet") + '</dd>' + (full.cc ? '<dt>Copy to</dt><dd>' + E(full.cc) + '</dd>' : '') + '</dl>' +
+      '<div style="white-space:pre-wrap;font-size:14px;line-height:1.55;background:var(--panel-2);border:1px solid var(--rule);border-radius:3px;padding:14px 16px;margin-bottom:14px">' + E(full.text || d.snippet || "") + '</div>' +
+      (full.to ? '<div class="actions"><button class="btn" data-mail-send="' + E(id) + '">Send it now</button><button class="btn ghost" data-mail-discard="' + E(id) + '">Discard</button>' +
+        '<a class="btn ghost" target="_blank" rel="noopener" href="https://mail.google.com/mail/u/' + encodeURIComponent((S.mailStatus && S.mailStatus.mailbox) || "") + '/#drafts?compose=' + E(d.messageId) + '">Change it in Gmail first</a></div>'
+        : '<div class="state wait">This draft has nobody to send it to. Open it in Gmail and add an address.</div>') +
+      '<p class="sub" id="mailMsg"></p>';
+  }).catch(e => { $("dbody").innerHTML = '<div class="state err">' + E(errCopy(e)) + '</div>'; });
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-mail-open],[data-mail-send],[data-mail-discard],[data-mail-yes],[data-mail-connect]");
+  if(!t) return;
+  if(t.dataset.mailConnect !== undefined){ mailConnect(); return; }
+  if(t.dataset.mailOpen){ openMail(t.dataset.mailOpen); return; }
+  const msg = $("mailMsg");
+  if(t.dataset.mailDiscard){ t.outerHTML = '<button class="btn ghost" data-mail-yes="' + E(t.dataset.mailDiscard) + '">Yes, throw it away</button>'; return; }
+  const id = t.dataset.mailSend || t.dataset.mailYes, action = t.dataset.mailSend ? "send" : "discard";
+  t.disabled = true; if(msg) msg.textContent = action === "send" ? "Sending…" : "Discarding…";
+  mailCall("", { action, id }).then(() => {
+    S.drafts = (S.drafts || []).filter(x => x.id !== id);
+    if(msg) msg.innerHTML = '<span class="tag clear">' + (action === "send" ? "Sent" : "Discarded") + '</span> ' + (action === "send" ? "It has gone, and a copy is in the Sent folder." : "It is gone from the drafts.");
+    $("dbody").querySelectorAll("[data-mail-send],[data-mail-discard],[data-mail-yes]").forEach(b => b.remove());
+    render();
+  }).catch(e => { if(msg) msg.textContent = errCopy(e); t.disabled = false; });
+});
+
+/* ---------- lists the drawer can open ---------- */
+function resolveList(key){
+  const [kind, val] = [key.split(":")[0], key.slice(key.indexOf(":") + 1)];
+  if(kind === "stage"){ const g = STAGES.find(s => s.key === val); return g && { title:g.label, lede:"Statuses: " + g.statuses.join(", ") + ".", jobs:() => live().filter(j => g.statuses.includes(st(j))) }; }
+  if(kind === "status") return { title:val, jobs:() => live().filter(j => st(j) === val) };
+  if(kind === "pm") return { title: val ? "Open jobs for " + val : "Open jobs with no project manager", jobs:() => live().filter(j => POST.includes(st(j)) && pm(j) === val) };
+  return LISTS[key];
+}
+openList = function(key, quiet){
+  const L = resolveList(key); if(!L) return;
+  const jobs = L.jobs();
+  drawerState = { kind:"list", key };
+  const rows = jobs.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + E(pm(j) || "") + '</td></tr>');
+  const html = (L.lede ? '<p class="sub">' + E(L.lede) + '</p>' : '') +
+    (rows.length ? '<div class="scroll"><table><thead><tr><th>Job</th><th>Status</th><th>PM</th></tr></thead><tbody>' + rows.join("") + '</tbody></table></div>'
+                 : '<div class="state ok">Nothing in this list right now.</div>');
+  if(quiet){ $("dbody").innerHTML = html; return; }
+  openDrawer('<small>' + plural(jobs.length, "job") + '</small>' + E(L.title), html);
+};
+function jobsReady(){
+  if(S.jobsErr && !S.jobs) return failBox(S.jobsErr, "JobTread");
+  if(!S.jobs) return wait("JobTread");
+  return null;
+}
+function shortWarn(){
+  return S.jobsShort ? '<div class="state wait" style="margin-bottom:14px">Only ' + S.jobs.length + ' of ' + S.jobTotal + ' jobs came back from JobTread, so every count here is short. Press Refresh.</div>' : '';
+}
+
+/* ================= OVERVIEW ================= */
+VIEWS.overview = {
+  render(){
+    const tabs = CFG.tabs.filter(t => t !== "overview");
+    const all = tabs.flatMap(alertsFor).sort((a, b) => LV[a.lvl] - LV[b.lvl]);
+    const lede = ROLE === "craig" ? "The whole company on one screen. Each line below is something that needs a decision. Press a number to see the jobs behind it."
+               : ROLE === "office" ? "Estimating, dispatch, money and records for the office. Press a number to see the jobs behind it."
+               : "Every won job from the day it is scheduled to the day it is closed out. Press a number to see the jobs behind it.";
+    let html = head(ROLE === "craig" ? "Good morning, " + (S.meName || "Craig") : ROLE === "office" ? "Office overview" : "Field overview", lede);
+    html += verdictHtml(all, "Nothing on any tab needs a decision right now.", "Every section has been read. Check back after the morning assistants have run.");
+    html += kpis();
+    if(S.jobs) html += flowStrip();
+    html += '<div class="card"><h2>Needs a decision</h2><p class="lede">Worst first. Each line is worked out live from the systems, so it clears itself once the cause is fixed.</p>';
+    if(!all.length) html += S.jobs ? '<div class="state ok">Nothing waiting on anybody.</div>' : wait("the systems");
+    else html += '<ul class="alerts">' + all.slice(0, 14).map(a =>
+      '<li><span class="tag ' + (a.lvl === "stop" ? "stop" : a.lvl === "caution" ? "caution" : "mute") + '">' + (a.lvl === "stop" ? "Now" : a.lvl === "caution" ? "Soon" : "Note") + '</span>' +
+      '<div><div class="t">' + E(a.text) + '</div>' + (a.meta ? '<div class="m">' + E(a.meta) + '</div>' : '') + '</div>' +
+      '<button class="go" data-go="' + a.tab + '">' + E(TABS[a.tab].label) + '</button></li>').join("") + '</ul>' +
+      (all.length > 14 ? '<div class="more">' + (all.length - 14) + ' more on the tabs.</div>' : '');
+    html += '</div>';
+    return shortWarn() + html;
+  }
+};
+function kpi(label, val, sub, tab, cls){
+  return '<button class="kpi" data-go="' + tab + '"><div class="k">' + E(label) + '</div><div class="v num ' + (cls || "") + '">' + val + '</div><div class="s">' + E(sub || "") + '</div></button>';
+}
+function kpis(){
+  const n = moneyNums(), J = S.jobs ? live() : null, dots = '<span style="color:var(--ink-3)">…</span>';
+  const q = quotesOut();
+  const list = [];
+  const has = t => CFG.tabs.includes(t);
+  if(ROLE !== "field"){
+    if(ROLE === "craig") list.push(kpi("Cash in the bank", n.cash !== undefined && n.cash !== null ? MK(n.cash) : (S.bsErr ? "n/a" : dots), "All bank accounts, per QuickBooks", "money", n.cash < 0 ? "stop" : ""));
+    list.push(kpi("Owed to A&M", n.ar ? MK(n.ar.tot.Total) : (S.arErr ? "n/a" : dots), n.ar ? MK(n.ar.tot.Late) + " of it is late" : "Customers, including holdbacks", "money"));
+    if(ROLE === "craig") list.push(kpi("A&M owes", n.ap ? MK(n.ap.tot.Total) : (S.apErr ? "n/a" : dots), n.ap ? MK(n.ap.tot.Late) + " of it is late" : "Suppliers and subtrades", "money"));
+    list.push(kpi("Quotes out", q ? MK(q.value) : (S.ordersErr ? "n/a" : dots), q ? plural(q.list.length, "quote") + " waiting on an answer" : "Built in JobTread", "estimating"));
+  }
+  if(J){
+    const won = J.filter(j => POST.includes(st(j)));
+    const soon = J.filter(j => ["won","sched"].includes(stageOf(st(j))) && (d => d !== null && d >= 0 && d <= 7)(daysTo(startOf(j))));
+    const onsite = J.filter(j => stageOf(st(j)) === "site");
+    const closing = J.filter(j => stageOf(st(j)) === "close");
+    if(ROLE === "office") list.push(kpi("Starting in 14 days", String(J.filter(j => ["won","sched"].includes(stageOf(st(j))) && (d => d !== null && d >= 0 && d <= 14)(daysTo(startOf(j)))).length), "Won jobs with a start date", "dispatch"));
+    if(ROLE === "craig") list.push(kpi("Won, not finished", String(won.length), onsite.length + " on site, " + closing.length + " closing out", "projects"));
+    if(ROLE === "field"){
+      list.push(kpi("On site now", String(onsite.length), "Status Site work", "sites"));
+      list.push(kpi("Starting in 7 days", String(soon.length), "Won jobs with a start date", "sites"));
+      const noNop = asbNoNotice().length;
+      list.push(kpi("Asbestos, no notice", String(noNop), "Starting within 10 days or on site", "sites", noNop ? "stop" : "clear"));
+      list.push(kpi("Closing out", String(closing.length), "Loose ends to post mortem", "closeout"));
+      const nopm = won.filter(j => !pm(j)).length;
+      list.push(kpi("No PM named", String(nopm), "Won jobs nobody owns", "projects", nopm ? "caution" : "clear"));
+    }
+    if(ROLE !== "field"){
+      const tb = J.filter(j => TOBILL.includes(st(j))).length;
+      list.push(kpi("Done, not billed", String(tb), "Finished work not yet invoiced", has("closeout") ? "closeout" : "money", tb ? "caution" : "clear"));
+    }
+  }
+  if(ROLE === "craig" && S.M.pl) list.push(kpi("Sales since 1 April", MK(S.M.pl.income), "Invoiced this fiscal year", "money"));
+  return '<div class="kpis">' + list.join("") + '</div>';
+}
+function flowStrip(){
+  const J = live();
+  return '<div class="flow">' + STAGES.map((g, i) => {
+    const n = J.filter(j => g.statuses.includes(st(j))).length;
+    return '<button data-list="stage:' + g.key + '"><div class="step">Step ' + (i + 1) + '</div><div class="n num">' + n + '</div><div class="l">' + E(g.label) + '</div><div class="fx">' + E(g.statuses.length === 1 ? g.statuses[0] : plural(g.statuses.length, "status", "statuses")) + '</div></button>';
+  }).join("") + '</div>';
+}
+
+/* ================= ESTIMATING ================= */
+function quotesOut(){
+  if(!S.orders || !S.jobs) return null;
+  const byId = {}; S.jobs.forEach(j => { byId[j._id] = j; });
+  const list = S.orders.filter(o => o.status === "pending" && o.job && byId[o.job.id] && isOpen(byId[o.job.id]))
+    .map(o => ({ o, j:byId[o.job.id], age: daysSince(o.issueDate || o.createdAt) }))
+    .sort((a, b) => (b.age || 0) - (a.age || 0));
+  return { list, value: list.reduce((s, x) => s + (Number(x.o.price) || 0), 0) };
+}
+function bidsDue(){ return live().filter(j => ["lead","est","out"].includes(stageOf(st(j))) && F(j["Bid Due Date and Time"]))
+  .map(j => ({ j, d: daysTo(F(j["Bid Due Date and Time"])) })).filter(x => x.d !== null && x.d >= -3 && x.d <= 14).sort((a, b) => a.d - b.d); }
+function wrongBoard(){
+  if(!S.orders) return [];
+  return live().filter(j => ["lead","est","out"].includes(stageOf(st(j))) && approvedFor(j._id) > 0);
+}
+VIEWS.estimating = {
+  alerts(){
+    const a = []; if(!S.jobs) return a;
+    const notSent = bidsDue().filter(x => stageOf(st(x.j)) !== "out");
+    const past = notSent.filter(x => x.d < 0), due = notSent.filter(x => x.d >= 0 && x.d <= 2);
+    if(due.length) a.push({ lvl:"stop", text: plural(due.length, "bid is", "bids are") + " due within two days and not sent yet.", meta: due.slice(0,4).map(x => x.j._number + " " + rel(x.d, false, true).toLowerCase()).join(", ") + "." });
+    if(past.length) a.push({ lvl:"caution", text: plural(past.length, "job is", "jobs are") + " past the bid date and still not marked as quoted.", meta:"Either the bid went in and the status was not moved, or it was missed. " + past.slice(0,4).map(x => x.j._number).join(", ") + "." });
+    const wb = wrongBoard();
+    if(wb.length) a.push({ lvl:"caution", text: plural(wb.length, "quote has", "quotes have") + " been approved while the job still reads as not won.", meta:"The job board is wrong, so dispatch cannot see this work. Move the status in JobTread." });
+    const q = quotesOut();
+    if(q){ const old = q.list.filter(x => x.age !== null && x.age > 30); if(old.length) a.push({ lvl:"caution", text: plural(old.length, "quote has", "quotes have") + " waited more than 30 days with no answer.", meta:"Worth " + M(old.reduce((s, x) => s + (Number(x.o.price) || 0), 0)) + " before GST. These are phone calls now, or close them out." }); }
+    const leads = live().filter(j => stageOf(st(j)) === "lead" && daysSince(j._created) > 3);
+    if(leads.length) a.push({ lvl:"caution", text: plural(leads.length, "lead has", "leads have") + " sat more than three days without being picked up.", meta:"Nobody has started estimating them." });
+    return a;
+  },
+  render(){
+    const nr = jobsReady(); if(nr) return head("Estimating", "") + nr;
+    const J = live();
+    let h = head("Estimating", "From the first call to the quote going out. Bid dates, site visits, quotes waiting on an answer, and whether we are winning.");
+    h += verdictHtml(this.alerts(), "Estimating is on top of everything.", "No bid is about to be missed and no quote has gone quiet.");
+    h += '<div class="grid">';
+    const due = bidsDue();
+    h += '<div class="card wide"><h2>Bids due in the next two weeks</h2><p class="lede">From the Bid Due Date and Time field. Red means it is close and the quote has not gone out.</p>' +
+      tbl('<th>Job</th><th>Bid type</th><th>Status</th><th class="r">Due</th>', due.map(x => {
+        const sent = stageOf(st(x.j)) === "out", cls = sent ? "clear" : (x.d <= 2 ? "stop" : x.d <= 5 ? "caution" : "mute");
+        return '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td>' + E(F(x.j["Bid Type"]) || "Not set") + '</td><td>' + stTag(x.j) + '</td><td class="r"><span class="tag ' + cls + '">' + (sent ? "Sent" : rel(x.d, false, true)) + '</span><span class="sm">' + E(showWhen(F(x.j["Bid Due Date and Time"]))) + '</span></td></tr>';
+      }), "No bids due in the next two weeks.") + '</div>';
+
+    const q = quotesOut();
+    h += '<div class="card wide"><h2>Quotes waiting on an answer</h2><p class="lede">Quotes built in JobTread and sent, not yet approved or turned down. Oldest first. Values are before GST.</p>';
+    if(!q) h += S.ordersErr ? failBox(S.ordersErr, "Quotes") : wait("quotes");
+    else {
+      const noDoc = J.filter(j => stageOf(st(j)) === "out" && !(S.orders || []).some(o => o.job && o.job.id === j._id));
+      LISTS["nodoc"] = { title:"Quote out, but no quote in JobTread", lede:"These jobs say a quote went out, but no quote was built in JobTread, so nobody can tell how old it is or what it was for.", jobs:() => noDoc };
+      h += '<div class="big num">' + M(q.value) + '</div><p class="sub">across ' + plural(q.list.length, "quote") + '.' +
+        (noDoc.length ? ' Another ' + plural(noDoc.length, "job") + ' <button class="go" data-list="nodoc">See them</button> say a quote went out, but no quote was built in JobTread, so they cannot be timed or valued.' : '') + '</p>' +
+        tbl('<th>Job</th><th>Bid type</th><th class="r">Value</th><th class="r">Waiting</th>', q.list.map(x => {
+          const cls = x.age > 30 ? "stop" : x.age > 14 ? "caution" : "mute";
+          return '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td>' + E(F(x.j["Bid Type"]) || "") + '<span class="sm">' + E(st(x.j)) + '</span></td><td class="r num">' + M(x.o.price) + '</td><td class="r"><span class="tag ' + cls + '">' + (x.age === null ? "No date" : x.age + " days") + '</span><span class="sm">' + E(showDate(x.o.issueDate) || "") + '</span></td></tr>';
+        }), "No quotes waiting on an answer.", 15);
+    }
+    h += '</div>';
+
+    const wb = wrongBoard();
+    if(wb.length) h += '<div class="card"><h2>Won, but the board says otherwise</h2><p class="lede">The quote is approved in JobTread but the job status still says it is being quoted. Dispatch cannot see these.</p>' +
+      tbl('<th>Job</th><th>Status</th><th class="r">Approved</th>', wb.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td class="r num">' + M(approvedFor(j._id)) + '</td></tr>')) + '</div>';
+
+    const visits = J.filter(j => F(j["Site Visit Date and Time"])).map(j => ({ j, d: daysTo(F(j["Site Visit Date and Time"])) })).filter(x => x.d !== null && x.d >= -1 && x.d <= 14).sort((a, b) => a.d - b.d);
+    h += '<div class="card"><h2>Site visits coming up</h2><p class="lede">From the Site Visit Date and Time field.</p>' +
+      tbl('<th>Job</th><th class="r">When</th>', visits.map(x => '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td class="r"><span class="tag ' + (x.d <= 1 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span><span class="sm">' + E(showWhen(F(x.j["Site Visit Date and Time"]))) + '</span></td></tr>'), "No site visits booked in the next two weeks.") + '</div>';
+
+    const pre = PRE.map(s => [s, J.filter(j => st(j) === s).length, "status:" + s]).filter(x => x[1]);
+    h += '<div class="card"><h2>Where every open quote is sitting</h2><p class="lede">Press a line to see the jobs.</p>' + bars(pre) + '</div>';
+
+    /* Win rate this fiscal year, by job outcome. */
+    const since = (S.jobs || []).filter(j => !isSpecial(j) && j._created && j._created.slice(0, 10) >= FY_START);
+    const won = since.filter(j => POST.includes(st(j)) || st(j) === "Closed Won").length;
+    const lost = since.filter(j => st(j) === "File Closed Bid Lost").length;
+    const nob = since.filter(j => st(j) === "Not Bid").length;
+    const rate = won + lost ? Math.round(won / (won + lost) * 100) : null;
+    let qa = "";
+    if(S.orders){
+      const ap = S.orders.filter(o => o.status === "approved" && (o.issueDate || "") >= FY_START), dn = S.orders.filter(o => o.status === "denied" && (o.issueDate || "") >= FY_START);
+      qa = '<p class="sub">Quotes built in JobTread since 1 April: ' + plural(ap.length, "approved") + ' worth ' + M(ap.reduce((s, o) => s + (Number(o.price) || 0), 0)) +
+        ', ' + plural(dn.length, "turned down") + ' worth ' + M(dn.reduce((s, o) => s + (Number(o.price) || 0), 0)) + '. Older quotes were not built in JobTread, so this side of the picture is still thin.</p>';
+    }
+    h += '<div class="card"><h2>Are we winning</h2><p class="lede">Jobs opened since 1 April that have reached an answer. Hit rate means won divided by won plus lost.</p>' +
+      '<div class="big num">' + (rate === null ? "n/a" : rate + "%") + '</div><p class="sub">' + plural(won, "job") + ' won, ' + lost + ' lost, ' + nob + ' not bid.</p>' + qa + '</div>';
+
+    const leads = J.filter(j => stageOf(st(j)) === "lead").sort((a, b) => String(a._created).localeCompare(String(b._created)));
+    h += '<div class="card"><h2>Leads not picked up yet</h2><p class="lede">New leads and uploads, oldest first.</p>' +
+      tbl('<th>Job</th><th class="r">Waiting</th>', leads.map(j => { const d = daysSince(j._created); return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td class="r"><span class="tag ' + (d > 3 ? "caution" : "mute") + '">' + d + ' days</span></td></tr>'; }), "Every lead has been picked up.") + '</div>';
+    return shortWarn() + h + '</div>';
+  }
+};
+
+/* ================= DISPATCH ================= */
+function addWorkDays(d, n){ const x = new Date(d); let left = Math.max(1, Math.ceil(n)); while(true){ const w = x.getDay(); if(w !== 0 && w !== 6){ left--; if(left === 0) return x; } x.setDate(x.getDate() + 1); } }
+function crewLoad(){
+  const J = live().filter(j => ["won","sched","site"].includes(stageOf(st(j))) && startOf(j));
+  const t = today(), mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+  const weeks = [];
+  for(let w = 0; w < 4; w++){
+    const ws = new Date(mon); ws.setDate(mon.getDate() + w * 7);
+    let peak = 0; const jobs = new Set(), unknown = new Set();
+    for(let d = 0; d < 5; d++){
+      const day = new Date(ws); day.setDate(ws.getDate() + d);
+      if(day < t) continue;
+      let sum = 0;
+      J.forEach(j => {
+        const s = dOnly(startOf(j)); if(!s || s > day) return;
+        let end = addWorkDays(s, dur(j) || 1);
+        if(stageOf(st(j)) === "site" && end < t) end = t; /* still on site past plan: assume today at least */
+        if(day > end) return;
+        jobs.add(j._id); if(crew(j) === null) unknown.add(j._id); else sum += crew(j);
+      });
+      peak = Math.max(peak, sum);
+    }
+    weeks.push({ ws, peak, jobs:[...jobs], unknown:[...unknown] });
+  }
+  return weeks;
+}
+VIEWS.dispatch = {
+  alerts(){
+    const a = []; if(!S.jobs) return a;
+    const J = live(), pre = J.filter(j => ["won","sched"].includes(stageOf(st(j))));
+    const soonNoPm = pre.filter(j => !pm(j) && (d => d !== null && d <= 3)(daysTo(startOf(j))));
+    if(soonNoPm.length) a.push({ lvl:"stop", text: plural(soonNoPm.length, "job starts", "jobs start") + " within three days with no project manager named.", meta: soonNoPm.map(j => j._number).join(", ") + "." });
+    const late = pre.filter(j => (d => d !== null && d < 0)(daysTo(startOf(j))));
+    if(late.length) a.push({ lvl:"caution", text: plural(late.length, "job is", "jobs are") + " past the start date and not marked as on site.", meta:"Either the work started and the status was not moved, or the job slipped. Both are worth ten minutes." });
+    const nodate = J.filter(j => stageOf(st(j)) === "won" && !startOf(j));
+    if(nodate.length) a.push({ lvl:"caution", text: plural(nodate.length, "won job has", "won jobs have") + " no start date.", meta:"Nobody can plan crews around a job with no date." });
+    const nocrew = pre.filter(j => (d => d !== null && d >= 0 && d <= 7)(daysTo(startOf(j))) && crew(j) === null);
+    if(nocrew.length) a.push({ lvl:"caution", text: plural(nocrew.length, "job starting this week has", "jobs starting this week have") + " no crew size.", meta:"Fill in Number of Guys Required so the crew load below is right." });
+    return a;
+  },
+  render(){
+    const nr = jobsReady(); if(nr) return head("Dispatch", "") + nr;
+    const J = live();
+    let h = head("Dispatch", "Who is going where, and when. Crew load for the next four weeks, jobs about to start, and won work with no date.");
+    h += verdictHtml(this.alerts(), "Every job about to start has a date, a PM and a crew size.", "");
+    h += '<div class="grid">';
+    const wk = crewLoad();
+    const max = Math.max(1, ...wk.map(w => w.peak));
+    h += '<div class="card wide"><h2>Crew load, next four weeks</h2><p class="lede">The busiest weekday in each week, adding up Number of Guys Required on every job on site that day. A job runs from its start date for its Estimated Days of Work, weekdays only.</p><ul class="bars">' +
+      wk.map((w, i) => {
+        LISTS["week" + i] = { title:"Week of " + iso(w.ws), lede:"Jobs planned on site that week.", jobs:() => J.filter(j => w.jobs.includes(j._id)) };
+        return '<li class="click" data-list="week' + i + '"><span>Week of ' + iso(w.ws) + (i === 0 ? " (this week)" : "") + '</span><span class="num">' + w.peak + ' people · ' + plural(w.jobs.length, "job") +
+          (w.unknown.length ? ' · <span style="color:var(--caution)">' + w.unknown.length + ' with no crew size</span>' : '') + '</span>' +
+          '<span class="track"><span class="fill" style="width:' + Math.max(2, Math.round(w.peak / max * 100)) + '%"></span></span></li>';
+      }).join("") + '</ul></div>';
+
+    const soon = J.filter(j => ["won","sched"].includes(stageOf(st(j)))).map(j => ({ j, d: daysTo(startOf(j)) })).filter(x => x.d !== null && x.d >= 0 && x.d <= 14).sort((a, b) => a.d - b.d);
+    h += '<div class="card wide"><h2>Starting in the next two weeks</h2><p class="lede">Won jobs with a start date, soonest first.</p>' +
+      tbl('<th>Job</th><th>PM</th><th class="r">Crew</th><th class="r">Days</th><th>Site info</th><th class="r">Starts</th>', soon.map(x => {
+        const j = x.j, phone = F(j["Site Contact Phone Number"]), notes = F(j["Site Access Notes"]);
+        return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + (pm(j) ? E(pm(j)) : '<span class="tag stop">Nobody</span>') + '</td>' +
+          '<td class="r num">' + (crew(j) === null ? '<span class="tag caution">?</span>' : crew(j)) + '</td><td class="r num">' + (dur(j) === null ? '<span class="tag caution">?</span>' : dur(j)) + '</td>' +
+          '<td>' + (phone ? '<span class="tag clear">Contact</span> ' : '<span class="tag caution">No contact</span> ') + (notes ? '<span class="tag clear">Access</span>' : '') + '</td>' +
+          '<td class="r"><span class="tag ' + (x.d <= 2 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span><span class="sm">' + E(showDate(startOf(j))) + '</span></td></tr>';
+      }), "Nothing starts in the next two weeks.", 20) + '</div>';
+
+    const late = J.filter(j => ["won","sched"].includes(stageOf(st(j))) && (d => d !== null && d < 0)(daysTo(startOf(j))));
+    h += '<div class="card"><h2>Past the start date, not on site</h2><p class="lede">The status was not moved, or the job slipped.</p>' +
+      tbl('<th>Job</th><th>Status</th><th class="r">Was due</th>', late.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td class="r"><span class="tag caution">' + rel(daysTo(startOf(j))) + '</span></td></tr>'), "Nothing has slipped.") + '</div>';
+    const nodate = J.filter(j => stageOf(st(j)) === "won" && !startOf(j));
+    h += '<div class="card"><h2>Won, no start date</h2><p class="lede">Bid accepted or waiting to be scheduled, with no Expected Date of Project Start.</p>' +
+      tbl('<th>Job</th><th>Status</th><th>PM</th>', nodate.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td></tr>'), "Every won job has a date.") + '</div>';
+    return shortWarn() + h + '</div>';
+  }
+};
+
+/* ================= MONEY ================= */
+function agingBar(tot){
+  const all = BK.reduce((s, k) => s + Math.max(0, tot[k]), 0);
+  if(all <= 0) return '<div class="state ok">Nothing outstanding.</div>';
+  return '<ul class="bars"><li><span>By age</span><span class="num">' + M(tot.Total) + '</span><span class="track">' +
+    BK.map((k, i) => '<span class="fill c' + (i + 1) + '" style="width:' + (Math.max(0, tot[k]) / all * 100).toFixed(2) + '%" title="' + E(BKLAB[k]) + '"></span>').join("") + '</span></li></ul>' +
+    '<div class="legend">' + BK.map((k, i) => '<span><i style="background:var(--' + ["cyan","cyan-deep","caution","stop","ink"][i] + ')"></i>' + E(BKLAB[k]) + ' <b class="num">' + MK(tot[k]) + '</b></span>').join("") + '</div>';
+}
+function worstTable(list, who){
+  const rows = list.filter(r => r.late > 0.5).sort((a, b) => (b.b["91+"] - a.b["91+"]) || (b.old - a.old) || (b.late - a.late)).slice(0, 10).map(r =>
+    '<tr><td>' + E(r.name) + '</td><td class="r num">' + M(r.total) + '</td><td class="r num">' + M(r.late) + '</td><td class="r num">' + (r.b["91+"] ? '<span class="tag stop">' + M(r.b["91+"]) + '</span>' : '') + '</td></tr>');
+  return tbl('<th>' + who + '</th><th class="r">Owed</th><th class="r">Late</th><th class="r">Over 90 days</th>', rows, "Nobody is late.", 10);
+}
+VIEWS.money = {
+  alerts(){
+    const a = [], n = moneyNums();
+    if(n.cash !== undefined && n.cash !== null && n.cash < 0) a.push({ lvl:"stop", text:"The bank accounts in QuickBooks add up to " + M(n.cash) + ".", meta:"Either the overdraft is real or deposits have not been recorded. Ask the bookkeeper which, because every other number here leans on it." });
+    if(n.ar && n.ar.tot["91+"] > 100000) a.push({ lvl:"stop", text: M(n.ar.tot["91+"]) + " has been owed to A&M for more than 90 days.", meta:"At that age an email will not collect it. These are phone calls." });
+    if(n.ar && n.ap){ const cover = n.ap.tot.Late > 0 ? n.ar.tot.Current / n.ap.tot.Late : null; if(cover !== null && cover < 1) a.push({ lvl:"stop", text:"Less customer money is due in than supplier money is already late.", meta: M(n.ar.tot.Current) + " not yet due from customers against " + M(n.ap.tot.Late) + " already late to suppliers." }); }
+    if(n.ar && n.arBS !== undefined && n.arBS !== null && Math.abs(n.ar.tot.Total - n.arBS) > 5) a.push({ lvl:"caution", text:"The receivables report and the balance sheet disagree by " + M(Math.abs(n.ar.tot.Total - n.arBS)) + ".", meta:"The balance sheet figure is the one to trust until the bookkeeper finds the gap." });
+    const b = booksCheck(); if(b && b.faults.length) a.push({ lvl:"caution", text:"Do not price work from the QuickBooks margin yet.", meta: b.faults[0] });
+    if(S.jobs){ const tb = live().filter(j => TOBILL.includes(st(j))); if(tb.length) a.push({ lvl:"caution", text: plural(tb.length, "finished job has", "finished jobs have") + " not been invoiced yet.", meta:"Money already spent and not yet asked for." }); }
+    return a;
+  },
+  render(){
+    let h = head("Money", "Cash, who owes us, who we owe, and whether the books are safe to price from. QuickBooks owns every figure here.");
+    if(!CFG.qb) return h + '<div class="state">Money is not part of this command centre.</div>';
+    const n = moneyNums();
+    h += verdictHtml(this.alerts(), "Money coming in covers money going out.", "");
+    h += '<div class="grid">';
+
+    /* cash position */
+    h += '<div class="card"><h2>Cash position</h2><p class="lede">From the balance sheet, as of today.</p>';
+    if(!S.M.bs) h += S.bsErr ? failBox(S.bsErr, "Balance sheet") : wait("the balance sheet");
+    else {
+      h += '<div class="big num ' + (n.cash < 0 ? "stop" : "") + '">' + M(n.cash) + '</div><p class="sub">in the bank accounts, added together. A minus means the accounts are overdrawn on the books.</p>' +
+        tbl('<th>&nbsp;</th><th class="r">Amount</th>', [
+          '<tr><td>Owed to A&amp;M by customers<span class="sm">Including ' + M(n.holdbacks) + ' of holdbacks</span></td><td class="r num">' + M(n.arBS) + '</td></tr>',
+          '<tr><td>Owed by A&amp;M to suppliers</td><td class="r num">' + M(n.apBS) + '</td></tr>',
+          '<tr><td>Working capital<span class="sm">Cash plus what is owed to us soon, minus what we owe soon</span></td><td class="r num">' + M(n.wc) + '</td></tr>',
+          '<tr><td>Current ratio<span class="sm">Cents on hand or coming in for every dollar due out this year</span></td><td class="r num">' + (n.ratio === null || n.ratio === undefined ? "n/a" : Math.round(n.ratio * 100) + "¢") + '</td></tr>'
+        ]);
+    }
+    h += '</div>';
+
+    /* cover */
+    h += '<div class="card"><h2>Does money coming in cover money going out</h2><p class="lede">What customers owe that is not late yet, against what A&amp;M owes that is already late.</p>';
+    if(!n.ar || !n.ap) h += (S.arErr || S.apErr) ? failBox(S.arErr || S.apErr, "Aging reports") : wait("the aging reports");
+    else {
+      const cover = n.ap.tot.Late > 0 ? n.ar.tot.Current / n.ap.tot.Late : null;
+      const cls = cover === null ? "clear" : cover >= 1.5 ? "clear" : cover >= 1 ? "caution" : "stop";
+      h += '<div class="big num ' + cls + '">' + (cover === null ? "n/a" : cover.toFixed(2) + "×") + '</div><p class="sub">' + M(n.ar.tot.Current) + ' due in from customers and not late yet, against ' + M(n.ap.tot.Late) +
+        ' already late to suppliers. ' + (cover === null ? "Nothing is late to suppliers." : cover >= 1 ? "For every dollar late to suppliers there is " + cover.toFixed(2) + " dollars of customer money coming that is not late yet." : "There is less customer money coming than supplier money already late.") + '</p>';
+    }
+    h += '</div>';
+
+    /* AR */
+    h += '<div class="card wide"><h2>Who owes us money</h2><p class="lede">Every unpaid invoice, by how late it is. Each customer counted once.</p>';
+    if(!n.ar) h += S.arErr ? failBox(S.arErr, "Receivables") : wait("receivables");
+    else {
+      const gap = (n.arBS !== undefined && n.arBS !== null) ? n.ar.tot.Total - n.arBS : null;
+      h += '<div class="big num">' + M(n.ar.tot.Total) + '</div><p class="sub">owed by ' + plural(n.ar.list.length, "customer") + '. ' + M(n.ar.tot.Late) + ' of it is late, which is ' + (n.ar.tot.Total ? Math.round(n.ar.tot.Late / n.ar.tot.Total * 100) : 0) + '%. ' +
+        (gap === null ? "" : Math.abs(gap) <= 5 ? "This matches the balance sheet to the dollar." : "This is " + M(Math.abs(gap)) + (gap > 0 ? " more" : " less") + " than the balance sheet, so trust the balance sheet figure.") + '</p>' +
+        agingBar(n.ar.tot) + '<p class="lede" style="margin-top:16px">Longest overdue first, because they are the hardest to collect.</p>' + worstTable(n.ar.list, "Customer");
+    }
+    h += '</div>';
+
+    /* AP */
+    h += '<div class="card wide"><h2>What we owe</h2><p class="lede">Every unpaid bill, by how late it is.</p>';
+    if(!n.ap) h += S.apErr ? failBox(S.apErr, "Payables") : wait("payables");
+    else {
+      h += '<div class="big num">' + M(n.ap.tot.Total) + '</div><p class="sub">owed to ' + plural(n.ap.list.length, "supplier") + '. ' + M(n.ap.tot.Late) + ' of it is late, which is ' + (n.ap.tot.Total ? Math.round(n.ap.tot.Late / n.ap.tot.Total * 100) : 0) + '%.</p>' +
+        agingBar(n.ap.tot) + '<p class="lede" style="margin-top:16px">Longest overdue first.</p>' + worstTable(n.ap.list, "Supplier");
+    }
+    h += '</div>';
+
+    /* books */
+    const b = booksCheck();
+    h += '<div class="card"><h2>Are the books safe to price from</h2><p class="lede">Gross margin means what is left from a dollar of sales once the direct cost of doing the work is taken off. A&amp;M plans on about 28.5% across the mix.</p>';
+    if(!b) h += S.plErr ? failBox(S.plErr, "Profit and loss") : wait("profit and loss");
+    else if(b.faults.length) h += '<div class="big stop">Not yet.</div><p class="sub">QuickBooks shows a gross margin of ' + (b.margin === null ? "n/a" : b.margin.toFixed(1) + "%") + ' on sales of ' + M(b.income) + ' since 1 April. That figure is too high:</p><ul class="sub" style="padding-left:18px">' + b.faults.map(f => '<li>' + E(f) + '</li>').join("") + '</ul><p class="sub">The bookkeeper is working on this. This check clears itself once the wages are moved.</p>';
+    else h += '<div class="big clear">Yes.</div><p class="sub">Wages sit in the cost of doing the work. QuickBooks shows a gross margin of ' + (b.margin === null ? "n/a" : b.margin.toFixed(1) + "%") + ' on sales of ' + M(b.income) + ' since 1 April.</p>';
+    h += '</div>';
+
+    /* sales pace */
+    h += '<div class="card"><h2>Sales since 1 April</h2><p class="lede">Invoiced this fiscal year. The year runs 1 April to 31 March.</p>';
+    if(!S.M.pl) h += S.plErr ? failBox(S.plErr, "Profit and loss") : wait("profit and loss");
+    else {
+      const days = Math.max(1, daysSince(FY_START) + 1), pace = (Number(S.M.pl.income) || 0) / days * 365;
+      h += '<div class="big num">' + M(S.M.pl.income) + '</div><p class="sub">in ' + days + ' days. At this pace the year closes near ' + MK(pace) + ', against the roughly ' + MK(YEAR_SALES) + ' a year A&amp;M usually does.</p>' +
+        bars([["Pace for the year", Math.round(pace), null, MK(pace)], ["A usual year", YEAR_SALES, null, MK(YEAR_SALES)]]);
+    }
+    h += '</div>';
+
+    /* lifted from the old finance console */
+    h += '<div class="card"><h2>Break even</h2><p class="lede">The sales a year needs before A&amp;M stops losing money. Worked out from this year\'s running costs and margin.</p>' + breakEvenHtml() + '</div>';
+    h += '<div class="card"><h2>What an hour of labour really costs</h2><p class="lede">The wage, plus the employer\'s share of CPP, EI, WCB, holiday pay and benefits. Price every hour from the right-hand number, not the wage.</p>' + ladderHtml() + '</div>';
+    h += '<div class="card wide"><h2>Bank balance, next 13 weeks</h2><p class="lede">A rough draft from QuickBooks totals and this year\'s pace. Move the sliders to test what happens if customers pay slower or bills get paid faster.</p>' + runwayHtml() + '</div>';
+
+    /* to bill */
+    if(S.jobs){
+      const tb = live().filter(j => TOBILL.includes(st(j))).sort((a, b) => String(a._created).localeCompare(String(b._created)));
+      h += '<div class="card wide"><h2>Work finished and not invoiced</h2><p class="lede">Jobs at loose ends, complete, PM approvals or invoicing in JobTread. Approved quote is the value of quotes approved in JobTread, before GST. Part of it may already be billed in QuickBooks.</p>' +
+        tbl('<th>Job</th><th>Status</th><th>PM</th><th class="r">Approved quote</th>', tb.map(j => { const v = approvedFor(j._id); return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td class="r num">' + (v ? M(v) : '<span class="tag mute">None built</span>') + '</td></tr>'; }), "Every finished job has been invoiced.", 15) + '</div>';
+    }
+    return h + '</div>';
+  }
+};
+
+/* ================= RECORDS ================= */
+function dupes(){
+  const norm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const groups = {};
+  (S.jobs || []).filter(j => isOpen(j) && !isSpecial(j)).forEach(j => { const k = norm(j._name); if(!k) return; (groups[k] = groups[k] || []).push(j); });
+  return Object.values(groups).filter(g => g.length > 1);
+}
+function unknownStatuses(){ const seen = {}; (S.jobs || []).forEach(j => ALL(j["Status"]).forEach(v => { if(!ALLSTATUS.includes(v)) seen[v] = (seen[v] || 0) + 1; })); return seen; }
+VIEWS.records = {
+  alerts(){
+    const a = []; if(!S.jobs) return a;
+    const u = Object.keys(unknownStatuses());
+    if(u.length) a.push({ lvl:"stop", text:"JobTread has " + plural(u.length, "status", "statuses") + " this page does not know: " + u.join(", ") + ".", meta:"Jobs at those statuses drop out of every count. Tell Bruce so the page can be updated." });
+    const g = live().filter(j => ["sched","site"].includes(stageOf(st(j))) && gapsOf(j).length);
+    if(g.length) a.push({ lvl:"caution", text: plural(g.length, "scheduled or live job is", "scheduled or live jobs are") + " missing details the crew needs.", meta:"Start date, crew size, days of work or PM." });
+    const d = dupes(); if(d.length) a.push({ lvl:"caution", text: plural(d.length, "job name appears", "job names appear") + " more than once.", meta:"Duplicates split costs and quotes across two jobs." });
+    const noJob = live().filter(j => !F(j["Status"]));
+    if(noJob.length) a.push({ lvl:"caution", text: plural(noJob.length, "open job has", "open jobs have") + " no status at all." });
+    return a;
+  },
+  render(){
+    const nr = jobsReady(); if(nr) return head("Records", "") + nr;
+    let h = head("Records", "Is JobTread complete enough to run the business from? Gaps, duplicates and test jobs, each with a button to fix it in JobTread.");
+    h += verdictHtml(this.alerts(), "JobTread is complete.", "");
+    h += '<div class="grid">';
+    const u = unknownStatuses();
+    if(Object.keys(u).length) h += '<div class="card wide"><h2>Statuses this page does not know</h2><p class="lede">If a status is renamed in JobTread, every panel goes quiet with no error. This guard names them instead.</p>' +
+      tbl('<th>Status</th><th class="r">Jobs</th>', Object.keys(u).map(k => '<tr><td>' + E(k) + '</td><td class="r num">' + u[k] + '</td></tr>')) + '</div>';
+    const order = { site:0, sched:1, won:2, close:3, out:4, est:5, lead:6, unknown:-1 };
+    const gaps = live().map(j => ({ j, g: gapsOf(j) })).filter(x => x.g.length).sort((a, b) => order[stageOf(st(a.j))] - order[stageOf(st(b.j))]);
+    h += '<div class="card wide"><h2>Open jobs missing details</h2><p class="lede">What each job should carry for the stage it is at. Live and scheduled jobs come first because a crew is waiting on them. Press a job, then Open in JobTread.</p>' +
+      tbl('<th>Job</th><th>Status</th><th>Missing</th>', gaps.map(x => '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td>' + stTag(x.j) + '</td><td>' + x.g.map(g => '<span class="tag caution">' + E(g) + '</span>').join(" ") + '</td></tr>'), "Every open job has what it needs.", 25) + '</div>';
+    const d = dupes();
+    h += '<div class="card"><h2>Same name, more than one job</h2><p class="lede">Open jobs that share a name. Check whether they are the same job entered twice.</p>' +
+      tbl('<th>Job</th><th>Status</th>', d.flatMap(g => g.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td></tr>')), "No duplicates.", 20) + '</div>';
+    const sp = (S.jobs || []).filter(j => isOpen(j) && isSpecial(j));
+    h += '<div class="card"><h2>Test and overhead jobs</h2><p class="lede">Left out of every count on this page. Close test jobs once they are done with.</p>' +
+      tbl('<th>Job</th><th>Status</th>', sp.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td></tr>'), "None open.") + '</div>';
+    h += '<div class="card"><h2>Safety records</h2><p class="lede">SiteDocs owns safety records: hazard assessments, toolbox talks, tickets and inspections. They are not copied here.</p><p class="sub">Once SiteDocs can be connected, this card will show forms due and tickets running out. Until then, open SiteDocs directly.</p></div>';
+    return shortWarn() + h + '</div>';
+  }
+};
+
+/* ================= PROJECTS ================= */
+const PMS = ["Ryan","Pat","George"];
+VIEWS.projects = {
+  alerts(){
+    const a = []; if(!S.jobs) return a;
+    const won = live().filter(j => POST.includes(st(j)));
+    const nopm = won.filter(j => !pm(j));
+    const soon = nopm.filter(j => (d => d !== null && d <= 7)(daysTo(startOf(j))));
+    if(soon.length) a.push({ lvl:"stop", text: plural(soon.length, "won job starts", "won jobs start") + " within a week with no project manager.", meta: soon.map(j => j._number).join(", ") + "." });
+    else if(nopm.length) a.push({ lvl:"caution", text: plural(nopm.length, "won job has", "won jobs have") + " no project manager.", meta:"A job with nobody on it is a job nobody is chasing." });
+    return a;
+  },
+  render(){
+    const nr = jobsReady(); if(nr) return head("Projects", "") + nr;
+    const won = live().filter(j => POST.includes(st(j)));
+    const names = [...new Set(PMS.concat(won.map(pm).filter(Boolean)))];
+    let h = head("Projects", "Every won job by project manager, from scheduling to closeout. Press a manager to see only their jobs.");
+    h += verdictHtml(this.alerts(), "Every won job has a project manager.", plural(won.length, "won job") + " open across " + plural(names.length, "manager") + ".");
+    const cards = names.concat([""]).map(n => {
+      const mine = won.filter(j => pm(j) === n);
+      if(n === "" && !mine.length) return "";
+      const by = k => mine.filter(j => stageOf(st(j)) === k).length;
+      const soon = mine.filter(j => ["won","sched"].includes(stageOf(st(j))) && (d => d !== null && d >= 0 && d <= 7)(daysTo(startOf(j)))).length;
+      return '<button class="pmcard" data-pm="' + E(n) + '" aria-pressed="' + (PMSEL === n && PMSEL !== "*") + '"><b>' + E(n || "Nobody named") + '</b><span class="tag ' + (n ? "mute" : "caution") + '" style="float:right">' + mine.length + ' jobs</span>' +
+        '<dl><dt>Won, no date</dt><dd class="num">' + by("won") + '</dd><dt>Scheduled</dt><dd class="num">' + by("sched") + '</dd><dt>Starting in 7 days</dt><dd class="num">' + soon + '</dd><dt>On site</dt><dd class="num">' + by("site") + '</dd><dt>Closing out</dt><dd class="num">' + by("close") + '</dd></dl></button>';
+    }).join("");
+    h += '<div class="pmcards">' + cards + '</div>';
+    h += '<div class="chips"><button class="chip" data-pm="*" aria-pressed="' + (PMSEL === "*" || !names.concat([""]).includes(PMSEL)) + '">Everyone</button>' +
+      names.map(n => '<button class="chip" data-pm="' + E(n) + '" aria-pressed="' + (PMSEL === n) + '">' + E(n) + '</button>').join("") + '<button class="chip" data-pm="" aria-pressed="' + (PMSEL === "") + '">Nobody named</button></div>';
+    const sel = (PMSEL === "*" || !names.concat([""]).includes(PMSEL)) ? null : PMSEL;
+    const rows = won.filter(j => sel === null || pm(j) === sel).sort((a, b) => {
+      const ord = { site:0, sched:1, won:2, close:3 };
+      return ((ord[stageOf(st(a))] ?? 9) - (ord[stageOf(st(b))] ?? 9)) || String(startOf(a) || "9").localeCompare(String(startOf(b) || "9"));
+    });
+    h += '<div class="card"><h2>' + E(sel === null ? "All won jobs" : sel ? sel + "'s jobs" : "Jobs with nobody named") + '</h2><p class="lede">On site first, then scheduled, then waiting for a date, then closing out. Press a job for every detail and a link to change it in JobTread.</p>' +
+      tbl('<th>Job</th><th>PM</th><th>Status</th><th>Type</th><th class="r">Start</th>', rows.map(j => {
+        const d = daysTo(startOf(j));
+        return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + (pm(j) ? E(pm(j)) : '<span class="tag caution">Nobody</span>') + '</td><td>' + stTag(j) + '</td><td>' + E(types(j).join(", ") || "Not set") + (risk(j) ? '<span class="sm">' + E(risk(j)) + '</span>' : '') + '</td>' +
+          '<td class="r">' + (startOf(j) ? '<span class="num">' + E(showDate(startOf(j))) + '</span><span class="sm">' + rel(d, false, true) + '</span>' : '<span class="tag mute">No date</span>') + '</td></tr>';
+      }), "No won jobs for this manager.", 40) + '</div>';
+    return shortWarn() + h;
+  }
+};
+
+/* ================= SITES ================= */
+function asbNoNotice(){
+  if(!S.jobs) return [];
+  return live().filter(j => isAsb(j) && ["won","sched","site"].includes(stageOf(st(j))) && !F(j["NOP Filed Date and Time"]))
+    .filter(j => stageOf(st(j)) === "site" || (d => d !== null && d <= 10)(daysTo(startOf(j))));
+}
+function nopExpiring(){
+  if(!S.jobs) return [];
+  return live().filter(j => F(j["NOP Expires"]) && ["sched","site"].includes(stageOf(st(j)))).map(j => ({ j, d: daysTo(F(j["NOP Expires"])) })).filter(x => x.d !== null && x.d <= 7).sort((a, b) => a.d - b.d);
+}
+function workDaysBetween(a, b){ let n = 0; const x = new Date(a); while(x < b){ const w = x.getDay(); if(w !== 0 && w !== 6) n++; x.setDate(x.getDate() + 1); } return n; }
+VIEWS.sites = {
+  alerts(){
+    const a = []; if(!S.jobs) return a;
+    const nn = asbNoNotice();
+    const urgent = nn.filter(j => stageOf(st(j)) === "site" || (d => d !== null && d <= 3)(daysTo(startOf(j))));
+    if(urgent.length) a.push({ lvl:"stop", text: plural(urgent.length, "asbestos job is", "asbestos jobs are") + " on site or starting within three days with no notice of project filed in JobTread.", meta:"Notice to Alberta OHS is due at least 72 hours before asbestos abatement starts. Check it was filed and record the date in JobTread." });
+    else if(nn.length) a.push({ lvl:"caution", text: plural(nn.length, "asbestos job starts", "asbestos jobs start") + " within ten days with no notice of project filed yet." });
+    const ex = nopExpiring();
+    const gone = ex.filter(x => x.d < 0 && stageOf(st(x.j)) === "site");
+    if(gone.length) a.push({ lvl:"stop", text: plural(gone.length, "job is", "jobs are") + " on site with the notice of project expired.", meta: gone.map(x => x.j._number).join(", ") + "." });
+    else if(ex.length) a.push({ lvl:"caution", text: plural(ex.length, "notice of project runs", "notices of project run") + " out within a week.", meta:"Extend it or finish before it lapses." });
+    const over = live().filter(j => stageOf(st(j)) === "site" && startOf(j) && dur(j) !== null && workDaysBetween(dOnly(startOf(j)), today()) > Math.ceil(dur(j)) + 1);
+    if(over.length) a.push({ lvl:"caution", text: plural(over.length, "job is", "jobs are") + " on site longer than planned.", meta:"Over the Estimated Days of Work. Either the plan was wrong or the job is costing more than quoted." });
+    return a;
+  },
+  render(){
+    const nr = jobsReady(); if(nr) return head("Sites", "") + nr;
+    const J = live();
+    let h = head("Sites", "What is happening on site today, what starts this week, and whether every asbestos job has its notice of project.");
+    h += verdictHtml(this.alerts(), "Every site is covered.", "Every asbestos job starting soon has a notice filed and nobody is over plan.");
+    h += '<div class="grid">';
+    const on = J.filter(j => stageOf(st(j)) === "site").sort((a, b) => String(startOf(a)).localeCompare(String(startOf(b))));
+    h += '<div class="card wide"><h2>On site now</h2><p class="lede">Jobs at Site work. Days on site counts weekdays since the start date, against the Estimated Days of Work.</p>' +
+      tbl('<th>Job</th><th>PM</th><th>Risk</th><th class="r">Crew</th><th class="r">On site</th>', on.map(j => {
+        const s = dOnly(startOf(j)), done = s ? workDaysBetween(s, today()) + 1 : null, plan = dur(j);
+        const over = done !== null && plan !== null && done > Math.ceil(plan) + 1;
+        return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td>' + (risk(j) ? '<span class="tag ' + (/high/i.test(risk(j)) ? "stop" : "mute") + '">' + E(risk(j)) + '</span>' : "") + '</td><td class="r num">' + (crew(j) === null ? "?" : crew(j)) + '</td>' +
+          '<td class="r">' + (done === null ? '<span class="tag mute">No start date</span>' : '<span class="tag ' + (over ? "caution" : "mute") + '">Day ' + done + (plan !== null ? ' of ' + plan : '') + '</span>') + '</td></tr>';
+      }), "Nobody is on site according to JobTread.", 25) + '</div>';
+
+    const nn = asbNoNotice();
+    h += '<div class="card"><h2>Asbestos work with no notice of project</h2><p class="lede">Alberta wants notice to OHS at least 72 hours before asbestos abatement starts. This lists asbestos jobs starting within ten days, or already on site, with no NOP Filed Date and Time in JobTread.</p>' +
+      tbl('<th>Job</th><th>Status</th><th class="r">Starts</th>', nn.sort((a, b) => (daysTo(startOf(a)) ?? 99) - (daysTo(startOf(b)) ?? 99)).map(j => {
+        const d = daysTo(startOf(j)), on = stageOf(st(j)) === "site";
+        return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td class="r"><span class="tag ' + (on || (d !== null && d <= 3) ? "stop" : "caution") + '">' + (on ? "On site" : rel(d, false, true)) + '</span></td></tr>';
+      }), "Every asbestos job starting soon has a notice filed.") + '</div>';
+
+    const ex = nopExpiring();
+    h += '<div class="card"><h2>Notices running out</h2><p class="lede">From the NOP Expires field, on scheduled and live jobs.</p>' +
+      tbl('<th>Job</th><th>Status</th><th class="r">Expires</th>', ex.map(x => '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td>' + stTag(x.j) + '</td><td class="r"><span class="tag ' + (x.d < 0 ? "stop" : "caution") + '">' + (x.d < 0 ? "Expired" : rel(x.d, false, true)) + '</span><span class="sm">' + E(showDate(F(x.j["NOP Expires"]))) + '</span></td></tr>'), "No notice runs out in the next week.") + '</div>';
+
+    const soon = J.filter(j => ["won","sched"].includes(stageOf(st(j)))).map(j => ({ j, d: daysTo(startOf(j)) })).filter(x => x.d !== null && x.d >= 0 && x.d <= 7).sort((a, b) => a.d - b.d);
+    h += '<div class="card wide"><h2>Starting this week</h2><p class="lede">Is every site ready? A crew should not arrive without a site contact and access notes.</p>' +
+      tbl('<th>Job</th><th>PM</th><th>Asbestos notice</th><th>Site contact</th><th>Access notes</th><th class="r">Starts</th>', soon.map(x => {
+        const j = x.j, asb = isAsb(j), nop = F(j["NOP Filed Date and Time"]);
+        return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + (pm(j) ? E(pm(j)) : '<span class="tag stop">Nobody</span>') + '</td>' +
+          '<td>' + (!asb ? '<span class="tag mute">Not asbestos</span>' : nop ? '<span class="tag clear">Filed</span>' : '<span class="tag stop">Not filed</span>') + '</td>' +
+          '<td>' + (F(j["Site Contact Phone Number"]) ? '<span class="tag clear">Yes</span>' : '<span class="tag caution">Missing</span>') + '</td>' +
+          '<td>' + (F(j["Site Access Notes"]) ? '<span class="tag clear">Yes</span>' : '<span class="tag mute">None</span>') + '</td>' +
+          '<td class="r"><span class="tag ' + (x.d <= 2 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span></td></tr>';
+      }), "Nothing starts this week.", 20) + '</div>';
+    return shortWarn() + h + '</div>';
+  }
+};
+
+/* ================= CLOSEOUT ================= */
+const CLOSE = STAGES.find(s => s.key === "close").statuses;
+VIEWS.closeout = {
+  alerts(){
+    const a = []; if(!S.jobs) return a;
+    const stuck = live().filter(j => CLOSE.includes(st(j)) && st(j) !== "Job Post Mortem" && (d => d !== null && d > 30)(daysSince(startOf(j) || j._created)));
+    if(stuck.length) a.push({ lvl:"caution", text: plural(stuck.length, "job has", "jobs have") + " been in closeout for over a month since it started.", meta:"Until the PM signs off, the invoice cannot go out." });
+    return a;
+  },
+  render(){
+    const nr = jobsReady(); if(nr) return head("Closeout", "") + nr;
+    const J = live().filter(j => CLOSE.includes(st(j)));
+    let h = head("Closeout", "Work that is done or nearly done. Every job here is money already spent and not yet collected, so speed matters.");
+    h += verdictHtml(this.alerts(), "Closeout is moving.", plural(J.length, "job") + " in closeout.");
+    h += '<div class="grid">';
+    h += '<div class="card"><h2>Where closeout is stuck</h2><p class="lede">Press a line to see the jobs.</p>' + bars(CLOSE.map(s => [s, J.filter(j => st(j) === s).length, "status:" + s]).filter(x => x[1])) + '</div>';
+    const val = J.reduce((s, j) => s + approvedFor(j._id), 0);
+    h += '<div class="card"><h2>Approved quotes in closeout</h2><p class="lede">The value of quotes approved in JobTread on these jobs, before GST. Some may already be billed in QuickBooks.</p><div class="big num">' + (S.orders ? M(val) : "…") + '</div><p class="sub">' +
+      plural(J.filter(j => approvedFor(j._id) > 0).length, "job") + ' of ' + J.length + ' carry an approved quote. The rest were quoted outside JobTread.</p></div>';
+    const rows = J.slice().sort((a, b) => (daysSince(startOf(b) || b._created) || 0) - (daysSince(startOf(a) || a._created) || 0));
+    h += '<div class="card wide"><h2>Every job in closeout</h2><p class="lede">Oldest first, counted from the start date, or the day it was opened if there is no start date.</p>' +
+      tbl('<th>Job</th><th>Status</th><th>PM</th><th class="r">Approved quote</th><th class="r">Since start</th>', rows.map(j => {
+        const d = daysSince(startOf(j) || j._created), v = approvedFor(j._id);
+        return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td class="r num">' + (v ? M(v) : "") + '</td><td class="r"><span class="tag ' + (d > 30 ? "caution" : "mute") + '">' + d + ' days</span></td></tr>';
+      }), "Nothing in closeout.", 30) + '</div>';
+    return shortWarn() + h + '</div>';
+  }
+};
+
+/* ================= EQUIPMENT ================= */
+VIEWS.equipment = {
+  alerts(){
+    const a = []; if(!S.jobs) return a;
+    const soon = live().filter(j => ["won","sched"].includes(stageOf(st(j))) && (d => d !== null && d >= 0 && d <= 7)(daysTo(startOf(j))) && !F(j["Inventory Job ID"]));
+    if(soon.length) a.push({ lvl:"caution", text: plural(soon.length, "job starting this week is", "jobs starting this week are") + " not set up in the inventory app.", meta:"Nobody can pull gear against it, so whatever goes out to site is not tracked to the job." });
+    if(S.inv){
+      const closed = (S.inv.jobs || []).filter(j => j.closed && (j.machinesOut || j.shelfLinesOut));
+      if(closed.length) a.push({ lvl:"stop", text: plural(closed.length, "closed job still has", "closed jobs still have") + " gear on it.", meta:"Either it came back and was not scanned in, or it is still on site. Both cost money." });
+      const lost = (S.inv.lost || []).length;
+      if(lost) a.push({ lvl:"caution", text: plural(lost, "machine is", "machines are") + " marked missing.", meta:"Somebody needs to chase each one or write it off." });
+      const low = ((S.inv.shelf || {}).low || []).length;
+      if(low) a.push({ lvl:"caution", text: plural(low, "shelf item is", "shelf items are") + " at or below the minimum.", meta:"Order before the next job needs it." });
+    }
+    return a;
+  },
+  render(){
+    let h = head("Equipment and shop", PLATFORM === "app" ? "Machines, shelf stock and gear on jobs, read straight from the shop screens, matched to JobTread." : "Machines, shelf stock and kits. The inventory app owns this list; this tab shows what JobTread knows about it.");
+    const nr = jobsReady(); if(nr) return h + nr;
+    h += verdictHtml(this.alerts(), "Every job starting this week is set up in the inventory app.", "");
+    h += '<div class="grid">';
+    if(PLATFORM === "app") h += invCards();
+    const won = live().filter(j => POST.includes(st(j)));
+    const linked = won.filter(j => F(j["Inventory Job ID"]));
+    const notYet = won.filter(j => !F(j["Inventory Job ID"]) && ["won","sched","site"].includes(stageOf(st(j))))
+      .sort((a, b) => (daysTo(startOf(a)) ?? 999) - (daysTo(startOf(b)) ?? 999));
+    h += '<div class="card"><h2>Won jobs set up in the inventory app</h2><p class="lede">A job is set up when the office links it in the inventory app, which stamps the Inventory Job ID field in JobTread.</p>' +
+      '<div class="big num ' + (linked.length ? "" : "caution") + '">' + linked.length + ' of ' + won.length + '</div><p class="sub">won jobs can have gear signed out against them.</p>' +
+      tbl('<th>Job</th><th>Status</th><th>Inventory job</th>', linked.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td class="num">' + E(F(j["Inventory Job ID"])) + '</td></tr>'), "No won job is linked yet. Linking is done on the office screen of the inventory app.") + '</div>';
+    h += '<div class="card"><h2>Won, but not in the inventory app</h2><p class="lede">Scheduled or on site, with no link. Soonest first.</p>' +
+      tbl('<th>Job</th><th>PM</th><th class="r">Starts</th>', notYet.map(j => { const d = daysTo(startOf(j)); return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td class="r">' + (d === null ? '<span class="tag mute">No date</span>' : '<span class="tag ' + (d <= 7 ? "caution" : "mute") + '">' + rel(d, false, true) + '</span>') + '</td></tr>'; }), "Every scheduled job is linked.") + '</div>';
+    if(PLATFORM !== "app") h += '<div class="card"><h2>Shelf stock and machines out</h2><p class="lede">In the A&amp;M app.</p><p class="sub">Stock on the shelf, what is running low, and machines out on each job show on this tab inside the A&amp;M app, which reads the shop\'s own records directly.</p></div>';
+    if(CFG.qb){
+      const B = S.M.bs || {}, iv = B.inventory, tools = B.tools, veh = B.vehicles;
+      h += '<div class="card"><h2>Equipment on the books</h2><p class="lede">From the balance sheet. Book value means what was paid, less wear written off each year.</p>' +
+        (!S.M.bs ? (S.bsErr ? failBox(S.bsErr, "Balance sheet") : wait("the balance sheet")) :
+        tbl('<th>&nbsp;</th><th class="r">Book value</th>', [
+          '<tr><td>Stock held, per QuickBooks</td><td class="r num">' + M(iv) + '</td></tr>',
+          '<tr><td>Tools and equipment</td><td class="r num">' + M(tools) + '</td></tr>',
+          '<tr><td>Vehicles</td><td class="r num">' + M(veh) + '</td></tr>'])) + '</div>';
+    }
+    const wk = crewLoad();
+    h += '<div class="card"><h2>Gear demand, next four weeks</h2><p class="lede">Jobs planned on site each week, from JobTread. Plan kits against this.</p>' +
+      bars(wk.map((w, i) => { LISTS["week" + i] = LISTS["week" + i] || { title:"Week of " + iso(w.ws), jobs:() => live().filter(j => w.jobs.includes(j._id)) }; return ["Week of " + iso(w.ws), w.jobs.length, "week" + i, plural(w.jobs.length, "job")]; })) + '</div>';
+    return shortWarn() + h + '</div>';
+  }
+};
+
+function invCards(){
+  if(!S.inv) return '<div class="card wide">' + (S.invErr ? failBox(S.invErr, "Shop records") : wait("the shop records")) + '</div>';
+  const I = S.inv, m = I.machines || {}, sh = I.shelf || {};
+  const byJt = {}; (S.jobs || []).forEach(j => { byJt[j._id] = j; });
+  let h = '<div class="card"><h2>Machines</h2><p class="lede">Where every machine is, from the scans.</p>' +
+    '<div class="big num">' + (m.job || 0) + ' <span style="font-size:15px;color:var(--ink-3)">of ' + (m.total || 0) + ' out on jobs</span></div>' +
+    bars([["In the shop", m.shop || 0], ["Out on jobs", m.job || 0], ["Out for repair", m.repair || 0], ["Missing", m.missing || 0], ["Written off", m.writeoff || 0]].filter(x => x[1])) + '</div>';
+  const low = sh.low || [];
+  h += '<div class="card"><h2>Shelf running low</h2><p class="lede">' + (sh.counted || 0) + ' of ' + (sh.items || 0) + ' shelf lines have been counted. Lines never counted cannot show as low.</p>' +
+    tbl('<th>Item</th><th class="r">On the shelf</th><th class="r">Minimum</th>', low.map(s => '<tr><td>' + E(s.name) + '</td><td class="r num"><span class="tag ' + (s.onHand <= 0 ? "stop" : "caution") + '">' + E(s.onHand) + ' ' + E(s.uom || "") + '</span></td><td class="r num">' + E(s.min) + '</td></tr>'), "Nothing counted is below its minimum.", 15) + '</div>';
+  const out = (I.jobs || []).filter(j => j.machinesOut || j.shelfLinesOut || j.materialUsedCost).sort((a, b) => (b.closed - a.closed) || (b.machinesOut - a.machinesOut));
+  h += '<div class="card wide"><h2>Gear and material by job</h2><p class="lede">Machines and shelf lines still out, and the cost of material used, at the price the shop last paid. Closed jobs with gear still out come first.</p>' +
+    tbl('<th>Job</th><th class="r">Machines out</th><th class="r">Shelf lines out</th><th class="r">Material used</th><th>Return</th>', out.map(j => {
+      const jt = byJt[j.jobtreadId];
+      return '<tr' + (jt ? ' data-job="' + E(jt._id) + '" tabindex="0"' : '') + '><td><span class="nm">' + E(jt ? jt._number + " " + jt._name : j.name) + '</span><span class="sm">' + (jt ? "Inventory job " + E(j.id) : '<span class="tag caution">Not linked to JobTread</span>') + '</span></td>' +
+        '<td class="r num">' + j.machinesOut + '</td><td class="r num">' + j.shelfLinesOut + '</td><td class="r num">' + (j.materialUsedCost ? M(j.materialUsedCost) : "") + '</td>' +
+        '<td>' + (j.closed && (j.machinesOut || j.shelfLinesOut) ? '<span class="tag stop">Job closed</span>' : j.overdueReturn ? '<span class="tag caution">Overdue</span>' : j.expectedReturn ? '<span class="sm">' + E(j.expectedReturn) + '</span>' : '') + '</td></tr>';
+    }), "Nothing is out on any job.", 20) + '</div>';
+  const lost = I.lost || [];
+  if(lost.length) h += '<div class="card"><h2>Missing machines</h2><p class="lede">Marked missing and not yet found or written off.</p>' +
+    tbl('<th>Machine</th><th>Last with</th><th class="r">Since</th>', lost.map(x => '<tr><td>' + E(x.name) + '</td><td>' + E(x.by || "") + '</td><td class="r num">' + E(showDate(x.since)) + '</td></tr>')) + '</div>';
+  return h;
+}
+
+/* ================= DRAFTS (Craig) ================= */
+function mailAppView(view){
+  const st = S.mailStatus;
+  let h = head("To send", "Emails the morning assistants have written. They never send on their own. Read each one, then send or discard it here.");
+  if(!st) return h + (S.mailErr ? failBox(S.mailErr, "Mail") : wait("the assistants' mailbox"));
+  if(!st.connected) return h + '<div class="card"><h2>Connect the assistants\' mailbox</h2><p class="sub">The assistants write into ' + E(st.mailbox) + '. Connect it once, signed in to Google as that account, and its drafts show here.</p>' +
+    (st.missingEnv && st.missingEnv.length ? '<div class="state wait">Netlify still needs: ' + E(st.missingEnv.join(", ")) + '.</div>' : '<button class="btn" data-mail-connect>Connect ' + E(st.mailbox) + '</button>') + '</div>';
+  if(!S.drafts) return h + (S.draftsErr ? failBox(S.draftsErr, "Mail") : wait("the drafts"));
+  const out = S.drafts.filter(d => String(d.to || "").split(",").some(x => x.trim() && !/@amabatement\.com>?$/i.test(x.trim())));
+  const inside = S.drafts.filter(d => !out.includes(d));
+  h += verdictHtml(view.alerts(), "Nothing to a client is waiting.", plural(inside.length, "assistant report") + " waiting.");
+  const row = d => { const age = daysSince(d.date); return '<tr data-mail-open="' + E(d.id) + '" style="cursor:pointer" tabindex="0"><td><span class="nm">' + E(d.subject || "(no subject)") + '</span><span class="sm">' + E((d.snippet || "").slice(0, 110)) + '</span></td><td>' + E(d.to || "Nobody yet") + '</td>' +
+    '<td class="r"><span class="tag ' + (age >= 3 ? "stop" : age >= 1 ? "caution" : "mute") + '">' + (age === 0 ? "Today" : plural(age, "day")) + '</span></td><td class="r"><span class="go">Read</span></td></tr>'; };
+  h += '<div class="grid"><div class="card wide"><h2>To clients and others outside A&amp;M</h2><p class="lede">Oldest first. Press one to read it, then send or discard.</p>' +
+    tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', out.slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).map(row), "Nothing waiting to go to a client.", 40) + '</div>' +
+    '<div class="card wide"><h2>Assistant reports</h2><p class="lede">Morning summaries addressed inside A&amp;M.</p>' +
+    tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', inside.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(row), "No assistant reports waiting.", 15) + '</div></div>';
+  return h;
+}
+const isInside = a => /@amabatement\.com>?$/i.test(String(a || "").trim());
+const recips = d => d.toRecipients || String(d.to || "").split(",").map(x => x.trim()).filter(Boolean);
+VIEWS.drafts = {
+  alerts(){
+    const a = []; if(!S.drafts) return a;
+    const out = S.drafts.filter(d => recips(d).some(x => !isInside(x)));
+    const old = out.filter(d => daysSince(d.date) >= 1);
+    if(old.length){ const oldest = Math.max(...old.map(d => daysSince(d.date))); a.push({ lvl:"stop", text: plural(old.length, "email to a client is", "emails to clients are") + " written and waiting to be sent.", meta:"The oldest has waited " + plural(oldest, "day") + ". The assistants draft, they never send. Somebody has to open each one and press Send." }); }
+    return a;
+  },
+  render(){
+    if(PLATFORM === "app") return mailAppView(this);
+    let h = head("Waiting to send", "Emails the morning assistants have written into your Gmail drafts. They never send on their own. Open one, check it, press Send.");
+    if(!S.drafts) return h + (S.draftsErr ? failBox(S.draftsErr, "Gmail") : wait("your Gmail drafts"));
+    const out = S.drafts.filter(d => (d.toRecipients || []).some(x => !isInside(x)));
+    const inside = S.drafts.filter(d => !(d.toRecipients || []).some(x => !isInside(x)));
+    h += verdictHtml(this.alerts(), "Nothing to a client is waiting in drafts.", plural(inside.length, "assistant report") + " to you in drafts.");
+    const row = d => { const age = daysSince(d.date); return '<tr><td><span class="nm">' + E(d.subject || "(no subject)") + '</span><span class="sm">' + E((d.snippet || "").slice(0, 110)) + '</span></td><td>' + E((d.toRecipients || []).join(", ") || "Nobody yet") + '</td>' +
+      '<td class="r"><span class="tag ' + (age >= 3 ? "stop" : age >= 1 ? "caution" : "mute") + '">' + (age === 0 ? "Today" : plural(age, "day")) + '</span></td><td class="r">' + (d.viewUrl ? '<a class="go" href="' + E(d.viewUrl) + '" target="_blank" rel="noopener">Open in Gmail</a>' : '') + '</td></tr>'; };
+    h += '<div class="grid"><div class="card wide"><h2>To clients and others outside A&amp;M</h2><p class="lede">Quote chases, site visit confirmations and replies. Oldest first.' + (S.draftsMore ? " Showing the newest 200 drafts." : "") + '</p>' +
+      tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', out.slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).map(row), "Nothing waiting to go to a client.", 40) + '</div>';
+    h += '<div class="card wide"><h2>Assistant reports to you</h2><p class="lede">Morning summaries addressed inside A&amp;M. Read them, then delete or file them.</p>' +
+      tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', inside.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(row), "No assistant reports waiting.", 15) + '</div></div>';
+    return h;
+  }
+};
+
+/* ================= BUYING ================= */
+/* What to order, what is on order, what has to be paid, who it is spent with,
+   and whether the subtrades on site have their paperwork. JobTread owns
+   purchase orders and the supplier records; QuickBooks owns bills and spend;
+   the shop screens own what is on the shelf. Nothing here changes any of them. */
+const normName = s => String(s || "").toLowerCase().replace(/&/g, "and").replace(/\b(ltd|inc|corp|co|limited|the)\b\.?/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+/* Inside Claude the two JobTread lists are read through the connector. */
+function loadBuyingClaude(){
+  S.buy = S.buy || { pos:null, vendors:null, bills:null, spend:null, errors:{} };
+  const page = (alias, args, nodes, token, acc) => S.mcp.callTool(JT, "query", { query:{ organization:{ "$":{ id:ORG },
+      [alias]:{ "_": alias === "v" ? "accounts" : "documents", "$": Object.assign({}, args, token ? { page:token } : {}), nextPage:{}, nodes } } } }, { cache:{ staleTime:300000 } })
+    .then(res => {
+      const d = res && res.payload && res.payload.organization && res.payload.organization[alias];
+      if(!d) throw { code:"tool_error", message:"JobTread did not answer." };
+      acc = acc.concat(d.nodes || []);
+      return d.nextPage && acc.length < 5000 ? page(alias, args, nodes, d.nextPage, acc) : acc;
+    });
+  page("d", { size:100, where:["type","vendorOrder"] }, { id:{}, name:{}, status:{}, cost:{}, issueDate:{}, dueDate:{}, account:{ name:{} }, job:{ id:{}, number:{}, name:{} } }, null, [])
+    .then(p => { S.buy.pos = p; render(); }).catch(e => { S.buy.errors.jobtread = errCopy(e); render(); });
+  page("v", { size:50, where:["type","vendor"] }, { id:{}, name:{}, customFieldValues:{ nodes:{ value:{}, customField:{ name:{} } } } }, null, [])
+    .then(v => {
+      S.buy.vendors = v.map(n => { const f = {}; ((n.customFieldValues && n.customFieldValues.nodes) || []).forEach(x => { if(x.customField) f[x.customField.name] = x.value; });
+        return { id:n.id, name:n.name, wcb: f["WCB"] === true, coiExpires: f["COI Expires"] || "" }; });
+      render();
+    }).catch(e => { S.buy.errors.jobtread = errCopy(e); render(); });
+}
+
+function openPOs(){
+  const B = S.buy; if(!B || !B.pos) return null;
+  return B.pos.filter(p => !["denied","closed","void"].includes(String(p.status || "").toLowerCase()))
+    .map(p => ({ p, d: p.dueDate ? daysTo(p.dueDate) : null })).sort((a, b) => (a.d ?? 999) - (b.d ?? 999));
+}
+function billsDue(){
+  const B = S.buy; if(!B || !B.bills) return null;
+  const list = B.bills.filter(b => b.open > 0.005).map(b => ({ b, d: daysTo(b.due) }));
+  return { late: list.filter(x => x.d !== null && x.d < 0), week: list.filter(x => x.d !== null && x.d >= 0 && x.d <= 7), all:list };
+}
+function activeSuppliers(){
+  const names = new Map();
+  const add = (n, why) => { const k = normName(n); if(!k) return; if(!names.has(k)) names.set(k, { name:n, why:new Set() }); names.get(k).why.add(why); };
+  if(S.M.ap) S.M.ap.list.forEach(r => { if(r.total > 0.5) add(r.name, "owed money"); });
+  const po = openPOs(); if(po) po.forEach(x => add(x.p.account && x.p.account.name, "open PO"));
+  return names;
+}
+function paperwork(){
+  const B = S.buy; if(!B || !B.vendors) return null;
+  const byName = new Map(B.vendors.map(v => [normName(v.name), v]));
+  const rows = [];
+  for(const [k, a] of activeSuppliers()){
+    const v = byName.get(k);
+    const coiD = v && v.coiExpires ? daysTo(v.coiExpires) : null;
+    const gaps = [];
+    if(!v) gaps.push("not in JobTread");
+    else {
+      if(!v.wcb) gaps.push("no WCB clearance recorded");
+      if(!v.coiExpires) gaps.push("no insurance expiry recorded");
+      else if(coiD < 0) gaps.push("insurance expired");
+      else if(coiD <= 30) gaps.push("insurance runs out in " + coiD + " days");
+    }
+    if(gaps.length) rows.push({ name: v ? v.name : a.name, why:[...a.why].join(", "), gaps, worst: gaps.some(g => /expired/.test(g)) });
+  }
+  return rows.sort((a, b) => (b.worst - a.worst) || a.name.localeCompare(b.name));
+}
+function shelfOrder(){
+  if(!S.inv) return null;
+  const low = (S.inv.shelf && S.inv.shelf.low) || [];
+  const by = new Map();
+  low.forEach(s => { const k = s.vendor || "No supplier set"; if(!by.has(k)) by.set(k, { vendor:k, items:[], cost:0, unknown:0 }); const g = by.get(k); g.items.push(s); if(s.orderCost != null) g.cost += s.orderCost; else g.unknown++; });
+  return [...by.values()].sort((a, b) => b.cost - a.cost);
+}
+
+VIEWS.buying = {
+  alerts(){
+    const a = [];
+    const bd = billsDue();
+    if(bd && bd.late.length){ const t = bd.late.reduce((s, x) => s + x.b.open, 0); a.push({ lvl: t > 100000 ? "stop" : "caution", text: M(t) + " of supplier bills are past their due date.", meta: plural(bd.late.length, "bill") + " across " + plural(new Set(bd.late.map(x => x.b.vendor)).size, "supplier") + ". Decide which get paid this week." }); }
+    else if(!bd && S.M.ap && S.M.ap.tot.Late > 100000) a.push({ lvl:"caution", text: M(S.M.ap.tot.Late) + " owed to suppliers is late.", meta:"By supplier on the Money tab." });
+    const po = openPOs();
+    if(po){ const late = po.filter(x => x.d !== null && x.d < 0); if(late.length) a.push({ lvl:"caution", text: plural(late.length, "purchase order is", "purchase orders are") + " past the due date and still open.", meta:"Either it came in and the PO was not closed, or it is late. Check with the supplier." }); }
+    const pw = paperwork();
+    if(pw && pw.length) a.push({ lvl: pw.some(r => r.worst) ? "stop" : "caution", text: plural(pw.length, "supplier we owe or have a PO with is", "suppliers we owe or have POs with are") + " missing paperwork in JobTread.", meta:"WCB clearance and insurance expiry. A subtrade on site without them is A&M's risk." });
+    const so = shelfOrder();
+    if(so && so.length){ const n = so.reduce((s, g) => s + g.items.length, 0); a.push({ lvl:"caution", text: plural(n, "shelf item needs", "shelf items need") + " ordering.", meta:"Grouped by supplier below." }); }
+    return a;
+  },
+  render(){
+    let h = head("Buying", "What to order, what is already on order, what has to be paid, and whether the suppliers on our jobs have their paperwork.");
+    h += verdictHtml(this.alerts(), "Nothing in buying needs a decision today.", "");
+    h += '<div class="grid">';
+    const B = S.buy || { errors:{} };
+    const jtErr = B.errors && B.errors.jobtread, qbErr = B.errors && B.errors.quickbooks;
+
+    /* order for the shop */
+    if(PLATFORM === "app"){
+      const so = shelfOrder();
+      h += '<div class="card wide"><h2>Order for the shop</h2><p class="lede">Shelf lines at or below their minimum, grouped by supplier. The order brings each line back up to its maximum (or twice the minimum), at the price last paid.</p>';
+      if(!so) h += S.invErr ? failBox(S.invErr, "Shop records") : wait("the shop records");
+      else if(!so.length) h += '<div class="state ok">Nothing counted is below its minimum. Lines never counted cannot show here, so keep counting.</div>';
+      else h += tbl('<th>Supplier</th><th>Items</th><th class="r">Estimated cost</th>', so.map(g =>
+          '<tr><td><span class="nm">' + E(g.vendor) + '</span></td><td>' + g.items.map(s => E(s.name) + ' <span class="sm" style="display:inline">(' + E(s.onHand) + ' on hand, order ' + E(s.order) + ' ' + E(s.uom || "") + ')</span>').join("<br>") + '</td>' +
+          '<td class="r num">' + (g.cost ? M(g.cost) : "") + (g.unknown ? '<span class="sm">' + g.unknown + ' with no price</span>' : '') + '</td></tr>'), "", 20) +
+        '<p class="lede" style="margin-top:8px">Orders are placed from the shop screens, which keep the supplier list from JobTread.</p>';
+      h += '</div>';
+    }
+
+    /* purchase orders */
+    const po = openPOs();
+    h += '<div class="card wide"><h2>Purchase orders out</h2><p class="lede">Open purchase orders in JobTread, soonest due first. Cost is before GST.</p>';
+    if(!po) h += jtErr ? '<div class="state err">' + E(jtErr) + '</div>' : wait("purchase orders");
+    else {
+      const total = po.reduce((s, x) => s + (Number(x.p.cost) || 0), 0);
+      const jobById = {}; (S.jobs || []).forEach(j => { jobById[j._id] = j; });
+      h += '<div class="big num">' + M(total) + '</div><p class="sub">committed on ' + plural(po.length, "open purchase order") + '.</p>' +
+        tbl('<th>Supplier</th><th>Job</th><th class="r">Cost</th><th class="r">Due</th>', po.map(x => {
+          const j = x.p.job && jobById[x.p.job.id];
+          return '<tr' + (j ? ' data-job="' + E(j._id) + '" tabindex="0"' : '') + '><td><span class="nm">' + E(x.p.account && x.p.account.name || "No supplier") + '</span><span class="sm">' + E(x.p.name || "PO") + ' · ' + E(x.p.status || "") + '</span></td>' +
+            '<td>' + (x.p.job ? E((x.p.job.number || "") + " " + (x.p.job.name || "")) : '<span class="tag mute">No job</span>') + '</td><td class="r num">' + M(x.p.cost) + '</td>' +
+            '<td class="r">' + (x.d === null ? '<span class="tag mute">No date</span>' : '<span class="tag ' + (x.d < 0 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span>') + '</td></tr>';
+        }), "No open purchase orders.", 15);
+    }
+    h += '</div>';
+
+    /* bills to pay */
+    const bd = billsDue();
+    h += '<div class="card"><h2>Bills to pay</h2>';
+    if(PLATFORM === "app"){
+      h += '<p class="lede">Every unpaid supplier bill in QuickBooks, by its due date.</p>';
+      if(!bd) h += qbErr ? '<div class="state err">' + E(qbErr) + '</div>' : wait("QuickBooks bills");
+      else {
+        const sum = l => l.reduce((s, x) => s + x.b.open, 0);
+        h += tbl('<th>&nbsp;</th><th class="r">Bills</th><th class="r">Amount</th>', [
+          '<tr><td>Past due</td><td class="r num">' + bd.late.length + '</td><td class="r num" style="color:var(--stop)">' + M(sum(bd.late)) + '</td></tr>',
+          '<tr><td>Due in the next 7 days</td><td class="r num">' + bd.week.length + '</td><td class="r num">' + M(sum(bd.week)) + '</td></tr>',
+          '<tr><td>All unpaid</td><td class="r num">' + bd.all.length + '</td><td class="r num">' + M(sum(bd.all)) + '</td></tr>']) +
+          '<p class="lede" style="margin-top:12px">Due this week</p>' +
+          tbl('<th>Supplier</th><th class="r">Due</th><th class="r">Amount</th>', bd.week.sort((a, b) => a.d - b.d).map(x =>
+            '<tr><td>' + E(x.b.vendor) + '<span class="sm">' + E(x.b.num ? "Bill " + x.b.num : x.b.type) + '</span></td><td class="r num">' + E(x.b.due) + '</td><td class="r num">' + M(x.b.open) + '</td></tr>'), "Nothing falls due this week.", 12);
+      }
+    } else {
+      h += '<p class="lede">By supplier, from the payables aging. The A&amp;M app shows every bill with its due date.</p>' +
+        (S.M.ap ? worstTable(S.M.ap.list, "Supplier") : (S.apErr ? failBox(S.apErr, "Payables") : wait("payables")));
+    }
+    h += '</div>';
+
+    /* spend */
+    if(PLATFORM === "app"){
+      h += '<div class="card"><h2>Who we spend with</h2><p class="lede">Spend by supplier since 1 April, from QuickBooks. The biggest are where a better price is worth the most.</p>';
+      if(!B.spend) h += qbErr ? '<div class="state err">' + E(qbErr) + '</div>' : wait("QuickBooks spend");
+      else h += bars(B.spend.slice(0, 12).map(s => [s.vendor, Math.round(s.amount), null, MK(s.amount)]));
+      h += '</div>';
+    }
+
+    /* paperwork */
+    const pw = paperwork();
+    h += '<div class="card wide"><h2>Supplier and subtrade paperwork</h2><p class="lede">Every supplier we owe money to or have an open purchase order with, checked for the WCB clearance and insurance expiry fields on their JobTread record. Fill these in on the supplier in JobTread.</p>';
+    if(!pw) h += jtErr ? '<div class="state err">' + E(jtErr) + '</div>' : wait("the supplier records");
+    else h += tbl('<th>Supplier</th><th>Why it matters now</th><th>Missing</th>', pw.map(r =>
+        '<tr><td><span class="nm">' + E(r.name) + '</span></td><td>' + E(r.why) + '</td><td>' + r.gaps.map(g => '<span class="tag ' + (/expired/.test(g) ? "stop" : "caution") + '">' + E(g) + '</span>').join(" ") + '</td></tr>'),
+        "Every active supplier has WCB clearance and insurance on file.", 20);
+    h += '</div>';
+    return h + '</div>';
+  }
+};
+
+start();
+</script>
+</body></html>

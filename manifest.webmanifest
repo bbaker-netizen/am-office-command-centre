@@ -1,0 +1,15 @@
+{
+  "name": "A&M Office Command Centre",
+  "short_name": "A&M Command",
+  "description": "The A&M Abatement Services office command centre: jobs, money, buying, equipment and the shop. The shop screens work with no signal.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f7fa",
+  "theme_color": "#1a1917",
+  "icons": [
+    { "src": "am-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "am-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
