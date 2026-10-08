@@ -85,14 +85,17 @@
      The step the SOP does not have. This is the physical exit from site, and it
      is where the machines are standing when everyone starts packing up. */
 
+  /* Cut back to the one line that earns its place, at A&M's request, pending a
+     revised list. The others were the SOP's tear down steps, and a checklist
+     that asks a crew to tick seven things they have already done gets ticked in
+     one swipe without being read, which is worse than not asking. The sweep is
+     the one that actually changes an outcome, because it is the step that finds
+     the machine nobody remembers stashing.
+
+     The old ids are left alone rather than renumbered: jobs already carry ticks
+     against them, and those ticks are a record of what somebody confirmed on a
+     real site. Adding lines back here brings that history back with them. */
   SOP.strike = [
-    { id: 'clearance', text: 'Clearance certificate in hand', gate: true,
-      note: 'Type 2 and Type 3 only. The SOP will not let a client walkthrough be booked without it.' },
-    { id: 'negair', text: 'Negative air machines shut down and pulled' },
-    { id: 'decon', text: 'Decontamination unit dismantled' },
-    { id: 'poly', text: 'Poly and critical barriers down' },
-    { id: 'signage', text: 'Signage down' },
-    { id: 'waste', text: 'Waste out, manifests kept for the close-out package' },
     { id: 'sweep', text: 'Final sweep for anything left behind, closets and mechanical rooms included',
       note: 'This is the one that finds the gear. The install crew stashes it and the tear down crew never looks.' }
   ];

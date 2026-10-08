@@ -38,17 +38,63 @@
     : r.item.name;
 
   function jobById(id) { return (S.catalog.jobs || []).find(j => j.id === id) || null; }
+
+  /* A job by its name, never by its code.
+     "NEG-44 is out on INV-20260902-W58" is a true sentence that helps nobody:
+     it names the job in a form no one in the shop has ever seen, because the
+     code is generated and the crew only ever knew the address. The job list is
+     what turns it back into "7825 71 st NW", so when a code does leak through
+     to a screen it means the job itself is missing, and saying so plainly is
+     more use than printing the code as though it were an answer. */
   function jobLabel(id) {
+    if (!id) return 'no job';
     const j = jobById(id);
-    if (!j) return id || 'no job';
-    return (j.number ? j.number + ' ' : '') + j.name;
+    if (!j) return 'a job this phone has not got yet';
+    const nm = String(j.name || '').trim();
+    return ((j.number ? j.number + ' ' : '') + nm).trim() || (j.address || 'unnamed job');
   }
   AM.jobLabel = jobLabel;
+
+  // Same thing, with the code kept for the office, where identifying the exact
+  // record matters more than reading nicely.
+  function jobLabelFull(id) {
+    const j = jobById(id);
+    return j ? jobLabel(id) : `${jobLabel(id)} (${id})`;
+  }
+  AM.jobLabelFull = jobLabelFull;
 
   function openJobs() {
     return (S.catalog.jobs || []).filter(j => !j.closed)
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   }
+
+  /* Every job the shop still has to do something about: the open ones, plus any
+     job with company gear standing on it, even a closed one and even one whose
+     record has gone astray.
+
+     A job used to drop off the shop screen the moment it was closed, and off it
+     entirely if its record went missing, while the machines signed out to it
+     stayed signed out. The office could see them and the shop could not, and
+     there was no screen left anywhere that could bring them back in. Gear out
+     is the thing that decides, because gear out is the thing somebody has to go
+     and fetch. */
+  function jobsToWorkOn() {
+    const d = AM.derive();
+    const out = [];
+    const seen = new Set();
+    for (const j of openJobs()) { out.push(j); seen.add(j.id); }
+    for (const jobId of d.outstanding.keys()) {
+      if (seen.has(jobId)) continue;
+      seen.add(jobId);
+      const j = jobById(jobId);
+      if (j) out.push(j);
+      // If it is still missing here, recoverOrphanJobs has not run yet. It will
+      // on the next derive, and the job appears then rather than being invented
+      // fresh on every redraw.
+    }
+    return out;
+  }
+  AM.jobsToWorkOn = jobsToWorkOn;
 
   /* --------------------------------------------------------------- sessions */
 
@@ -74,7 +120,7 @@
         <strong>${esc(nameOf(r))}</strong>
         <span class="line-id">${esc(r.item.id)}</span>
       </div>
-      <div class="line-qty">${esc(qty(n))}${r.kind === 'stock' ? ' ' + esc(r.item.uom || '') : ''}</div>
+      <div class="line-qty">${r.kind === 'stock' ? esc(AM.qtyLabel(r.item, n)) : esc(qty(n))}</div>
       ${scanned ? '' : '<div class="line-flag">typed in</div>'}
       ${editable ? `<div class="line-fix">
         ${r.kind === 'stock' ? `<button class="ln-fix" data-id="${esc(r.item.id)}">Fix the count</button>` : ''}
@@ -103,6 +149,12 @@
     else session.lines.push({ id: r.item.id, kind: r.kind, qty: n, scanned: !!scanned });
     AM.beep(true);
     AM.scanFeed(sessionRow(r, n, scanned));
+    /* The load list is redrawn HERE, when the line actually changes, rather
+       than by whoever called this. Adding off the list asks for a quantity
+       first, and the caller was redrawing before that question was answered,
+       so the screen kept the old number. Somebody who adds three and still
+       reads two adds three again and the job wears six. */
+    AM.render();
   }
 
   /* It is on another job. Not an error and not a refusal: the machine is in
@@ -111,7 +163,7 @@
      the old job's line settles. */
   function alreadyOutModal(r, at) {
     AM.modal(`
-      <h3>${esc(nameOf(r))} is out on ${esc(jobLabel(at.jobId))}</h3>
+      <h3>${esc(nameOf(r))} is signed out to ${esc(jobLabel(at.jobId))}</h3>
       <p class="muted small">It has not come back through the shop. If it is here in front of you, move it across rather than checking it out twice, and ${esc(jobLabel(at.jobId))} stops waiting for it.</p>
       <div class="row"><button class="btn big" id="aoMove">Move it to ${esc(jobLabel(session.jobId))}</button>
       <button class="btn-ghost" onclick="AM.closeModal()">Leave it alone</button></div>
@@ -172,14 +224,16 @@
      machine, and asking for a quantity would only slow the scan down. */
   function askQty(r, then) {
     const inc = r.item.increments && r.item.increments.length ? r.item.increments : null;
+    const pk = AM.packOf(r.item);
     AM.modal(`
       <h3>${esc(nameOf(r))}</h3>
-      <p class="muted">${esc(r.item.uom || 'each')}${r.item.shelf ? ' · ' + esc(r.item.shelf) : ''}</p>
+      <p class="muted">How many ${esc(AM.uomWord(r.item.uom, 2))}?${r.item.shelf ? ' · ' + esc(r.item.shelf) : ''}</p>
+      ${pk ? `<p class="muted small">One ${esc(AM.uomWord(r.item.uom, 1))} is ${pk.size} ${esc(pk.piece)}.</p>` : ''}
       <div class="pad">
         ${[1, 2, 3, 4, 5, 6, 8, 10, 12, 20, 25, 50].map(n => `<button class="pad-n" data-q="${n}">${n}</button>`).join('')}
       </div>
       <div class="pad-row">
-        <input id="qFree" type="number" inputmode="decimal" step="0.25" placeholder="Other">
+        <input id="qFree" type="number" inputmode="decimal" step="${AM.stepFor ? AM.stepFor(r.item) : 0.25}" min="0" placeholder="${partialOK(r.item) ? 'Other, part of one is fine' : 'Other'}">
         <button class="btn" id="qGo">Add</button>
       </div>
       <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button>
@@ -194,7 +248,12 @@
     });
   }
 
-  function handleCode(code, scanned) {
+  /* `after` runs once this code has actually been dealt with, which for
+     anything on the shelf means after the quantity has been answered. The
+     camera used to be reopened by the caller the instant this returned, so it
+     came up underneath the quantity pad and the man was typing into a box with
+     a live camera behind it. */
+  function handleCode(code, scanned, after) {
     const r = findItem(code);
     if (!r) { AM.beep(false); AM.toast(`Nothing here is tagged ${esc(code)}`, 'bad'); return; }
     /* Broken gear does not leave the shop. The block is here rather than in a
@@ -227,15 +286,15 @@
       if (at && at.where === 'job') {
         AM.beepDup();
         if (!session || at.jobId === session.jobId) {
-          AM.toast(`${nameOf(r)} is already out on this job.`, 'warn');
+          AM.toast(`${nameOf(r)} is already signed out to ${jobLabel(at.jobId)}.`, 'warn');
           return;
         }
         alreadyOutModal(r, at);
         return;
       }
     }
-    if (r.kind === 'stock') askQty(r, n => addLine(r, n, scanned));
-    else addLine(r, 1, scanned);
+    if (r.kind === 'stock') askQty(r, n => { addLine(r, n, scanned); if (after) after(); });
+    else { addLine(r, 1, scanned); if (after) after(); }
   }
 
   /* The pick list. It exists because one man on the phone while another pulls
@@ -243,11 +302,62 @@
      work back to paper. It is one tap behind the camera, and everything added
      through it is marked so the shop can see how much of the day never got
      scanned. That is the whole guard rail. */
+  /* What this shop actually reaches for. Scored off its own history rather
+     than a guess: everything that has been checked out or asked for, weighted
+     so the last month counts for more than last year, but nothing that has
+     ever been used drops to nothing. */
+  function useScore() {
+    const now = Date.now();
+    const m = new Map();
+    for (const e of S.events) {
+      if (e.type !== 'ISSUE' && e.type !== 'REQUEST') continue;
+      if (!e.itemId) continue;
+      const days = Math.max(0, (now - new Date(e.at).getTime()) / 86400000);
+      const w = days <= 30 ? 3 : days <= 90 ? 1.5 : 1;
+      m.set(e.itemId, (m.get(e.itemId) || 0) + w);
+    }
+    return m;
+  }
+  AM.useScore = useScore;
+
+  const TOP_USED = 12;
+  const PL_MAX = 40;          // rows on screen at once; nobody scrolls past this
+
+  /* WHY THIS LIST IS BUILT ONCE AND NOT ON EVERY KEYSTROKE
+     There are 756 things on the master list. This used to rebuild all 756
+     wrapper objects, walk the whole event log to score them, lower-case every
+     name, sort the lot and then hang a click handler on each of sixty rows,
+     and it did all of that again on every letter typed. On a shop phone that
+     is a list which appears to hang, so the man taps it again, or backs out and
+     comes in again, and lands back at the start. Exactly as reported.
+
+     Now the searchable index is built once and kept until the master list
+     itself changes, typing is debounced so a fast typist causes one redraw
+     rather than nine, and the rows share a single handler on their container
+     instead of one each. */
+  let plIndex = null;
+  let plStamp = '';
+
+  function pickIndex() {
+    const stamp = `${S.catalog.stock.length}:${S.catalog.units.length}:${S.events.length}`;
+    if (plIndex && plStamp === stamp) return plIndex;
+    const score = useScore();
+    const build = (item, kind) => ({
+      id: item.id, kind, item,
+      name: kind === 'unit' ? `${item.name} ${item.unitNo || ''}`.trim() : item.name,
+      hay: `${item.name} ${item.id} ${item.group || ''} ${item.model || ''}`.toLowerCase(),
+      score: score.get(item.id) || 0
+    });
+    plIndex = [
+      ...S.catalog.stock.map(s => build(s, 'stock')),
+      ...S.catalog.units.map(u => build(u, 'unit'))
+    ].sort((a, b) => b.score - a.score);   // sorted once, so no sort per keystroke
+    plStamp = stamp;
+    return plIndex;
+  }
+
   function pickList(onPick) {
-    const rows = [
-      ...S.catalog.stock.map(s => ({ kind: 'stock', item: s })),
-      ...S.catalog.units.map(u => ({ kind: 'unit', item: u }))
-    ];
+    const rows = pickIndex();
     AM.modal(`
       <h3>Pick it off the list</h3>
       <p class="muted small">Anything added this way is marked, so the shop can see what never got scanned.</p>
@@ -256,18 +366,52 @@
       <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button>
     `, el => {
       const list = $('#plList', el);
+
+      // What a one of it actually is, right on the row, so nobody has to guess
+      // whether a 1 means one glove or one box of a hundred.
+      const rowHtml = r => {
+        const unit = r.kind === 'stock' ? AM.uomLabel(r.item, 1) : '';
+        return `<button class="pl-row" data-id="${esc(r.id)}">
+          <span>${esc(r.name)}${unit ? ` <em class="pl-uom">per ${esc(unit)}</em>` : ''}</span>
+          <span class="line-id">${esc(r.id)}</span>
+        </button>`;
+      };
+
       const draw = q => {
         const t = q.trim().toLowerCase();
-        const hits = (t
-          ? rows.filter(r => (r.item.name + ' ' + r.item.id + ' ' + (r.item.group || '') + ' ' + (r.item.model || '')).toLowerCase().includes(t))
-          : rows.slice(0, 40)).slice(0, 60);
-        list.innerHTML = hits.map(r => `<button class="pl-row" data-id="${esc(r.item.id)}">
-            <span>${esc(nameOf(r))}</span><span class="line-id">${esc(r.item.id)}</span>
-          </button>`).join('') || '<div class="muted pad-y">Nothing matches that.</div>';
-        $$('.pl-row', list).forEach(b => b.onclick = () => { AM.closeModal(); onPick(b.dataset.id); });
+        if (t) {
+          // Already in the shop's own order, so the thing they pull every day is
+          // the first line rather than the twelfth. No sorting needed here.
+          const hits = [];
+          for (const r of rows) {
+            if (r.hay.includes(t)) { hits.push(r); if (hits.length >= PL_MAX) break; }
+          }
+          list.innerHTML = hits.map(rowHtml).join('') || '<div class="muted pad-y">Nothing matches that.</div>';
+        } else {
+          const used = rows.filter(r => r.score > 0).slice(0, TOP_USED);
+          const usedIds = new Set(used.map(r => r.id));
+          const rest = rows.filter(r => !usedIds.has(r.id)).slice(0, PL_MAX);
+          list.innerHTML =
+            (used.length ? `<div class="pl-head">What this shop pulls most</div>` + used.map(rowHtml).join('') : '') +
+            (rest.length ? `<div class="pl-head">Everything else</div>` + rest.map(rowHtml).join('') : '');
+        }
       };
+
+      // One handler for the whole list, so a redraw costs nothing to re-wire.
+      list.onclick = ev => {
+        const b = ev.target.closest('.pl-row');
+        if (!b) return;
+        AM.closeModal();
+        onPick(b.dataset.id);
+      };
+
       draw('');
-      $('#plq', el).oninput = e => draw(e.target.value);
+      let t = null;
+      $('#plq', el).oninput = e => {
+        const v = e.target.value;
+        clearTimeout(t);
+        t = setTimeout(() => draw(v), 120);
+      };
       setTimeout(() => { const el_ = $('#plq', el); el_ && el_.focus(); }, 60);
     });
   }
@@ -403,7 +547,9 @@
 
   AM.screens['#/'] = function () {
     const d = AM.derive();
-    const jobs = openJobs();
+    // Not just the open ones: anything with company gear standing on it, so a
+    // closed job that never gave its machines back is still reachable from here.
+    const jobs = jobsToWorkOn();
     const outCount = [...d.outstanding.values()].reduce((a, rows) => a + rows.length, 0);
     const onJobs = [...d.unitAt.values()].filter(x => x.where === 'job').length;
     const broken = [...d.unitAt.values()].filter(x => x.where === 'repair').length;
@@ -425,11 +571,52 @@
     return `
     <div class="wrap">
       <div class="tiles">
+        ${(() => {
+          /* WHAT IS COMING, ABOVE WHAT IS HAPPENING
+             This lived in the office as "Mobilizing tomorrow", which is the
+             wrong place and the wrong horizon. The person who needs it is the
+             one standing in the shop deciding what to pull, and by tomorrow it
+             is not planning any more, it is a scramble. So it sits above
+             Mobilize and Tear down, it looks forward as far as there are dates,
+             and the nearest job is at the top because that is the one being
+             loaded next.
+
+             It is empty until jobs carry a mobilization date, which is what the
+             JobTread link will bring across. Empty is still worth a tile: it
+             says what it is for, so it is not a surprise the day it fills. */
+          /* THE DATE, ON THE TILE
+             This said "next out tomorrow" and left the date itself on the
+             screen behind. A date is the thing that gets written on the
+             whiteboard and read back down a phone, so it belongs where it can
+             be read without opening anything. And the count that matters is how
+             many vans leave on that day, not how many jobs have a date on them
+             somewhere in the next month. */
+          const byDay = mobsByDay();
+          const first = byDay[0];
+          const total = byDay.reduce((n, g) => n + g.jobs.length, 0);
+          return `<a class="tile plan wide ${byDay.length ? '' : 'empty'}" href="#/upcoming">
+            <span class="tile-k">${first
+              ? `Coming up · ${esc(whenWord(first.days))}, ${esc(AM.dayShort(first.date))}`
+              : 'Coming up'}</span>
+            <span class="tile-s">${first
+              ? `${first.jobs.length} mobilization${first.jobs.length === 1 ? '' : 's'} that day: ${esc(first.jobs.map(x => jobLabel(x.j.id)).slice(0, 3).join(', '))}${first.jobs.length > 3 ? ' and ' + (first.jobs.length - 3) + ' more' : ''}. ${total > first.jobs.length ? (total - first.jobs.length) + ' more further out.' : 'Plan the stock before it is needed.'}`
+              : 'jobs with a mobilization date turn up here, broken down by the day they go out on, soonest first, so stock can be pulled before the morning it is wanted'}</span></a>`;
+        })()}
         <a class="tile go" href="#/out" data-tour="mobilize"><span class="tile-k">Mobilize</span><span class="tile-s">gear leaving the shop</span></a>
         <a class="tile back" href="#/back" data-tour="teardown"><span class="tile-k">Tear down</span><span class="tile-s">bringing it back</span></a>
         <a class="tile move" href="#/move" data-tour="transfer"><span class="tile-k">Transfer</span><span class="tile-s">site to site</span></a>
         <a class="tile find" href="#/find" data-tour="find"><span class="tile-k">Find</span><span class="tile-s">where is it</span></a>
         <a class="tile in wide" href="#/in" data-tour="arrived"><span class="tile-k">Stock arrived</span><span class="tile-s">put a delivery on the shelves</span></a>
+        ${(() => {
+          /* What the crews have asked the shop for. It used to shout only on
+             the office Today screen, and the office is not the man who pulls
+             it. */
+          const open = AM.derive().requests.filter(r => !r.filled);
+          if (!open.length) return '';
+          return `<a class="tile asks wide" href="#/asks">
+            <span class="tile-k">${open.length} asked for</span>
+            <span class="tile-s">${esc(shopLead())} pulls these and takes them to site</span></a>`;
+        })()}
       </div>
 
       <div class="panel">
@@ -457,9 +644,15 @@
           const hidden = withRows.length - shown.length;
           return `<div class="job-list">${shown.map(({ j, rows }) => {
             const ph = window.SOP.phase(j.division, j.phase);
+            /* A closed job with gear still on it is the one worth shouting
+               about: nobody is going back to that site on purpose, so the
+               machines sit there until somebody notices. */
+            const note = j.recovered ? 'record was rebuilt from the movements, needs an address'
+              : j.closed ? 'closed, but gear is still out on it'
+              : (j.address || (ph ? ph.name : ''));
             return `<a class="job-row" href="#/back?job=${encodeURIComponent(j.id)}">
               <div><strong>${esc(jobLabel(j.id))}</strong>
-                <div class="muted small">${esc(j.address || (ph ? ph.name : ''))}</div></div>
+                <div class="muted small${j.closed || j.recovered ? ' warn-text' : ''}">${esc(note)}</div></div>
               <div class="job-count ${rows ? 'has' : ''}">${rows ? rows + ' out' : 'clear'}</div>
             </a>`;
           }).join('')}</div>
@@ -486,7 +679,7 @@
              the rest of the day it was filled, so the man who asked sees it
              happened, and then it goes. */
           const today = AM.dayISO();
-          const done = d.requests.filter(r => r.filled && String(r.filled.at || r.at || '').slice(0, 10) === today).slice(-3);
+          const done = d.requests.filter(r => r.filled && ((r.filled.at || r.at) ? AM.dayISO(r.filled.at || r.at) : '') === today).slice(-3);
           if (!open.length && !done.length) return '';
           return `<div class="req-list">
             ${open.map(r => `<div class="req-row">
@@ -544,8 +737,10 @@
         const t = e.target.value.trim().toLowerCase();
         picked = null;
         if (t.length < 2) { list.innerHTML = ''; return; }
+        const score = useScore();
         const hits = S.catalog.stock
           .filter(s => (s.name + ' ' + s.group).toLowerCase().includes(t))
+          .sort((a, b) => (score.get(b.id) || 0) - (score.get(a.id) || 0))
           .slice(0, 5);
         list.innerHTML = hits.map(s => `<button class="pl-row" data-id="${esc(s.id)}">
           <span>${esc(s.name)}</span><span class="line-id">${esc(s.uom || '')}</span></button>`).join('');
@@ -565,7 +760,8 @@
           itemId: picked || null,          // attached when it matches the shelf
           text: what,
           qty: parseFloat($('#rqQty', el).value) || 1,
-          afterTwo: late
+          afterTwo: late,
+          forWhom: shopLead()          // who in the shop is pulling it
         });
         AM.closeModal();
         AM.toast(late ? 'Sent. It is after two though, so ring the shop as well.' : 'Sent. The shop has it for the morning.', late ? 'warn' : 'ok');
@@ -576,46 +772,22 @@
 
   /* ---------------------------------------------------------- check out ---- */
 
-  /* The manual's pre-mobilization list is the step everybody skips, because it
-     is a desk job and the van is running. So it sits in front of mobilize
-     rather than beside it: the office walks it the day before, and a crew that
-     finds it unfinished at six in the morning can still go, but says why and
-     the override lands on the office screen with a name on it. */
-  function preMobState(jobId) {
-    const j = jobById(jobId) || {};
-    const type3 = j.division !== 'restoration' && String(j.containment) === '3';
-    const items = window.SOP.preMob.filter(i => i.appliesTo === 'all' || (i.appliesTo === 'type3' && type3));
-    const missing = items.filter(i => !(j.preMob && j.preMob[i.id]));
-    const overridden = S.events.some(e => e.type === 'PREMOB_OVERRIDE' && e.jobId === jobId);
-    return { j, items, missing, ready: !missing.length, overridden };
-  }
 
+  /* THE PRE-MOBILIZATION LIST MOVED TO THE END, ON PURPOSE
+     It used to stand in front of the camera: pick a job, and instead of the
+     scanner you got a red screen headed "Not confirmed" listing paperwork you
+     had not done. At six in the morning, with the van running, that is a wall
+     in front of the only thing the man opened the app to do, and the list it is
+     quoting is an office job done the day before. Nobody at the van can action
+     any of it, so the only real choice it ever offered was the way round it.
+
+     So the camera opens first now. The list is still there, it is still counted
+     on the screen while the van is being loaded, and it is put in front of
+     somebody at the point where it is genuinely worth a last look, which is
+     when the load is finished and about to leave. It never blocks. */
   AM.screens['#/out'] = function () {
     if (!session || session.mode !== 'out') {
       return jobPicker('Mobilize', 'Which job is this going to?', () => {});
-    }
-    const pm = preMobState(session.jobId);
-    if (!pm.ready && !pm.overridden) {
-      return `
-      <div class="wrap">
-        <div class="panel note bad">
-          <h2>${esc(jobLabel(session.jobId))} is not ready to mobilize</h2>
-          <p>${pm.missing.length} thing${pm.missing.length === 1 ? '' : 's'} on the pre-mobilization list ${pm.missing.length === 1 ? 'has' : 'have'} not been confirmed. It is a desk job, done the day before, and this is the point where it either happened or it did not.</p>
-        </div>
-        <div class="panel">
-          <h2>Not confirmed</h2>
-          <div class="chk-list">
-            ${pm.missing.map(i => `<div class="chk"><span><strong>${esc(i.text)}</strong>${i.note ? `<em class="muted small">${esc(i.note)}</em>` : ''}</span></div>`).join('')}
-          </div>
-          ${pm.j.mobDate ? `<p class="muted small">This job is down to go out ${esc(pm.j.mobDate)}.</p>` : '<p class="muted small">This job has no mobilization date on it, so it never showed up on anybody\'s list the day before.</p>'}
-        </div>
-        <div class="panel">
-          <h2>Going anyway</h2>
-          <p class="muted">Ring the office and get it walked if you can. If the work cannot wait, say why and load the van.</p>
-          <div class="row"><button class="btn-ghost" id="pmBack">Pick a different job</button>
-          <button class="btn" id="pmGo">Go anyway</button></div>
-        </div>
-      </div>`;
     }
     return sessionScreen('Mobilizing to', 'Everything here goes on the job the moment you send it.');
   };
@@ -625,7 +797,7 @@
       title: 'Check out to ' + jobLabel(session.jobId),
       hint: 'Scan the machine, or the card on the shelf edge',
       altLabel: 'Cannot scan it',
-      onAlt: () => pickList(id => { handleCode(id, false); openOutScanner(); }),
+      onAlt: () => pickList(id => handleCode(id, false, () => openOutScanner())),
       onClose: () => AM.render()
     });
   }
@@ -638,7 +810,8 @@
     const jobId = m ? decodeURIComponent(m[1]) : (session && session.mode === 'back' ? session.jobId : null);
 
     if (!jobId) {
-      return jobPicker('Tear down', 'Which job are you tearing down?', id => { location.hash = '#/back?job=' + encodeURIComponent(id); });
+      return jobPicker('Tear down', 'Which job are you tearing down?',
+        id => { location.hash = '#/back?job=' + encodeURIComponent(id); }, jobsToWorkOn);
     }
 
     const rows = d.outstanding.get(jobId) || [];
@@ -698,6 +871,21 @@
           Asbestos so far: ${w.asbestos ? w.asbestos.bags : w.bags} bags${(w.asbestos ? w.asbestos.bags : w.bags) ? ` · about ${Math.round((w.asbestos ? w.asbestos.bags : w.bags) / bagsPerBin * 100)}% of a bin` : ''}${(w.asbestos ? w.asbestos.trailers : w.trailers) ? ` · ${qty(w.asbestos ? w.asbestos.trailers : w.trailers)} trailer loads` : ''}<br>
           Clean demo so far: ${w.clean ? w.clean.bags : 0} bags${w.clean && w.clean.trailers ? ` · ${qty(w.clean.trailers)} trailer loads` : ''}
         </div>
+        ${(() => {
+          /* Every load already logged on this job, newest first. A running
+             total on its own gives a man no way to tell whether the one he
+             just entered went on, so he enters it again or decides it did
+             not work. The list is the receipt. */
+          const loads = S.events.filter(e => e.type === 'WASTE' && e.jobId === jobId).slice(-8).reverse();
+          if (!loads.length) return '';
+          return `<div class="waste-log">
+            <div class="waste-log-head">Loads logged on this job</div>
+            ${loads.map(e => `<div class="waste-log-row">
+              <span>${e.bags ? esc(qty(e.bags)) + ' bags' : ''}${e.bags && e.trailers ? ' · ' : ''}${e.trailers ? esc(qty(e.trailers)) + ' trailer loads' : ''}</span>
+              <span class="muted small">${e.stream === 'clean' ? 'clean demo' : 'asbestos'} · ${esc(fmtWhen(e.at))}${e.by ? ' · ' + esc(e.by) : ''}</span>
+            </div>`).join('')}
+          </div>`;
+        })()}
       </div>
 
       <div class="panel ${rows.length ? '' : 'ready'}">
@@ -715,8 +903,149 @@
      as a whole thing or does not come back. You cannot have two and a half
      cases of coveralls unless somebody is checking in garbage for the half,
      which is why the step depends on how the item is bought. */
+  /* WHY HALF A BOX USED TO COME BACK AS A WHOLE ONE
+     This said a part quantity is only possible on a roll or a pail. Everything
+     else stepped in whole numbers, and the counter rounded to that step before
+     it recorded anything. So a man who opened a pack of ten blades, used two,
+     and typed 0.5 had it rounded straight up to 1, and the shop was told the
+     whole unopened pack was back on the shelf. The two blades were never
+     charged to the job and the count on the shelf was wrong from that moment.
+
+     A pack that has been opened is the normal case, not the exception. So
+     anything sold in a pack can come back in part, and it is counted in the
+     pieces inside it rather than in decimals of a box, because nobody at a
+     bench thinks "nought point eight of a pack". They think "eight blades". */
+  /* Anything that gets opened can come back part used. That is every container
+     on the shelf, whether or not the master list happens to record how many are
+     inside it, plus rolls. An each and a pair move whole, because half a pair
+     of gloves is not a thing anybody puts on a shelf. */
   function partialOK(item) {
-    return item.uom === 'RL' || item.uom === 'PL' || item.cls === 'roll';
+    return AM.isContainer(item) || !!AM.packOf(item);
+  }
+
+  /* Two different numbers, and the difference matters.
+
+     `stepFor` is what the plus and minus buttons move by: it has to be something
+     a thumb can get to a sensible answer with. `grainFor` is the smallest amount
+     the app will accept at all, and it is only ever used to tidy up what
+     somebody has typed.
+
+     They used to be the same number, and that is why a typed half was refused.
+     A box of fifty steps by a fiftieth on the buttons, so typing 0.5 got rounded
+     to the nearest fiftieth, which is still 0.5, fine. But a box with no stated
+     count stepped by one, so a typed 0.5 was rounded straight back up to a whole
+     box. The buttons and the keyboard now answer to different rules: the buttons
+     stay coarse, and a number typed by a person is respected to the piece, or to
+     a hundredth of a container when nobody has said what is inside. */
+  function stepFor(item) {
+    const p = AM.packOf(item);
+    if (p) {
+      const one = 1 / p.size;
+      // A box of a thousand does not want a thousandth on a button.
+      return one < 0.05 ? 0.25 : Math.round(one * 10000) / 10000;
+    }
+    return partialOK(item) ? 0.25 : 1;
+  }
+  AM.stepFor = stepFor;
+
+  function grainFor(item) {
+    const p = AM.packOf(item);
+    /* Exactly one piece, deliberately not rounded. A pack of thirty rounded to
+       five places is 0.03333, and thirty of those is 0.9999 of a box, so
+       returning every last suit would leave a hair of a line standing open on
+       the job forever. The rounding belongs on the answer, once, not on the
+       size of the step. */
+    if (p) return 1 / p.size;
+    return partialOK(item) ? 0.01 : 1;                          // a hundredth of a container
+  }
+  AM.grainFor = grainFor;
+
+  /* "0.8 packs" said out loud, in the words on the box. */
+  function piecesNote(item, n) {
+    const p = AM.packOf(item);
+    if (!p) return '';
+    const pieces = Math.round(n * p.size * 100) / 100;
+    return `${AM.qty(pieces)} ${p.piece}`;
+  }
+  /* Part of one coming back, where there is nothing to count.
+
+     A roll of poly and a jug of Benefect are both perfectly ordinary things to
+     bring back half of, and neither contains a number of anything. The old
+     version of this told a man "nobody has recorded how many are in one roll",
+     which is not information, it is the app admitting it asked itself the wrong
+     question. It asks the only question that can be answered by looking at the
+     thing: how much of it is left. */
+  const PART_ASK = {
+    length: 'How much of the roll is coming back? Judge it by eye, a quarter is close enough.',
+    liquid: 'How much of it is coming back? Judge it by eye.',
+    countable: 'How much of the box is coming back?'
+  };
+
+  function partModal(item, maxQty, onSet) {
+    const kind = AM.kindOf(item);
+    const word = AM.uomWord(item.uom, 1);
+    const opts = [[0.25, 'a quarter'], [0.5, 'a half'], [0.75, 'three quarters'], [1, 'all of it']]
+      .filter(o => o[0] <= maxQty + 0.0001);
+    AM.modal(`
+      <h3>${esc(item.name)}</h3>
+      <p class="muted small">${esc(PART_ASK[kind] || PART_ASK.countable)} ${AM.qty(maxQty)} ${esc(AM.uomWord(item.uom, maxQty))} went out on this job.</p>
+      <div class="pad">
+        ${opts.map(o => `<button class="pad-n" data-q="${o[0]}">${esc(o[1])}</button>`).join('')}
+      </div>
+      <div class="pad-row">
+        <input id="ptFree" type="number" inputmode="decimal" step="0.01" min="0" max="${maxQty}" placeholder="Or a number">
+        <button class="btn" id="ptGo">Set it</button>
+      </div>
+      ${kind === 'countable' ? `<p class="muted small">If you know how many are in one ${esc(word)}, tell the office. It counts in real ${esc(AM.packOf(item) ? AM.packOf(item).piece : 'pieces')} after that, for everybody.</p>` : ''}
+      <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button>
+    `, el => {
+      const done = v => {
+        let k = Math.min(Math.max(0, v), maxQty);
+        k = Math.round(k * 100) / 100;
+        AM.closeModal();
+        onSet(k);
+      };
+      $$('.pad-n', el).forEach(b => b.onclick = () => done(parseFloat(b.dataset.q) * (maxQty >= 1 ? 1 : maxQty)));
+      $('#ptGo', el).onclick = () => {
+        const v = parseFloat($('#ptFree', el).value);
+        if (!isFinite(v) || v <= 0) { AM.toast('Put a number in.', 'warn'); return; }
+        done(v);
+      };
+      setTimeout(() => { const i = $('#ptFree', el); i && i.focus(); }, 60);
+    });
+    return true;
+  }
+
+  /* Counting back in pieces. The arithmetic that turns eight blades into
+     four fifths of a pack happens here rather than in somebody's head. */
+  function piecesModal(item, maxPacks, title, onSet) {
+    const p = AM.packOf(item);
+    if (!p) return false;
+    const maxPieces = Math.round(maxPacks * p.size * 100) / 100;
+    AM.modal(`
+      <h3>${esc(item.name)}</h3>
+      <p class="muted small">${esc(title)} There ${p.size === 1 ? 'is' : 'are'} ${p.size} ${esc(p.piece)} in a ${esc(AM.uomWord(item.uom, 1))}, and ${AM.qty(maxPieces)} ${esc(p.piece)} went out on this job.</p>
+      <label class="fld">How many ${esc(p.piece)}<input id="pcN" type="number" inputmode="numeric" step="1" min="0" max="${maxPieces}" value="${maxPieces}"></label>
+      <p class="muted small" id="pcEcho"></p>
+      <div class="row"><button class="btn big" id="pcGo">Set it</button>
+      <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button></div>
+    `, el => {
+      const inp = $('#pcN', el), echo = $('#pcEcho', el);
+      const packs = () => {
+        let v = parseFloat(inp.value);
+        if (!isFinite(v) || v < 0) v = 0;
+        if (v > maxPieces) v = maxPieces;
+        return Math.round((v / p.size) * 10000) / 10000;
+      };
+      const show = () => {
+        const k = packs();
+        echo.textContent = `That is ${AM.qty(k)} of a ${AM.uomWord(item.uom, 1)}. The rest is charged to the job.`;
+      };
+      inp.oninput = show; show();
+      $('#pcGo', el).onclick = () => { const k = packs(); AM.closeModal(); onSet(k); };
+      setTimeout(() => { inp.focus(); inp.select && inp.select(); }, 60);
+    });
+    return true;
   }
 
   function renderReturnRow(r, jobId) {
@@ -726,11 +1055,14 @@
     if (!item) return '';
     const rr = { kind: isUnit ? 'unit' : 'stock', item };
 
+    const pk = isUnit ? null : AM.packOf(item);
+    const still = pk ? `${AM.qtyLabel(item, r.still)}` : (isUnit ? qty(r.still) : `${AM.qtyLabel(item, r.still)}`);
     const head = `
       <div class="ret-main">
         <strong>${esc(nameOf(rr))}</strong>
         <span class="line-id">${esc(r.id)}</span>
-        <div class="muted small">${qty(r.still)} still out${item.uom ? ' (' + esc(item.uom) + ')' : ''}${r.back ? ' · ' + qty(r.back) + ' already checked in' : ''}${r.unscanned ? ' · ' + qty(r.unscanned) + ' was typed in, not scanned' : ''}</div>
+        <div class="muted small">${esc(still)} still out${r.back ? ' · ' + esc(qty(r.back)) + ' already checked in' : ''}${r.unscanned ? ' · ' + esc(qty(r.unscanned)) + ' was typed in, not scanned' : ''}</div>
+        ${pk && Math.abs(r.still - Math.round(r.still)) < 0.0001 ? `<div class="muted small">${esc(piecesNote(item, r.still))} out on the job</div>` : ''}
       </div>`;
 
     /* A machine is one thing. It is back or it cannot be found, and there is
@@ -748,19 +1080,41 @@
 
     /* Consumables get a count, not a percentage. What does not come back was
        used on the job, so "used it all" closes the line and the job wears it.
-       Nobody has to find a box that was never lost. */
-    const step = partialOK(item) ? 0.25 : 1;
+       Nobody has to find a box that was never lost.
+
+       THE NUMBER IN THE BOX NEEDED A SECOND BUTTON
+       There was one box and one commit button, "Check in", so the number could
+       only ever mean one thing: how much is coming back. Which is fine until
+       somebody types the amount they used, because that is the other half of
+       the same question and it is just as natural a thing to type. It happened:
+       0.75 typed meaning three quarters of a box used, then "Used it all"
+       tapped, and the typed number went in the bin while the whole box was
+       written off.
+
+       So the box now says what it is counting, and the number has a button for
+       each meaning. Type three quarters and tap "Used on the job" and the job
+       wears three quarters. Type it and tap "Back on the shelf" and a quarter
+       is what the job wears. Neither one guesses, and neither one throws away
+       what somebody just typed. */
+    const step = stepFor(item);
     return `<div class="ret-row" data-id="${esc(r.id)}">
       ${head}
       <div class="ret-count">
         <button class="stp" data-id="${esc(r.id)}" data-d="-1">&minus;</button>
         <input class="cnt" id="cnt-${esc(r.id)}" type="number" inputmode="decimal"
                step="${step}" min="0" max="${r.still}" value="${r.still}"
-               data-step="${step}" data-max="${r.still}">
+               data-step="${step}" data-grain="${grainFor(item)}" data-max="${r.still}"
+               aria-label="How many ${esc(AM.uomWord(item.uom, 2))}">
         <button class="stp" data-id="${esc(r.id)}" data-d="1">+</button>
-        <button class="btn chkin" data-id="${esc(r.id)}" data-job="${esc(jobId)}">Check in</button>
+      </div>
+      <div class="ret-commit">
+        <span class="rc-ask">That many ${esc(AM.uomWord(item.uom, 2))} were&hellip;</span>
+        <button class="btn chkin" data-id="${esc(r.id)}" data-job="${esc(jobId)}">Back on the shelf</button>
+        <button class="btn alt usedn" data-id="${esc(r.id)}" data-job="${esc(jobId)}">Used on the job</button>
       </div>
       <div class="ret-actions">
+        ${pk ? `<button class="inc part" data-id="${esc(r.id)}" data-job="${esc(jobId)}">Count the ${esc(pk.piece)} back</button>`
+             : (AM.isContainer(item) ? `<button class="inc part" data-id="${esc(r.id)}" data-job="${esc(jobId)}">Part of a ${esc(AM.uomWord(item.uom, 1))} back</button>` : '')}
         <button class="inc used" data-id="${esc(r.id)}" data-f="used" data-job="${esc(jobId)}">Used it all</button>
         ${item.cls === 'roll' ? `<button class="inc scrap" data-id="${esc(r.id)}" data-f="scrap" data-job="${esc(jobId)}">Under half, scrap it</button>` : ''}
       </div>
@@ -776,15 +1130,24 @@
     const item = isUnit ? d.unitById.get(l.id) : d.stockById.get(l.id);
     if (!item) return '';
     const rr = { kind: isUnit ? 'unit' : 'stock', item };
+    /* Read through the one rule that decides what a line means, rather than off
+       the raw sums. A box cannot come back and be used up at the same time, and
+       this row was the screen saying it had: a quarter of a box back on the
+       shelf and the whole box on the job. */
+    const st = AM.settled(l);
     const bits = [];
-    if (l.back > 0.001) bits.push(qty(l.back) + ' back on the shelf');
-    if (l.consumed > 0.001) bits.push(qty(l.consumed) + ' used on the job');
+    if (st.back > 0.001) bits.push((isUnit ? qty(st.back) : AM.qtyLabel(item, st.back)) + ' back on the shelf');
+    if (st.used > 0.001) bits.push((isUnit ? qty(st.used) : AM.qtyLabel(item, st.used)) + ' used on the job');
+    if (st.still > 0.001) bits.push((isUnit ? qty(st.still) : AM.qtyLabel(item, st.still)) + ' still to account for');
+    const pk = isUnit ? null : AM.packOf(item);
 
     return `<div class="ret-row done" data-id="${esc(l.id)}">
       <div class="ret-main">
         <strong>${esc(nameOf(rr))}</strong>
         <span class="line-id">${esc(l.id)}</span>
-        <div class="muted small">${bits.join(' · ')}${item.uom ? ' (' + esc(item.uom) + ')' : ''}</div>
+        <div class="muted small">${esc(bits.join(' · '))}</div>
+        ${pk && st.used > 0.001 ? `<div class="muted small">${esc(piecesNote(item, st.used))} charged to the job</div>` : ''}
+        ${st.over > 0.001 ? `<div class="muted small warn-text">This line was written off twice. Fix the count and it corrects itself.</div>` : ''}
       </div>
       <div class="ret-actions">
         ${isUnit ? '' : `<button class="inc fix" data-id="${esc(l.id)}" data-job="${esc(jobId)}">Fix the count</button>`}
@@ -796,7 +1159,7 @@
     const m = /job=([^&]+)/.exec(location.hash);
     const jobId = m ? decodeURIComponent(m[1]) : null;
     if (!jobId) {
-      wireJobPicker(id => { location.hash = '#/back?job=' + encodeURIComponent(id); });
+      wireJobPicker(id => { location.hash = '#/back?job=' + encodeURIComponent(id); }, jobsToWorkOn);
       return;
     }
 
@@ -819,104 +1182,298 @@
        past what is actually still out, so nobody can check in more coveralls
        than left the shop. */
     const clamp = inp => {
-      const step = parseFloat(inp.dataset.step) || 1;
+      // Tidied to the smallest real amount, NOT to whatever the buttons step by.
+      const step = parseFloat(inp.dataset.grain) || parseFloat(inp.dataset.step) || 1;
       const max = parseFloat(inp.dataset.max) || 0;
       let v = parseFloat(inp.value);
       if (!isFinite(v) || v < 0) v = 0;
       v = Math.round(v / step) * step;
       if (v > max) v = max;
-      inp.value = Math.round(v * 100) / 100;
+      /* Four places, not two. A pack of three steps by a third, and rounding a
+         third to two places turns three pieces back into 0.99 of a pack, which
+         leaves a line open on the job forever over a rounding error. */
+      inp.value = Math.round(v * 10000) / 10000;
       return parseFloat(inp.value);
     };
 
-    $$('.stp').forEach(b => b.onclick = () => {
-      const inp = document.getElementById('cnt-' + b.dataset.id);
-      if (!inp) return;
-      const step = parseFloat(inp.dataset.step) || 1;
-      inp.value = (parseFloat(inp.value) || 0) + step * parseFloat(b.dataset.d);
-      clamp(inp);
-    });
-    $$('.cnt').forEach(inp => inp.onchange = () => clamp(inp));
+    /* ONE HANDLER FOR THE WHOLE LIST
+       Every button down here used to get its own onclick, hung on freshly after
+       each redraw, and the screen redraws on every sync and after every check
+       in. Two of those selectors overlapped, so whichever ran second quietly
+       replaced the first, and "Fix the count" was the one that lost. A button
+       that is drawn, looks live and does nothing when tapped is worse than one
+       that is not there.
 
-    $$('.chkin').forEach(b => b.onclick = async () => {
-      const id = b.dataset.id, job = b.dataset.job;
-      const inp = document.getElementById('cnt-' + id);
-      if (!inp) return;
-      const n = clamp(inp);
-      if (!n) { AM.toast('Set a count first, or say it was all used.', 'warn'); return; }
-      await AM.record({ type: 'RETURN', itemId: id, jobId: job, qty: n, scanned: false, toLocation: 'SHOP' });
-      AM.beep(true); AM.buzz();
-      AM.toast(qty(n) + ' checked in. Anything else on the next load carries on from here.');
-    });
+       The list is now read by one listener on the panel itself, matched by what
+       the button says it is. Redraws cannot unwire it, two handlers cannot
+       fight over the same button, and a button added later is picked up without
+       anybody remembering to wire it. */
+    /* Hung on the screen's own container, which is thrown away and rebuilt on
+       every redraw, so the handler goes with it. Hanging it on #view instead
+       would leave a tear down listener running on every other screen in the
+       app, because #view has its contents replaced but is never itself
+       replaced. The route check is the belt to that pair of braces. */
+    const panel = $('#view .wrap') || $('#view');
 
-    /* Correcting a count is another movement, not an edit. A quarter box found
-       on the final sweep adds; an over-count subtracts. Either way the history
-       still says what happened. */
-    $$('.fix').forEach(b => b.onclick = () => {
+    const inpFor = id => document.getElementById('cnt-' + id);
+    const itemFor = id => AM.derive().stockById.get(id);
+    const lineFor = (job, id) => (AM.derive().jobLoad.get(job) || new Map()).get(id);
+
+    panel.onclick = async ev => {
+      if (AM.routeOf(location.hash) !== '#/back') return;
+      const b = ev.target.closest('button');
+      if (!b || !panel.contains(b)) return;
       const id = b.dataset.id, job = b.dataset.job;
-      const d = AM.derive();
-      const l = (d.jobLoad.get(job) || new Map()).get(id);
-      const item = d.stockById.get(id);
-      if (!l || !item) return;
-      const step = partialOK(item) ? 0.25 : 1;
-      AM.modal(`
-        <h3>${esc(item.name)}</h3>
-        <p class="muted small">Checked in so far: ${qty(l.back)}${item.uom ? ' ' + esc(item.uom) : ''}. Set it to what is actually on the bench.</p>
-        <label class="fld">Checked in<input id="fxN" type="number" inputmode="decimal" step="${step}" min="0" max="${l.out}" value="${l.back}"></label>
-        <div class="row"><button class="btn" id="fxGo">Set it</button>
-        <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button></div>
-      `, el => {
-        $('#fxGo', el).onclick = async () => {
-          let v = parseFloat($('#fxN', el).value);
-          if (!isFinite(v) || v < 0) return;
-          v = Math.min(v, l.out);
-          const diff = Math.round((v - l.back) * 100) / 100;
-          if (!diff) { AM.closeModal(); return; }
-          await AM.record({ type: 'RETURN', itemId: id, jobId: job, qty: diff, scanned: false, correction: true, toLocation: 'SHOP' });
-          AM.closeModal();
-          AM.toast('Corrected to ' + qty(v));
+
+      // ---- the counter
+      if (b.classList.contains('stp')) {
+        const inp = inpFor(id);
+        if (!inp) return;
+        const step = parseFloat(inp.dataset.step) || 1;
+        inp.value = Math.round(((parseFloat(inp.value) || 0) + step * parseFloat(b.dataset.d)) * 10000) / 10000;
+        clamp(inp);
+        return;
+      }
+
+      // ---- counting the pieces inside an opened pack back in
+      if (b.classList.contains('part')) {
+        const item = itemFor(id);
+        const row = (AM.derive().outstanding.get(job) || []).find(x => x.id === id);
+        if (!item || !row) return;
+        const put = async k => {
+          if (k <= 0) { AM.toast('Nothing back, so the job wears it. Use "Used it all".', 'warn'); return; }
+          await AM.record({ type: 'RETURN', itemId: id, jobId: job, qty: k, scanned: false, toLocation: 'SHOP' });
+          AM.beep(true);
+          AM.toast(`${AM.qtyLabel(item, k)} back on the shelf. The rest is on the job.`);
         };
-      });
-    });
-
-    $$('.inc').forEach(b => b.onclick = async () => {
-      const id = b.dataset.id, f = b.dataset.f, job = b.dataset.job;
-      const d = AM.derive();
-      const isUnit = d.unitById.has(id);
-      const rows = d.outstanding.get(job) || [];
-      const row = rows.find(x => x.id === id);
-      if (!row) return;
-
-      /* It came off the site, so the job's line settles. It just does not go
-         back on the shelf, because it is broken. */
-      if (f === 'repair') {
-        repairModal(id, job);
+        // Counted in pieces where the pack size is known, and in fractions of a
+        // container where nobody has recorded it yet.
+        if (!piecesModal(item, row.still, 'How much of it is coming back?', put)) {
+          partModal(item, row.still, put);
+        }
         return;
       }
 
-      if (f === 'missing') {
-        lostModal(id, job);
+      // ---- check in what is in the box
+      if (b.classList.contains('chkin')) {
+        const inp = inpFor(id);
+        if (!inp) return;
+        const n = clamp(inp);
+        if (!n) { AM.toast('Set a count first, or say it was all used.', 'warn'); return; }
+        delete inp.dataset.typed;   // consumed, so the redraw is free to reset it
+        await AM.record({ type: 'RETURN', itemId: id, jobId: job, qty: n, scanned: false, toLocation: 'SHOP' });
+        AM.beep(true); AM.buzz();
+        const item = itemFor(id);
+        AM.toast((item ? AM.qtyLabel(item, n) : qty(n)) + ' back on the shelf. Anything else on the next load carries on from here.');
         return;
       }
-      /* Used is not lost. A box of coveralls that went out and did not come
-         back was worn, and the job should wear the cost rather than the shop
-         going looking for it. */
-      if (f === 'used') {
-        await AM.record({ type: 'CONSUME', itemId: id, jobId: job, qty: row.still, reason: 'used on the job' });
-        AM.toast('The job wears it. That line is done.');
+
+      /* ---- the same number, meaning the other thing. Three quarters of a box
+         used is an ordinary amount to know and an awkward one to arrive at by
+         subtraction, so it is typed and said directly. The job wears exactly
+         what was typed, and whatever is left stays open on the line, because
+         a quarter of a box unaccounted for is a real quarter of a box. */
+      if (b.classList.contains('usedn')) {
+        const inp = inpFor(id);
+        if (!inp) return;
+        const n = clamp(inp);
+        const item = itemFor(id);
+        if (!n) { AM.toast('Put in how much was used first.', 'warn'); return; }
+        delete inp.dataset.typed;
+        await AM.record({ type: 'CONSUME', itemId: id, jobId: job, qty: n, reason: 'used on the job, counted at the van' });
+        AM.beep(true); AM.buzz();
+        const row = (AM.derive().outstanding.get(job) || []).find(x => x.id === id);
+        const left = row ? row.still : 0;
+        AM.toast((item ? AM.qtyLabel(item, n) : qty(n)) + ' charged to the job.' +
+          (left > 0.001 ? ' ' + (item ? AM.qtyLabel(item, left) : qty(left)) + ' still to account for.' : ' That line is done.'), 'ok');
         return;
       }
-      if (f === 'scrap') {
-        // Below half does not go back on the shelf. It goes in the scrap box,
-        // which sits outside the count on purpose, and the job wears it.
-        await AM.record({ type: 'CONSUME', itemId: id, jobId: job, qty: row.still, reason: 'under half, scrap box' });
-        AM.toast('Put it in the scrap box. The job wears it.');
+
+      /* ---- correcting a count is another movement, not an edit. A quarter box
+         found on the final sweep adds; an over-count subtracts. Either way the
+         history still says what happened.
+
+         AND IT CORRECTS WHAT THE JOB WAS CHARGED, WHICH IS THE OTHER HALF
+         This wrote the return and stopped, and that is the bug the numbers on
+         the screen were showing. One box of gloves went out, the whole box was
+         marked used, then the count was corrected to a quarter of a box back on
+         the bench. The quarter went back on the shelf correctly and the job was
+         still carrying all fifty gloves: a box and a quarter accounted for out
+         of a box that went out, the job over-charged by a quarter, and the shop
+         count a quarter adrift.
+
+         A box cannot hold more than a box. So the correction now settles the
+         whole line: what the person is telling the app is how much is on the
+         bench, and whatever is left of what went out is what the job wears. If
+         raising the returned amount leaves no room for everything already
+         written off, the difference is handed back with a matching correction,
+         which is a real movement in the history like every other one, not a
+         quiet edit of a number that was already reported. */
+      if (b.classList.contains('fix')) {
+        const l = lineFor(job, id);
+        const item = itemFor(id);
+        if (!l || !item) return;
+        const pk = AM.packOf(item);
+        const st = AM.settled(l);
+
+        const apply = async v => {
+          v = Math.min(Math.max(0, v), l.out);
+          v = Math.round(v * 10000) / 10000;
+          const diff = Math.round((v - l.back) * 10000) / 10000;
+          /* What is already written off against the job, and how much room the
+             corrected count leaves for it. Anything that does not fit was never
+             used, because it is sitting on the bench. */
+          const room = Math.round(Math.max(0, l.out - v) * 10000) / 10000;
+          const give = Math.round(Math.max(0, (l.consumed || 0) - room) * 10000) / 10000;
+          if (!diff && !give) { AM.closeModal(); return; }
+          if (diff) {
+            await AM.record({ type: 'RETURN', itemId: id, jobId: job, qty: diff, scanned: false, correction: true, toLocation: 'SHOP' });
+          }
+          if (give) {
+            await AM.record({ type: 'CONSUME', itemId: id, jobId: job, qty: -give, correction: true,
+              reason: 'counted back on the bench, so the job does not wear it' });
+          }
+          AM.closeModal();
+          const nowUsed = Math.round(Math.max(0, (l.consumed || 0) - give) * 10000) / 10000;
+          const stillOpen = Math.round(Math.max(0, l.out - v - nowUsed) * 10000) / 10000;
+          AM.toast(AM.qtyLabel(item, v) + ' on the bench, ' +
+            (nowUsed > 0.0001 ? AM.qtyLabel(item, nowUsed) + ' charged to the job' : 'nothing charged to the job') +
+            (stillOpen > 0.0001 ? ', ' + AM.qtyLabel(item, stillOpen) + ' still to account for' : ''));
+        };
+
+        const step = stepFor(item);
+        AM.modal(`
+          <h3>${esc(item.name)}</h3>
+          <p class="muted small">${esc(AM.qtyLabel(item, l.out))} went out on this job.
+            ${esc(AM.qtyLabel(item, st.back))} is checked in and
+            ${esc(AM.qtyLabel(item, st.used))} is charged to the job.
+            Set it to what is actually on the bench and the charge follows.</p>
+          ${st.over > 0.0001 ? `<p class="hint warn-hint">This line does not add up: more has been checked in and written off than ever went out. Setting the count straightens it.</p>` : ''}
+          <label class="fld">On the bench<input id="fxN" type="number" inputmode="decimal" step="${step}" min="0" max="${l.out}" value="${st.back}"></label>
+          <p class="muted small" id="fxEcho"></p>
+          ${pk ? `<button class="btn-ghost" id="fxPieces">Count the ${esc(pk.piece)} instead</button>` : ''}
+          <div class="row"><button class="btn" id="fxGo">Set it</button>
+          <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button></div>
+        `, el => {
+          /* Says the consequence out loud before the button is pressed, because
+             the number being typed decides what a job gets charged. */
+          const inp = $('#fxN', el), echo = $('#fxEcho', el);
+          const show = () => {
+            let v = parseFloat(inp.value);
+            if (!isFinite(v) || v < 0) { echo.textContent = ''; return; }
+            v = Math.min(v, l.out);
+            /* Exactly what the button will do, in the same arithmetic it uses.
+               A correction can only ever hand back what was written off; it
+               never writes anything new off, because the app does not know
+               whether what is missing was used or is still standing on the
+               site, and guessing that is how a job gets charged for gear that
+               comes home on the next load. */
+            const rest = Math.round(Math.max(0, l.out - v) * 10000) / 10000;
+            const nowUsed = Math.min((l.consumed || 0), rest);
+            const open = Math.round((rest - nowUsed) * 10000) / 10000;
+            echo.textContent = 'That leaves ' + AM.qtyLabel(item, nowUsed) + ' charged to the job' +
+              (open > 0.0001 ? ', and ' + AM.qtyLabel(item, open) + ' still to account for.' : '.');
+          };
+          inp.oninput = show; show();
+          $('#fxGo', el).onclick = () => {
+            const v = parseFloat(inp.value);
+            if (!isFinite(v) || v < 0) return;
+            apply(v);
+          };
+          const fp = $('#fxPieces', el);
+          if (fp) fp.onclick = () => {
+            AM.closeModal();
+            piecesModal(item, l.out, 'How much of it is on the bench?', k => apply(k));
+          };
+        });
         return;
       }
-      const back = isUnit ? Math.min(1, row.still) : row.still;
-      await AM.record({ type: 'RETURN', itemId: id, jobId: job, qty: back, scanned: false, toLocation: 'SHOP' });
-      AM.beep(true); AM.buzz();
-    });
+
+      // ---- broken, lost, used up, scrapped, or simply back
+      if (b.classList.contains('inc')) {
+        const d = AM.derive();
+        const isUnit = d.unitById.has(id);
+        const row = (d.outstanding.get(job) || []).find(x => x.id === id);
+        if (!row) return;
+        const f = b.dataset.f;
+
+        /* It came off the site, so the job's line settles. It just does not go
+           back on the shelf, because it is broken. */
+        if (f === 'repair') { repairModal(id, job); return; }
+        if (f === 'missing') { lostModal(id, job); return; }
+        /* Used is not lost. A box of coveralls that went out and did not come
+           back was worn, and the job should wear the cost rather than the shop
+           going looking for it.
+
+           IT NEVER THROWS AWAY A TYPED NUMBER
+           "Used it all" means all of what is still out, which is right when the
+           box is empty and wrong when somebody has just typed a number into the
+           counter above it. That number is not noise, it is the answer to the
+           same question said the other way round, and quietly writing off the
+           whole box over the top of it is how a job got charged for fifty
+           gloves that were sitting back on the shelf. So when a number has been
+           typed and it is not the whole amount, the button asks which of the
+           two it is rather than picking one. */
+        if (f === 'used') {
+          const inp = inpFor(id);
+          const item = itemFor(id);
+          const typed = inp && inp.dataset.typed === '1' ? clamp(inp) : null;
+          const allOfIt = async () => {
+            await AM.record({ type: 'CONSUME', itemId: id, jobId: job, qty: row.still, reason: 'used on the job' });
+            AM.toast('The job wears all of it. That line is done.');
+          };
+          if (typed == null || Math.abs(typed - row.still) < 0.0001 || typed <= 0) { await allOfIt(); return; }
+          const lbl = n => item ? AM.qtyLabel(item, n) : qty(n);
+          AM.modal(`
+            <h3>${esc(item ? item.name : id)}</h3>
+            <p class="muted small">There is <strong>${esc(lbl(typed))}</strong> in the box above, and
+              ${esc(lbl(row.still))} still out on this job. Which is it?</p>
+            <div class="who-list">
+              <button class="who-pick" id="uaUsed"><strong>${esc(lbl(typed))} was used on the job</strong>
+                <span class="muted small">the job wears that much, ${esc(lbl(Math.round((row.still - typed) * 10000) / 10000))} stays open</span></button>
+              <button class="who-pick" id="uaBack"><strong>${esc(lbl(typed))} came back on the shelf</strong>
+                <span class="muted small">the job wears the other ${esc(lbl(Math.round((row.still - typed) * 10000) / 10000))}, and the line closes</span></button>
+              <button class="who-pick" id="uaAll"><strong>All ${esc(lbl(row.still))} of it was used</strong>
+                <span class="muted small">ignore the number above, nothing is coming back</span></button>
+            </div>
+            <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button>
+          `, el => {
+            const done = () => { if (inp) delete inp.dataset.typed; AM.closeModal(); AM.beep(true); AM.buzz(); };
+            $('#uaUsed', el).onclick = async () => {
+              done();
+              await AM.record({ type: 'CONSUME', itemId: id, jobId: job, qty: typed, reason: 'used on the job, counted at the van' });
+              AM.toast(lbl(typed) + ' charged to the job.');
+            };
+            $('#uaBack', el).onclick = async () => {
+              const rest = Math.round((row.still - typed) * 10000) / 10000;
+              done();
+              await AM.record({ type: 'RETURN', itemId: id, jobId: job, qty: typed, scanned: false, toLocation: 'SHOP' });
+              if (rest > 0.0001) {
+                await AM.record({ type: 'CONSUME', itemId: id, jobId: job, qty: rest, reason: 'the rest was used on the job' });
+              }
+              AM.toast(lbl(typed) + ' back on the shelf, ' + lbl(rest) + ' charged to the job.');
+            };
+            $('#uaAll', el).onclick = async () => { done(); await allOfIt(); };
+          });
+          return;
+        }
+        if (f === 'scrap') {
+          // Below half does not go back on the shelf. It goes in the scrap box,
+          // which sits outside the count on purpose, and the job wears it.
+          await AM.record({ type: 'CONSUME', itemId: id, jobId: job, qty: row.still, reason: 'under half, scrap box' });
+          AM.toast('Put it in the scrap box. The job wears it.');
+          return;
+        }
+        if (f === '1') {
+          const back = isUnit ? Math.min(1, row.still) : row.still;
+          await AM.record({ type: 'RETURN', itemId: id, jobId: job, qty: back, scanned: false, toLocation: 'SHOP' });
+          AM.beep(true); AM.buzz();
+        }
+        return;
+      }
+    };
+
+    $$('.cnt').forEach(inp => inp.onchange = () => clamp(inp));
 
     const fin = $('#finGo');
     if (fin) fin.onclick = async () => {
@@ -946,11 +1503,16 @@
 
     const ws = $('#wSave');
     if (ws) ws.onclick = async () => {
-      const bags = parseFloat($('#wBags').value) || 0;
-      const trailers = parseFloat($('#wTrl').value) || 0;
-      if (!bags && !trailers) return;
+      const bagEl = $('#wBags'), trlEl = $('#wTrl');
+      const bags = parseFloat(bagEl.value) || 0;
+      const trailers = parseFloat(trlEl.value) || 0;
+      if (!bags && !trailers) { AM.toast('Put a number in first.', 'warn'); return; }
+      // Emptied before the record, so the redraw that follows does not put the
+      // last load back into the boxes and invite it being logged twice.
+      AM.clearTyped(bagEl); AM.clearTyped(trlEl);
       await AM.record({ type: 'WASTE', jobId, bags, trailers, stream });
-      AM.toast((stream === 'clean' ? 'Clean demo' : 'Asbestos') + ' logged against the job');
+      AM.toast((stream === 'clean' ? 'Clean demo' : 'Asbestos') + ' logged: ' +
+        [bags ? bags + ' bags' : '', trailers ? qty(trailers) + ' trailer loads' : ''].filter(Boolean).join(', '));
     };
   };
 
@@ -1066,7 +1628,7 @@
 
   AM.screens['#/in'] = function () {
     const today = AM.dayISO();
-    const mine = S.events.filter(e => e.type === 'RECEIVE' && String(e.at).slice(0, 10) === today).slice(-12).reverse();
+    const mine = S.events.filter(e => e.type === 'RECEIVE' && (e.at ? AM.dayISO(e.at) : '') === today).slice(-12).reverse();
     return `
     <div class="wrap">
       <div class="panel">
@@ -1184,7 +1746,8 @@
         const lowFlag = s.min != null && n != null && n <= s.min;
         return `<div class="find-row"><div><strong>${esc(s.name)}</strong> <span class="line-id">${esc(s.id)}</span>
           <div class="muted small">${esc(s.group)}${s.shelf ? ' · ' + esc(s.shelf) : ''}</div></div>
-          <div class="find-where ${lowFlag ? 'bad' : ''}">${n == null ? '<span class="muted">not counted</span>' : qty(n) + ' ' + esc(s.uom || '')}
+          <div class="find-where ${lowFlag ? 'bad' : ''}">${n == null ? '<span class="muted">not counted</span>' : esc(AM.qtyLabel(s, n))}
+          ${n == null && d.movedSince.get(s.id) ? `<div class="muted small">${esc(AM.qtyLabel(s, d.movedSince.get(s.id)))} gone out since</div>` : ''}
           ${lowFlag ? '<div class="muted small">running low</div>' : ''}</div></div>`;
       };
 
@@ -1203,7 +1766,11 @@
             const where = !a || a.where === 'shop' ? 'Shop'
               : a.where === 'missing' ? 'LOST'
               : a.where === 'writeoff' ? 'WRITTEN OFF'
-              : a.where === 'repair' ? 'OUT OF SERVICE' : jobLabel(a.jobId);
+              : a.where === 'repair' ? 'OUT OF SERVICE'
+              /* The job by its name, and said as a sentence. "INV-20260902-W58"
+                 is not an answer to "where is it", and it was what this column
+                 printed whenever the job record had gone missing. */
+              : 'Signed out to ' + jobLabel(a.jobId);
             const ds = u.dop ? dopState(u.id) : null;
             return `<div class="find-row tap" data-unit="${esc(u.id)}">
               <div><strong>${esc(u.name)} ${esc(u.unitNo || '')}</strong> <span class="line-id">${esc(u.id)}</span>
@@ -1229,7 +1796,7 @@
         else if (at && at.where === 'missing') foundModal(id, redraw);
         else if (at && at.where === 'writeoff') AM.toast('Written off. The office takes it off the fleet.', 'warn');
         else if (at && at.where === 'job') {
-          AM.toast('It is out on ' + jobLabel(at.jobId) + '. Pull it in on tear down.', 'warn');
+          AM.toast('Signed out to ' + jobLabel(at.jobId) + '. Pull it in on tear down.', 'warn');
         } else repairModal(id, null, redraw);
       });
     };
@@ -1288,8 +1855,8 @@
     }).join('');
   }
 
-  function jobPicker(title, question, onPick) {
-    const jobs = openJobs();
+  function jobPicker(title, question, onPick, source) {
+    const jobs = (source || openJobs)();
     return `
     <div class="wrap">
       <div class="panel">
@@ -1307,7 +1874,7 @@
     </div>`;
   }
 
-  function wireJobPicker(onPick) {
+  function wireJobPicker(onPick, source) {
     const list = $('#jpList');
     const more = $('#jpMore');
     let open = false;
@@ -1316,7 +1883,7 @@
       if (!list) return;
       const t = (($('#jpq') || {}).value || '').trim().toLowerCase();
       const d = AM.derive();
-      let jobs = openJobs();
+      let jobs = (source || openJobs)();
       if (t) jobs = jobs.filter(j =>
         ((j.number || '') + ' ' + j.name + ' ' + (j.address || '')).toLowerCase().includes(t));
       jobs = jobs.slice().sort((a, b) =>
@@ -1415,11 +1982,6 @@
       ? suggest.map(s => s.count + ' × ' + s.group.toLowerCase()).join(', ')
       : '';
 
-    // The manual's own pre-mobilization list, as a count rather than a gate.
-    const type3 = job.division !== 'restoration' && String(job.containment) === '3';
-    const pm = window.SOP.preMob.filter(i => i.appliesTo === 'all' || (i.appliesTo === 'type3' && type3));
-    const pmOpen = pm.filter(i => !(job.preMob && job.preMob[i.id]));
-
     return `
     <div class="wrap">
       <div class="panel">
@@ -1428,7 +1990,6 @@
           <button class="btn" id="ssScan">Scan more</button>
         </div>
         ${hint ? `<button class="hint" id="ssWhy">A job this shape usually takes ${esc(hint)}. <span class="hint-more">why</span></button>` : ''}
-        ${pmOpen.length && job.preMob ? `<p class="hint warn-hint">${pmOpen.length} thing${pmOpen.length === 1 ? '' : 's'} on the pre-mobilization list not confirmed yet. Not a blocker, but somebody in the office should know.</p>` : ''}
         ${(() => {
           /* What the estimator priced, as a list to load against. It ticks
              itself off as things are scanned, and it never blocks anything:
@@ -1468,38 +2029,8 @@
       wireJobPicker(id => {
         startSession('out', id);
         AM.render();
-        // Straight to the camera, unless the pre-mobilization list stops it.
-        if (preMobState(id).ready || preMobState(id).overridden) openOutScanner();
+        openOutScanner();     // straight to the camera, every time
       });
-      return;
-    }
-
-    /* The gate. Either it gets walked, or somebody puts their name to going
-       without it. There is no third door and no silent skip. */
-    const pmGo = $('#pmGo');
-    if (pmGo) {
-      $('#pmBack').onclick = () => { session = null; AM.render(); };
-      pmGo.onclick = () => {
-        const pm = preMobState(session.jobId);
-        AM.modal(`
-          <h3>Going without the pre-mobilization list</h3>
-          <p class="muted small">${pm.missing.map(i => esc(i.text)).join(' · ')}</p>
-          <label class="fld">Why<input id="pmWhy" placeholder="emergency call, office not open yet" autocomplete="off"></label>
-          <div class="row"><button class="btn big" id="pmYes">Load the van</button>
-          <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button></div>
-        `, el => {
-          $('#pmYes', el).onclick = async () => {
-            const why = $('#pmWhy', el).value.trim();
-            if (!why) { AM.toast('Say why. It is one line and it is what the office reads.', 'warn'); return; }
-            await AM.record({ type: 'PREMOB_OVERRIDE', jobId: session.jobId, note: why,
-              missing: pm.missing.map(i => i.id) });
-            AM.closeModal();
-            AM.render();
-            openOutScanner();
-          };
-          setTimeout(() => { const el_ = $('#pmWhy', el); el_ && el_.focus(); }, 60);
-        });
-      };
       return;
     }
 
@@ -1526,7 +2057,7 @@
         <button class="btn" onclick="AM.closeModal()">Right</button>
       `);
     };
-    $('#ssList').onclick = () => pickList(id => { handleCode(id, false); AM.render(); });
+    $('#ssList').onclick = () => pickList(id => handleCode(id, false, () => AM.render()));
     $('#ssCancel').onclick = () => { session = null; AM.render(); };
     $$('.ln-fix').forEach(b => b.onclick = () => fixLineModal(b.dataset.id));
     $$('.ln-rm').forEach(b => b.onclick = () => removeLine(b.dataset.id));
@@ -1553,6 +2084,19 @@
         AM.go('#/');
       };
 
+      /* THE PRE-MOBILIZATION LIST IS OUT OF THIS FLOW ENTIRELY
+         It has been moved twice and asked to be gone twice, so it is gone. It
+         stood in front of the camera first, then in front of the send button,
+         and neither is the right place: the list it quotes is a desk job done
+         the day before by somebody in the office, nobody at the van can action
+         a line of it, and the list itself is not finished being written. A gate
+         built on a draft, standing in front of the only thing the man opened
+         the app to do, teaches exactly one habit and it is tapping past it.
+
+         So there is no gate now. Loading the van sends the load to the job and
+         that is the whole of it. The office still walks its own list on its own
+         screen, which is where that paperwork lives. */
+
       if (blocked.length) {
         AM.modal(`
           <h3>Certificates first</h3>
@@ -1566,6 +2110,235 @@
         return;
       }
       send();
+    };
+  };
+
+  /* ------------------------------------------------------- what is coming --
+     Every open job carrying a mobilization date, nearest first. Nothing is
+     filtered out for being far away: a job three weeks out is exactly the one
+     worth knowing about while there is still time to order for it, and that is
+     the whole point of the screen. Anything already gone is dropped, because a
+     date in the past is not a plan.
+
+     It fills from whatever puts dates on jobs. Today that is the office, by
+     hand; once JobTread is linked it will be the schedule coming across. The
+     screen does not care which. */
+  function upcomingMobs() {
+    const today = AM.dayISO();
+    return (S.catalog.jobs || [])
+      .filter(j => !j.closed && j.mobDate && j.mobDate >= today)
+      .map(j => ({ j, days: AM.daysBetween(today, j.mobDate) }))
+      .sort((a, b) => a.days - b.days || String(a.j.name).localeCompare(String(b.j.name)));
+  }
+  AM.upcomingMobs = upcomingMobs;
+
+  /* ONE HEADING PER DAY, NOT ONE LONG LIST
+     Nearest first was already right and still was not enough to plan a morning
+     from. Three jobs going out tomorrow read as three separate panels each
+     saying "tomorrow", and how many vans leave on Tuesday is the actual
+     question anybody is asking this screen. So the days are the structure: one
+     heading per date, in order, carrying its own count, and the jobs sit under
+     the day they go out on. A day with three mobilizations says so once, at the
+     top, where it can be read at a glance. */
+  function mobsByDay() {
+    const out = [];
+    for (const row of upcomingMobs()) {
+      const last = out[out.length - 1];
+      if (last && last.date === row.j.mobDate) last.jobs.push(row);
+      else out.push({ date: row.j.mobDate, days: row.days, jobs: [row] });
+    }
+    return out;
+  }
+  AM.mobsByDay = mobsByDay;
+
+  function whenWord(days) {
+    if (days <= 0) return 'today';
+    if (days === 1) return 'tomorrow';
+    if (days < 7) return `in ${days} days`;
+    if (days < 14) return 'next week';
+    return `in ${Math.round(days / 7)} weeks`;
+  }
+
+  /* "Tomorrow, Tue Sep 8" — the relative word for how soon, and the date
+     itself, because a date is what gets written on a whiteboard and read back
+     down a phone. Both, always, so neither has to be worked out. */
+  function dayHeading(date, days) {
+    const w = whenWord(days);
+    const stamp = AM.dayShort(date);
+    return w.charAt(0).toUpperCase() + w.slice(1) + ' · ' + stamp;
+  }
+
+  AM.screens['#/upcoming'] = function () {
+    const byDay = mobsByDay();
+    if (!byDay.length) {
+      return `<div class="wrap"><div class="panel">
+        <h2>Nothing is booked to go out</h2>
+        <p class="muted">No open job has a mobilization date on it, so there is nothing to plan against yet. Put a date on a job in the office and it turns up here straight away, under the day it goes out on, with the nearest day at the top.</p>
+        ${AM.why('This screen is for the person deciding what to pull off the shelf this week, not for the person loading the van this morning. It looks as far ahead as there are dates, so a job that needs forty rolls of poly is known about while there is still time to order them, rather than at six on the morning it goes out.')}
+        <a class="btn-ghost" href="#/">Back to the shop</a>
+      </div></div>`;
+    }
+
+    const d = AM.derive();
+    const total = byDay.reduce((n, g) => n + g.jobs.length, 0);
+    const first = byDay[0];
+
+    return `
+    <div class="wrap">
+      <div class="panel">
+        <h2>Coming up</h2>
+        <p class="muted">Next out <strong>${esc(whenWord(first.days))}, ${esc(AM.dayWords(first.date))}</strong>${first.jobs.length > 1 ? ` — ${first.jobs.length} mobilizations that day` : ''}.</p>
+        <p class="muted small">${total} job${total === 1 ? '' : 's'} with a date on ${total === 1 ? 'it' : 'them'}, across ${byDay.length} day${byDay.length === 1 ? '' : 's'}, soonest first. What each one usually takes is worked out from its shape, so the shelf can be checked before the morning it is wanted.</p>
+      </div>
+      ${byDay.map(g => `
+      <div class="up-day ${g.days <= 1 ? 'soon' : ''}">
+        <div class="up-day-head">
+          <h3>${esc(dayHeading(g.date, g.days))}</h3>
+          <span class="up-day-n">${g.jobs.length} mobilization${g.jobs.length === 1 ? '' : 's'}</span>
+        </div>
+        ${g.jobs.map(({ j }) => {
+          const suggest = window.SOP.suggest(j, S.catalog) || [];
+          const pull = j.pullList || [];
+          const ph = window.SOP.phase(j.division, j.phase);
+          return `<div class="panel up-job">
+            <div class="panel-head">
+              <div>
+                <h2>${esc(jobLabel(j.id))}</h2>
+                <p class="muted small">${esc(j.address || (ph ? ph.name : ''))}</p>
+              </div>
+            </div>
+
+            ${suggest.length ? `<h4 class="grp">What a job this shape usually takes</h4>
+            <div class="up-need">
+              ${suggest.map(s => `<div class="up-need-row ${s.assumed ? 'guess' : ''}">
+                <span><strong>${esc(String(s.count))}</strong> &times; ${esc(s.group.toLowerCase())}</span>
+                <span class="muted small">${esc(s.why)}</span>
+              </div>`).join('')}
+            </div>
+            <p class="muted small">A starting point off the job's own containment type and area, not an order. The crew pulls what the job actually needs.</p>`
+            : `<p class="muted small">No containment type or area on this job yet, so there is nothing to work a quantity out from. The office fills those in on the job detail screen and this fills itself in.</p>`}
+
+            ${pull.length ? `<h4 class="grp">On the estimate</h4>
+            <div class="up-need">
+              ${pull.slice(0, 12).map(l => {
+                const s = l.itemId ? d.stockById.get(l.itemId) : null;
+                const have = s ? d.onHand.get(s.id) : null;
+                const short = s && have != null && have < (l.qty || 0);
+                return `<div class="up-need-row ${short ? 'short' : ''}">
+                  <span><strong>${esc(qty(l.qty || 0))}</strong> ${esc(l.uom || '')} ${esc(l.name)}</span>
+                  <span class="muted small">${s
+                    ? (have == null ? 'not counted on the shelf' : `${esc(AM.qtyLabel(s, have))} on the shelf${short ? ' · short' : ''}`)
+                    : 'nothing on the shelf matched this line'}</span>
+                </div>`;
+              }).join('')}
+            </div>` : ''}
+
+            <div class="row">
+              <a class="btn" href="#/out">Load this one</a>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`).join('')}
+    </div>`;
+  };
+
+  /* --------------------------------------------------- pre-mobilization ---- */
+
+  /* The crew-side pre-mobilization screen has been taken out with the gate that
+     fed it. There is one list, it is a desk job, and it lives on the office
+     screens where the paperwork is actually done. Nothing in the shop links
+     here any more, so the screen went rather than being left orphaned. */
+
+  /* -------------------------------------------------------------- asks ---- */
+
+  /* Who in the shop pulls what the crews ask for. Set once in Settings. */
+  function shopLead() {
+    const st = S.catalog.settings || {};
+    if (st.shopLead) return st.shopLead;
+    const users = (S.catalog.users || []).filter(u => u.active !== false);
+    const max = users.find(u => String(u.name).toLowerCase() === 'max');
+    return max ? max.name : (users[0] ? users[0].name : 'the shop');
+  }
+  AM.shopLead = shopLead;
+
+  AM.screens['#/asks'] = function () {
+    const d = AM.derive();
+    const open = d.requests.filter(r => !r.filled);
+    const today = AM.dayISO();
+    const done = d.requests.filter(r => r.filled && ((r.filled.at || r.at) ? AM.dayISO(r.filled.at || r.at) : '') === today);
+
+    const byJob = new Map();
+    for (const r of open) {
+      if (!byJob.has(r.jobId)) byJob.set(r.jobId, []);
+      byJob.get(r.jobId).push(r);
+    }
+
+    return `
+    <div class="wrap">
+      <div class="panel">
+        <div class="panel-head">
+          <div><h2>${open.length ? open.length + ' thing' + (open.length === 1 ? '' : 's') + ' to pull' : 'Nothing outstanding'}</h2>
+          <p class="muted">${esc(shopLead())} pulls these and takes them to site. In by two o'clock and it goes out with the morning.</p></div>
+          ${open.length ? '<button class="btn" id="askCopy">Copy the list</button>' : ''}
+        </div>
+        ${AM.why('The manual asks for material requisitions by two o\'clock the day before. This is that list, on the shop screen rather than the office one, because the office is not the person walking the racks.')}
+        ${open.length ? [...byJob].map(([jid, rs]) => `<div class="ask-grp">
+          <div class="ask-job">${esc(jobLabel(jid))}</div>
+          ${rs.map(r => `<div class="find-row">
+            <div><strong>${esc(qty(r.qty || 1))} &times; ${esc(r.text)}</strong>
+              <div class="muted small">asked by ${esc(r.by || '')} · ${esc(fmtWhen(r.at))}${r.afterTwo ? ' · after two' : ''}${r.itemId ? '' : ' · typed in words, not on the shelf list'}</div></div>
+            <div class="find-where">
+              ${r.afterTwo ? '<span class="cert due">after two</span>' : ''}
+              <button class="btn ask-fill" data-id="${esc(r.id)}">Pulled</button></div>
+          </div>`).join('')}
+        </div>`).join('') : '<p class="clear-note">Every ask has been pulled. Nothing is waiting on the shop.</p>'}
+      </div>
+
+      ${done.length ? `<div class="panel">
+        <h2>Pulled today</h2>
+        <div class="ret-list settled">${done.map(r => `<div class="ret-row done">
+          <div class="ret-main"><strong>${esc(qty(r.qty || 1))} &times; ${esc(r.text)}</strong>
+            <div class="muted small">${esc(jobLabel(r.jobId))} · pulled by ${esc((r.filled && r.filled.by) || '')}</div></div>
+        </div>`).join('')}</div>
+      </div>` : ''}
+
+      <div class="panel">
+        <div class="panel-head"><div><h2>Ask for something</h2>
+        <p class="muted small">For a job going out tomorrow.</p></div>
+        <button class="btn" id="askNew">Ask the shop</button></div>
+      </div>
+    </div>`;
+  };
+
+  AM.after['#/asks'] = function () {
+    const nb = $('#askNew');
+    if (nb) nb.onclick = () => requestModal();
+
+    /* Pulled is a movement, not a tick, exactly as it is on the office screen:
+       it leaves the shelf and lands on the job, or the numbers say the poly is
+       still in the rack while it is going out the door on a truck. */
+    $$('.ask-fill').forEach(b => b.onclick = async () => {
+      const d = AM.derive();
+      const r = d.requests.find(x => x.id === b.dataset.id);
+      await AM.record({ type: 'REQUEST_FILLED', requestId: b.dataset.id });
+      if (r && r.itemId) {
+        await AM.record({ type: 'ISSUE', itemId: r.itemId, jobId: r.jobId, qty: r.qty || 1, scanned: false, fromRequest: r.id });
+        AM.toast('Pulled and put on ' + jobLabel(r.jobId) + '. The shelf and the job both moved.');
+      } else {
+        AM.toast('Marked as pulled. This one was typed in words, so mobilize it onto the job by hand.', 'warn');
+      }
+      AM.beep(true);
+    });
+
+    const cp = $('#askCopy');
+    if (cp) cp.onclick = () => {
+      const open = AM.derive().requests.filter(r => !r.filled);
+      const text = `A&M Abatement Services\nWhat the crews have asked for, ${AM.dayISO()}\nPulling: ${shopLead()}\n\n` +
+        open.map(r => `${qty(r.qty || 1)} x ${r.text}\t${jobLabel(r.jobId)}\t${r.by || ''}`).join('\n');
+      navigator.clipboard.writeText(text).then(
+        () => AM.toast('Copied. Paste it wherever you keep the run sheet.'),
+        () => AM.toast('Could not copy on this device.', 'bad')
+      );
     };
   };
 

@@ -29,6 +29,7 @@
       and writes only on an empty result, keyed on a custom field that carries
       our own job id. */
 
+import { authGate, requireOffice } from "./_auth.mjs";
 import { getStore } from "@netlify/blobs";
 
 const STORE = "am-inventory";
@@ -158,7 +159,10 @@ async function fieldsSeenOnJobs(grantKey, organizationId) {
       $: { id: organizationId },
       id: {},
       jobs: {
-        $: { size: 25, sortBy: [{ field: "createdAt", order: "desc" }] },
+        $: term
+          ? { size: 25, sortBy: [{ field: "createdAt", order: "desc" }],
+              where: { or: [["name", "like", "%" + term + "%"], ["number", "like", "%" + term + "%"]] } }
+          : { size: 25, sortBy: [{ field: "createdAt", order: "desc" }] },
         nodes: {
           id: {},
           customFieldValues: {
@@ -319,7 +323,11 @@ async function ensureInventoryField(grantKey, organizationId) {
   }
 }
 
-async function pullJobs(grantKey, organizationId, cfg) {
+async function pullJobs(grantKey, organizationId, cfg, search = "") {
+  /* Typed a job number or part of a name: look it up across every job, not
+     only the newest twenty five. Before 2026-10 an older job could never be
+     matched at all. */
+  const term = String(search || "").trim().slice(0, 60);
   const q = {
     organization: {
       $: { id: organizationId },
@@ -500,11 +508,14 @@ async function linkJob(grantKey, organizationId, payload) {
     organization: {
       $: { id: organizationId },
       jobs: {
-        $: { size: 5, with: { cf: { _: "customFieldValues", $: { customFieldId: inventoryIdFieldId } } } },
+        $: { size: 100, with: { cf: { _: "customFieldValues", $: { customFieldId: inventoryIdFieldId } } } },
         nodes: { id: {}, customFieldValues: { nodes: { value: {}, customField: { id: {} } } } }
       }
     }
   }, grantKey).catch(() => null);
+  /* If the check could not be made, nothing is written. A link stamped twice
+     sends one job's costs to two jobs. */
+  if (!dupe) throw new Error("Could not check JobTread for an existing link, so nothing was changed. Try again.");
 
   const clash = (dupe?.organization?.jobs?.nodes || []).find(j =>
     j.id !== jobtreadJobId &&
@@ -519,7 +530,8 @@ async function linkJob(grantKey, organizationId, payload) {
       $: {
         id: jobtreadJobId,
         notify: false,
-        customFieldValues: [{ customFieldId: inventoryIdFieldId, value: inventoryJobId }]
+        /* JobTread takes these as an object keyed by field id. */
+        customFieldValues: { [inventoryIdFieldId]: inventoryJobId }
       },
       job: { id: {} }
     }
@@ -532,6 +544,8 @@ async function linkJob(grantKey, organizationId, payload) {
 /* ------------------------------------------------------------------- router */
 
 export default async (req) => {
+  const denied = await authGate(req);
+  if (denied) return denied;
   const url = new URL(req.url);
 
   if (req.method === "GET") {
@@ -555,6 +569,13 @@ export default async (req) => {
   catch { return json({ error: "Body was not valid JSON." }, 400); }
 
   const action = body.action;
+
+  /* Changing the connection, writing to JobTread, or creating anything there is
+     the office's job. Reading is anybody signed in. */
+  if (["saveKey", "ensureField", "linkJob", "pushCost"].includes(action)) {
+    const notOffice = requireOffice(req);
+    if (notOffice) return notOffice;
+  }
 
   try {
     if (action === "saveKey") {
@@ -626,7 +647,7 @@ export default async (req) => {
     }
 
     if (action === "jobs") {
-      const jobs = await pullJobs(c.grantKey, body.organizationId || c.organizationId, c);
+      const jobs = await pullJobs(c.grantKey, body.organizationId || c.organizationId, c, body.search || "");
       return json({ jobs });
     }
 
@@ -636,6 +657,12 @@ export default async (req) => {
     }
 
     if (action === "pushCost") {
+      /* Off until it has been rebuilt to work out the lines on the server from
+         the movement log and tried on a practice job. As written it would bill
+         whatever lines and prices a phone sent it. */
+      if (process.env.JT_PUSH_ENABLED !== "1") {
+        return json({ error: "Sending cost to JobTread is switched off until it has been tested on a practice job." }, 409);
+      }
       const out = await pushCost(c.grantKey, c.organizationId, body);
       return json(out);
     }

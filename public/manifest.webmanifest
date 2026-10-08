@@ -1,7 +1,7 @@
 {
-  "name": "A&M Inventory",
-  "short_name": "A&M Inventory",
-  "description": "Shop, equipment and consumables for A&M Abatement Services. Works with no signal.",
+  "name": "A&M Office Command Centre",
+  "short_name": "A&M Command",
+  "description": "The A&M Abatement Services office command centre: jobs, money, buying, equipment and the shop. The shop screens work with no signal.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

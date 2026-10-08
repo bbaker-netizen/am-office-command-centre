@@ -21,18 +21,13 @@
    account and onto the job, so nothing is recognised twice. That account should
    trend to near zero every period. It is not built here on purpose. */
 
-import { getStore } from "@netlify/blobs";
+import { authGate, requireOffice } from "./_auth.mjs";
+import { qboStore, TOKEN_KEY, AUTH_URL, env, missingEnv, readTokens, writeTokens, exchange, query } from "./_qbo.mjs";
 
-const STORE = "am-inventory";
-const TOKEN_KEY = "qbo-tokens";
 const STATE_KEY = "qbo-state";
 const CACHE_KEY = "qbo-cache";
 
-const AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
-const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
-const MINOR_VERSION = "75";
-
-const store = () => getStore({ name: STORE, consistency: "strong" });
+const store = qboStore;
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -40,89 +35,28 @@ function json(body, status = 200) {
   });
 }
 
-function env() {
-  const environment = (process.env.QBO_ENVIRONMENT || "production").toLowerCase();
-  return {
-    clientId: process.env.QBO_CLIENT_ID,
-    clientSecret: process.env.QBO_CLIENT_SECRET,
-    redirectUri: process.env.QBO_REDIRECT_URI,
-    apiBase: environment === "sandbox"
-      ? "https://sandbox-quickbooks.api.intuit.com"
-      : "https://quickbooks.api.intuit.com"
-  };
-}
-
-function missingEnv() {
-  const e = env();
-  const missing = [];
-  if (!e.clientId) missing.push("QBO_CLIENT_ID");
-  if (!e.clientSecret) missing.push("QBO_CLIENT_SECRET");
-  if (!e.redirectUri) missing.push("QBO_REDIRECT_URI");
-  return missing;
-}
-
-async function readTokens() { return (await store().get(TOKEN_KEY, { type: "json" })) || null; }
-async function writeTokens(t) { await store().setJSON(TOKEN_KEY, t); }
-
-async function exchange(params) {
-  const { clientId, clientSecret } = env();
-  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-  const r = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: {
-      authorization: `Basic ${basic}`,
-      "content-type": "application/x-www-form-urlencoded",
-      accept: "application/json"
-    },
-    body: new URLSearchParams(params).toString()
-  });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(`QuickBooks refused the token request: ${body.error_description || body.error || "HTTP " + r.status}`);
-  return body;
-}
-
-// Access tokens last an hour. Refresh tokens last 100 days and Intuit rotates
-// them, so whatever comes back has to be written down every single time.
-async function accessToken() {
-  const t = await readTokens();
-  if (!t || !t.refresh_token) {
-    const err = new Error("Not connected to QuickBooks yet.");
-    err.code = "NOT_CONNECTED";
-    throw err;
-  }
-  if (t.access_token && t.expires_at && Date.now() < t.expires_at - 120000) {
-    return { token: t.access_token, realmId: t.realmId };
-  }
-  const fresh = await exchange({ grant_type: "refresh_token", refresh_token: t.refresh_token });
-  const updated = {
-    ...t,
-    access_token: fresh.access_token,
-    refresh_token: fresh.refresh_token || t.refresh_token,
-    expires_at: Date.now() + (fresh.expires_in || 3600) * 1000,
-    refreshed_at: new Date().toISOString()
-  };
-  await writeTokens(updated);
-  return { token: updated.access_token, realmId: updated.realmId };
-}
-
-/* Intuit throttles at roughly 500 requests a minute per company, but the
-   binding limit is 10 at once across everything hitting that company. Requests
-   are issued one at a time, never fanned out. */
-async function query(sql) {
-  const { apiBase } = env();
-  const { token, realmId } = await accessToken();
-  const url = `${apiBase}/v3/company/${realmId}/query?query=${encodeURIComponent(sql)}&minorversion=${MINOR_VERSION}`;
-  const r = await fetch(url, { headers: { authorization: `Bearer ${token}`, accept: "application/json" } });
-  if (!r.ok) {
-    const text = await r.text().catch(() => "");
-    throw new Error(`QuickBooks would not answer that query (HTTP ${r.status}). ${text.slice(0, 300)}`);
-  }
-  return r.json();
-}
-
 export default async (req) => {
   const url = new URL(req.url);
   const action = url.searchParams.get("action") || "status";
+  /* Everything except the two halves of the QuickBooks handshake. Those are
+     browser redirects that leave the app and come back from Intuit, so they
+     cannot carry a header, and refusing them would break connecting rather than
+     protect anything: neither one hands out data, and the callback is useless
+     without the one-time code Intuit puts on it. */
+  /* Connecting is now office only. Before 2026-10 anybody on the internet
+     could start a connection, sign in to their own QuickBooks company, and the
+     app would quietly start reading theirs instead of A&M's. The office screen
+     asks for the Intuit address with its sign-in attached, then goes there.
+     The callback cannot carry a sign-in, so it is held to a one-time state that
+     only a signed-in office person can have started, and that runs out. */
+  if (action !== "callback") {
+    const denied = await authGate(req);
+    if (denied) return denied;
+  }
+  if (action === "connect" || action === "disconnect") {
+    const notOffice = requireOffice(req);
+    if (notOffice) return notOffice;
+  }
   const s = store();
 
   try {
@@ -131,7 +65,7 @@ export default async (req) => {
       const missing = missingEnv();
       if (missing.length) return json({ error: `Missing environment values: ${missing.join(", ")}` }, 400);
       const state = crypto.randomUUID();
-      await s.setJSON(STATE_KEY, { state, at: Date.now() });
+      await s.setJSON(STATE_KEY, { state, at: Date.now(), by: req.amUser ? req.amUser.name : "" });
       const { clientId, redirectUri } = env();
       const qs = new URLSearchParams({
         client_id: clientId,
@@ -140,6 +74,7 @@ export default async (req) => {
         redirect_uri: redirectUri,
         state
       });
+      if (url.searchParams.get("mode") === "url") return json({ url: `${AUTH_URL}?${qs}` });
       return Response.redirect(`${AUTH_URL}?${qs}`, 302);
     }
 
@@ -148,9 +83,11 @@ export default async (req) => {
       const realmId = url.searchParams.get("realmId");
       const state = url.searchParams.get("state");
       const saved = await s.get(STATE_KEY, { type: "json" });
-      if (!saved || saved.state !== state) {
+      /* Used once, and good for ten minutes. */
+      if (!saved || !state || saved.state !== state || Date.now() - Number(saved.at || 0) > 600000) {
         return new Response("That QuickBooks sign-in did not match the request that started it. Try connecting again.", { status: 400 });
       }
+      try { await s.delete(STATE_KEY); } catch (e) {}
       const { redirectUri } = env();
       const t = await exchange({ grant_type: "authorization_code", code, redirect_uri: redirectUri });
       await writeTokens({
@@ -186,7 +123,7 @@ export default async (req) => {
 
     // -------------------------------------------------- reference data pulls
     if (action === "vendors") {
-      const res = await query("select Id, DisplayName, Active from Vendor maxresults 200");
+      const res = await query("select Id, DisplayName, Active from Vendor maxresults 1000");
       const list = (res?.QueryResponse?.Vendor || []).map(v => ({ id: v.Id, name: v.DisplayName, active: v.Active !== false }));
       return json({ vendors: list });
     }
@@ -203,7 +140,8 @@ export default async (req) => {
        pricing list the replenish screen uses to pick a vendor, taken from what
        A&M actually paid rather than from a list somebody maintains by hand. */
     if (action === "prices") {
-      const since = url.searchParams.get("since") || "2024-04-01";
+      const sinceRaw = url.searchParams.get("since") || "2024-04-01";
+      const since = /^\d{4}-\d{2}-\d{2}$/.test(sinceRaw) ? sinceRaw : "2024-04-01";
       const res = await query(
         `select * from Purchase where TxnDate >= '${since}' maxresults 500`
       );

@@ -52,7 +52,7 @@
   /* Row builders, pulled out so a list can be rendered flat when it is short
      and inside folds when it is long, without the row being written twice. */
   const lowRow = s => `<tr><td><strong>${esc(s.name)}</strong><div class="line-id">${esc(s.id)}</div></td>
-    <td>${esc(s.group)}</td><td class="n">${qty(s.onHand)} ${esc(s.uom || '')}</td>
+    <td>${esc(s.group)}</td><td class="n">${esc(AM.qtyLabel(s, s.onHand))}</td>
     <td class="n">${qty(s.min)}</td><td class="n bad">${qty(Math.max(0, s.short))}</td></tr>`;
 
   function lostRow(u) {
@@ -76,7 +76,7 @@
   AM.screens['#/dash'] = function () {
     const d = AM.derive();
     const today = AM.dayISO();
-    const todays = S.events.filter(e => (e.at || '').slice(0, 10) === today);
+    const todays = S.events.filter(e => (e.at ? AM.dayISO(e.at) : '') === today);
     const issuedToday = todays.filter(e => e.type === 'ISSUE');
     const unscanned = issuedToday.filter(e => !e.scanned).length;
     const scanRate = issuedToday.length ? Math.round((1 - unscanned / issuedToday.length) * 100) : null;
@@ -97,6 +97,65 @@
 
     return `
     <div class="wrap wide">
+      ${(() => {
+        /* WHAT NEEDS A DECISION, BEFORE ANYTHING ELSE ON THE SCREEN
+           Everything below this was already here and already right, and it was
+           still being missed, because a stock level below its minimum and a
+           crew asking for something both sat in panels a long way down a screen
+           somebody had to think to open. Neither of them is information. They
+           are both a job, with a deadline, and the manual puts the second one at
+           two o'clock.
+
+           So they come first, as a list of jobs to do, each one linked to the
+           screen it gets done on. It disappears entirely when there is nothing,
+           because a banner that is always there is furniture. */
+        const jobs = [];
+        const asks = d.requests.filter(r => !r.filled);
+        const late = asks.filter(r => r.afterTwo).length;
+        if (asks.length) jobs.push({
+          cls: 'warn', href: '#/asks',
+          k: `${asks.length} thing${asks.length === 1 ? '' : 's'} asked for from site`,
+          s: late ? `${late} came in after two o'clock, so ${late === 1 ? 'it needs' : 'they need'} a phone call, not just a pull.`
+                  : 'The crews need these pulled and taken out. In by two means ready for the morning.'
+        });
+        if (low.length) jobs.push({
+          cls: 'bad', href: '#/order',
+          k: `${low.length} item${low.length === 1 ? '' : 's'} below minimum`,
+          s: 'Walk the shelf, confirm it by eye, then draft the order. Running out mid-job costs a day.'
+        });
+        const overdueCerts = certs.filter(x => x.st.state === 'overdue' || x.st.state === 'fail').length;
+        if (overdueCerts) jobs.push({
+          cls: 'bad', href: '#/dop',
+          k: `${overdueCerts} certificate${overdueCerts === 1 ? '' : 's'} expired or failed`,
+          s: 'Alberta wants a valid DOP or PAO test before a machine runs on a job. These cannot go out as they are.'
+        });
+        /* Never tested is not the same problem as out of date, and it was being
+           left off this list entirely. That left the door to the office carrying
+           a badge of 85 and this screen offering no reason for it, which is the
+           exact fault this banner was put here to cure. It is a backlog rather
+           than an emergency, and it says so, but it does not get to be invisible. */
+        const neverTested = certs.filter(x => x.st.state === 'none').length;
+        if (neverTested) jobs.push({
+          cls: 'warn', href: '#/dop',
+          k: `${neverTested} machine${neverTested === 1 ? ' has' : 's have'} never had a filter test recorded`,
+          s: neverTested === certs.length
+            ? 'Nothing has been logged against any of them yet, so this is a backlog to work through rather than 85 separate faults. Log one and it turns green.'
+            : 'Work through these as they come back to the shop. A machine with no test on file cannot be proven compliant.'
+        });
+        if (missing.length) jobs.push({
+          cls: 'bad', href: '#/find?f=__missing',
+          k: `${missing.length} machine${missing.length === 1 ? '' : 's'} cannot be found`,
+          s: 'Somebody has to chase these. A job settles without them, but the machine does not turn up on its own.'
+        });
+        if (!jobs.length) return '';
+        return `<div class="needs">
+          <div class="needs-head">Needs you today</div>
+          ${jobs.map(x => `<a class="needs-row ${x.cls}" href="${x.href}">
+            <span><strong>${esc(x.k)}</strong><em>${esc(x.s)}</em></span>
+            <span class="needs-go">Open</span>
+          </a>`).join('')}
+        </div>`;
+      })()}
       ${setup ? `<div class="panel setup-card">
         <h2>Finish setting this up</h2>
         <p class="muted small">Everything in the app works without these. They are what connects it to the rest of the business.</p>
@@ -114,7 +173,21 @@
       <div class="stat-row big">
         <div class="stat"><b>${onJobs.length}</b><span>machines on jobs</span></div>
         <div class="stat ${low.length ? 'bad' : ''}"><b>${low.length}</b><span>below minimum</span></div>
-        <div class="stat ${certs.length ? 'warn' : ''}"><b>${certs.length}</b><span>certificates to sort</span></div>
+        ${(() => {
+          /* "85 certificates to sort" told nobody anything, and it was asked
+             what it meant. It is 85 machines, and what is actually wrong with
+             them is three different problems with three different urgencies: a
+             machine that has never been tested is a purchasing job, one whose
+             test has run out is a today job, and one that failed does not leave
+             the yard at all. The tile says which. */
+          const none = certs.filter(x => x.st.state === 'none').length;
+          const bad = certs.filter(x => x.st.state === 'overdue' || x.st.state === 'fail').length;
+          const label = certs.length === 0 ? 'all tested and in date'
+            : bad ? bad + ' expired or failed'
+            : none ? 'never tested' : 'due soon';
+          return `<a class="stat tap ${bad ? 'bad' : certs.length ? 'warn' : ''}" href="#/dop"><b>${certs.length}</b>
+            <span>machines need a filter test<br><em class="stat-note">${esc(label)}</em></span></a>`;
+        })()}
         <div class="stat ${missing.length ? 'bad' : ''}"><b>${missing.length}</b><span>cannot be found</span></div>
         <div class="stat ${broken.length ? 'warn' : ''}"><b>${broken.length}</b><span>out of service</span></div>
         <div class="stat ${d.requests.filter(r => !r.filled).length ? 'warn' : ''}"><b>${d.requests.filter(r => !r.filled).length}</b><span>asked for</span></div>
@@ -152,7 +225,8 @@
 
       ${d.requests.filter(r => !r.filled).length ? `<div class="panel">
         <div class="panel-head"><div><h2>Asked for, for tomorrow</h2>
-        <p class="muted">The manual wants these in by two o'clock. Anything marked late came in after that.</p></div></div>
+        <p class="muted">${esc(AM.shopLead ? AM.shopLead() : 'The shop')} pulls these off the shop screen and takes them to site. The manual wants them in by two o'clock; anything marked late came in after that.</p></div>
+        <a class="btn-ghost" href="#/asks">Open the shop's list</a></div>
         ${d.requests.filter(r => !r.filled).map(r => `<div class="find-row">
           <div><strong>${esc(r.text)}</strong>
             <div class="muted small">${esc(jobLabel(r.jobId))} · ${esc(r.by || '')} · ${esc(fmtWhen(r.at))}${r.note ? ' · ' + esc(r.note) : ''}</div></div>
@@ -178,14 +252,19 @@
         const tomorrow = AM.dayISO(new Date(Date.now() + 86400000));
         const soon = (S.catalog.jobs || []).filter(j => !j.closed && (j.mobDate === today || j.mobDate === tomorrow))
           .sort((a, b) => (a.mobDate || '').localeCompare(b.mobDate || ''));
+        /* The forward schedule moved to the shop screen, where the person
+           pulling stock actually stands. What is left here is the desk job it
+           was always meant to be: walking the pre-mobilization list for what
+           goes out in the next day. */
         if (!soon.length) return `<div class="panel">
-          <h2>Mobilizing tomorrow</h2>
-          <p class="muted">No job has a mobilization date on it yet. Put one on a job and its pre-mobilization list turns up here the day before it goes out.</p>
-          <div class="row"><a class="btn-ghost" href="#/jobs">Put a date on a job</a></div>
+          <h2>Pre-mobilization walk</h2>
+          <p class="muted">Nothing goes out today or tomorrow. Put a mobilization date on a job and its list turns up here the day before, and the job appears on the shop's Coming up screen straight away.</p>
+          <div class="row"><a class="btn-ghost" href="#/jobs">Put a date on a job</a>
+          <a class="btn-ghost" href="#/upcoming">See what is coming up</a></div>
         </div>`;
         return `<div class="panel">
-          <h2>Mobilizing today and tomorrow</h2>
-          <p class="muted">Walk each list the day before the gear goes out.</p>
+          <h2>Pre-mobilization walk, today and tomorrow</h2>
+          <p class="muted">Walk each list the day before the gear goes out. Everything further ahead is on the shop's <a href="#/upcoming">Coming up</a> screen.</p>
           ${AM.why('This is the manual’s own pre-mobilization list, against the day the gear actually goes out. A crew cannot mobilize a job that is not finished here without overriding it, and an override lands on this screen with a name on it.')}
           ${soon.map(j => {
             const type3 = j.division !== 'restoration' && String(j.containment) === '3';
@@ -367,6 +446,7 @@
           <input id="shq" class="search" placeholder="Filter" autocomplete="off">
         </div>
         ${AM.why('Two different things happen on this screen. Counting is somebody standing at the shelf saying what is there, and it replaces the number. Arrived is stock coming in off an order, and it adds to it. Never retype a count to record a delivery: the difference between what was bought and what is there is what tells you whether anything is walking. The minimum is meant to be moved: buffer it when it is busy, tighten it when it is slow.')}
+        ${priceSource()}
 
         <!-- What you can do to this list belongs on this list. Burying add,
              download and stickers behind Settings meant people stood in front
@@ -400,14 +480,62 @@
               <select class="bulk-vendor" data-g="${esc(g)}">${vOpts('')}</select></label>` : ''}
           </div>
           <table class="tbl shelf-tbl"><thead><tr>
-            <th>Item</th><th>Unit</th><th class="n">On hand</th><th></th><th class="n">Min</th><th class="n">Max</th><th class="n">Last paid</th><th>Bought from</th><th>Part rolls come back</th>
+            <th>Item</th><th>Sold by</th><th class="n">How many in one</th><th class="n">On hand</th><th></th><th class="n">Min</th><th class="n">Max</th><th class="n">Last paid</th><th>Bought from</th><th>Part rolls come back</th>
           </tr></thead><tbody>
           ${S.catalog.stock.filter(s => s.group === g).map(s => {
             const n = d.onHand.get(s.id);
             const lowFlag = s.min != null && n != null && n <= s.min;
             return `<tr data-name="${esc((s.name + ' ' + s.id).toLowerCase())}" class="${lowFlag ? 'low' : ''}">
               <td><strong>${esc(s.name)}</strong><div class="line-id">${esc(s.id)}</div></td>
-              <td>${esc(s.uom || 'EA')}</td>
+              <td>${esc(AM.uomWord(s.uom, 1))}</td>
+              ${(() => {
+                /* WHAT CAN HONESTLY BE ASKED ABOUT THIS LINE
+                   The first version of this column put an amber box against
+                   thirty nine lines and asked how many were in one. Thirty
+                   seven of them were rolls of poly and jugs of Benefect, which
+                   do not contain a number of anything, so it was thirty seven
+                   pieces of busywork with no answer. The app now works out what
+                   the thing is first, and only a box of countable objects gets
+                   asked. That is two lines on this shelf, and it has a go at
+                   answering one of them itself off A&M's own prices. */
+                const kind = AM.kindOf(s);
+                if (kind !== 'countable') {
+                  const note = kind === 'length' ? 'measured by length, comes back part used'
+                    : kind === 'liquid' ? 'measured by volume, comes back part used'
+                    : kind === 'equipment' ? 'a machine, moves whole'
+                    : 'whole ones only';
+                  return `<td class="pack-cell none"><span class="muted small">${esc(note)}</span></td>`;
+                }
+                const p = AM.packOf(s);
+                if (p) {
+                  return `<td class="n pack-cell">
+                    <input class="cell" data-f="packSize" data-id="${esc(s.id)}" type="number" min="0" step="1"
+                      value="${p.source === 'stated' ? p.size : ''}" placeholder="${p.size}">
+                    <div class="line-id">${esc(p.piece)}${p.source === 'name' ? ', read off the name' : ''}</div></td>`;
+                }
+                const g = AM.suggestPack(s, S.catalog);
+                if (g) {
+                  return `<td class="n pack-cell has-guess">
+                    <input class="cell" data-f="packSize" data-id="${esc(s.id)}" type="number" min="0" step="1"
+                      value="" placeholder="${g.size}">
+                    <button class="pack-take" data-id="${esc(s.id)}" data-n="${g.size}" title="${esc(g.why)}">Use ${g.size}</button>
+                    <div class="line-id">worked out from your prices</div></td>`;
+                }
+                /* Asking how many are in one is the wrong question when the
+                   unit itself is wrong, and the prices are what give that away.
+                   Better to say which of the two problems this actually is than
+                   to invite a number that would make the count worse. */
+                const w = AM.unitLooksWrong(s, S.catalog);
+                if (w) {
+                  return `<td class="n pack-cell suspect">
+                    <span class="pack-flag">check the unit</span>
+                    <div class="line-id" title="${esc(w.why)}">priced like one ${esc(AM.uomWord(w.twin.uom, 1))}, not a ${esc(AM.uomWord(s.uom, 1))}</div></td>`;
+                }
+                return `<td class="n pack-cell wants">
+                  <input class="cell" data-f="packSize" data-id="${esc(s.id)}" type="number" min="0" step="1"
+                    value="" placeholder="how many?">
+                  <div class="line-id">comes back by eye until this is filled in</div></td>`;
+              })()}
               <td class="n"><input class="cell" data-f="onHand" data-id="${esc(s.id)}" type="number" step="0.25" value="${n == null ? '' : n}" placeholder="count"></td>
               <td><button class="btn-ghost recv" data-id="${esc(s.id)}">Arrived</button></td>
               <td class="n"><input class="cell" data-f="min" data-id="${esc(s.id)}" type="number" step="1" value="${s.min == null ? '' : s.min}"></td>
@@ -456,6 +584,18 @@
       s[f] = v;
       await AM.saveCatalog();
     });
+    /* Taking the app's own answer. One tap, because the work of finding the
+       number was the part worth automating; confirming it is the part a person
+       should still do, since a wrong pack size does not announce itself. */
+    $$('.pack-take').forEach(b => b.onclick = async () => {
+      const s = S.catalog.stock.find(x => x.id === b.dataset.id);
+      if (!s) return;
+      s.packSize = parseInt(b.dataset.n, 10);
+      await AM.saveCatalog();
+      AM.toast(`${s.name}: ${s.packSize} in one. It counts in real pieces from now on.`);
+      AM.render();
+    });
+
     $$('.cell-v').forEach(sel => sel.onchange = async () => {
       const s = S.catalog.stock.find(x => x.id === sel.dataset.id);
       if (!s) return;
@@ -657,6 +797,32 @@
   }
   AM.matchShelf = matchShelf;
 
+  /* WHERE EVERY DOLLAR ON THESE SCREENS CAME FROM, SAID ON THE SCREEN ITSELF
+     This was asked directly, and it is the right question to ask of any figure
+     an app puts in front of you: is this real, or did the software make it up.
+     Answering it in a conversation answers it once. Answering it here answers
+     it for whoever opens the screen next, including the person who has to say
+     the number out loud to a client.
+
+     Both sources are A&M's own documents. Nothing here is a market rate, an
+     industry average, or a figure the app invented. The counts are read off the
+     live shelf list rather than written down, so the sentence cannot go stale
+     as prices get filled in. */
+  function priceSource() {
+    const stock = (S.catalog.stock || []);
+    const priced = stock.filter(x => x.price != null && x.price !== '').length;
+    const quoted = stock.filter(x => Array.isArray(x.prices) && x.prices.length).length;
+    return AM.why(
+      'Every price is one A&M has actually paid or been quoted, off two of A&M’s own documents. ' +
+      'The first is the Master Equipment and Inventory List built 26 August 2026: its Last Unit Price column was read line by line off all 68 Hazmasters and Wesco invoices in the Drive receipts folder, invoice 6852216 through 7163524, April 2024 to July 2026, and that workbook keeps every one of those invoice lines on its own tab as the audit trail. ' +
+      'The second is the estimators’ Material Price List dated 17 July 2026, which carries a quote from each supplier for the same item. ' + quoted + ' lines on the shelf have that full supplier comparison behind them, and the price used is the one A&M actually buys at, with the supplier named on the line. ' +
+      'Of ' + stock.length + ' lines on the shelf, ' + priced + ' carry a price and ' + (stock.length - priced) + ' do not. The ones that do not are left out of every total and flagged, rather than guessed at. ' +
+      'A price corrects itself from then on whenever a delivery is entered with what it cost, so none of this depends on the spreadsheets once the shop is receiving through the app. ' +
+      'One number in the app is not real, and it is in no total: the cost of a filter certificate test, which ships as a placeholder and is labelled as a guess until somebody sets the real rate in Settings. Equipment days and waste bags are counted and never turned into money, because those rates do not live in this app.',
+      'Is this real data? Where these prices come from'
+    );
+  }
+
   function jobPanel(j, d) {
     const rows = [...(d.jobLoad.get(j.id) || new Map()).values()];
     const still = (d.outstanding.get(j.id) || []).length;
@@ -668,12 +834,50 @@
     const cont = window.SOP.containment[String(j.containment)];
     const type3 = j.division !== 'restoration' && String(j.containment) === '3';
 
-    let material = 0, equipmentDays = 0;
+  /* WHAT THE MONEY ON THIS SCREEN IS, AND WHERE IT COMES FROM
+       "Materials used" used to sit in a row of tiles next to a bare count and a
+       bag tally, so a dollar figure, a day count and a number of bags all read
+       as the same kind of thing, and the summary underneath then repeated some
+       of them back as text. It was asked, fairly, where the number came from.
+
+       It is: for every shelf line on this job, the amount that did not come
+       back, multiplied by the last price A&M paid for it. Nothing else feeds
+       it. Equipment is counted in days and disposal in bags, and neither is
+       turned into money, because the rate for those does not live in this app.
+       Only what can honestly be priced is allowed in the money column, and
+       everything else is stated as what it is and labelled as such.
+
+       "Did not come back" is split now, because the two halves mean different
+       things. What a crew marked as used up is spent. What is still standing on
+       the site is not spent, and may well come home on the next load. */
+    let usedCost = 0, atRiskCost = 0, equipmentDays = 0, overLines = 0;
+    const usedRows = [];
     const unitsOnJob = [];
     for (const l of rows) {
       const s = d.stockById.get(l.id);
-      if (s) { const used = l.out - l.back; if (used > 0 && s.price) material += used * s.price; }
+      if (!s) continue;
+      /* Read through the one rule that decides what a job's line means, not off
+         the raw sums. A line could say a quarter of a box came back AND the
+         whole box was used, which is a box and a quarter out of a box, and this
+         column then charged the job for the quarter that was sitting on the
+         shelf. What went back on the shelf is the half the shop count
+         corroborates, so it stands, and what a job can be charged is capped at
+         what actually left and stayed gone. */
+      const st = AM.settled(l);
+      const stillOut = st.still;
+      const used = st.used;
+      if (st.over > 0.0001) overLines++;
+      if (used <= 0.0001 && stillOut <= 0.0001) continue;
+      const price = s.price || 0;
+      usedCost += used * price;
+      atRiskCost += stillOut * price;
+      usedRows.push({ s, used, stillOut, back: st.back, out: st.out, price,
+                      cost: used * price, priced: !!s.price, over: st.over });
     }
+    usedRows.sort((a, b) => b.cost - a.cost || b.used - a.used);
+    const usedLines = usedRows.filter(r => r.used > 0.0001);
+    const unpriced = usedLines.filter(r => !r.priced).length;
+
     // Equipment days: every deployment on this job, counted from when it landed.
     for (const u of S.catalog.units) {
       const a = d.unitAt.get(u.id);
@@ -688,30 +892,80 @@
     const pmItems = window.SOP.preMob.filter(i => i.appliesTo === 'all' || (i.appliesTo === 'type3' && type3));
     const pmDone = pmItems.filter(i => j.preMob && j.preMob[i.id]).length;
 
+    /* The one number on this screen A&M has not supplied. It ships as 50 so the
+       arithmetic has something to run on, and until somebody confirms it that is
+       a guess wearing a dollar sign. It is shown, labelled, and kept out of the
+       total, because a placeholder folded silently into a figure somebody quotes
+       to a client is worse than no figure at all. */
+    const dopEach = (S.catalog.settings || {}).dopCostPerUnit || 50;
+    const dopConfirmed = !!(S.catalog.settings || {}).dopCostConfirmed;
+    const moneyTotal = usedCost + dopOwed.cost;
+    const bags = asb.bags + cln.bags;
+
     return `<div class="job-panel ${still ? 'open' : ''}">
-      <div class="panel-head">
-        <div><h3>${esc(jobLabel(j.id))} ${j.jobtreadId ? '<span class="tag ok">linked</span>' : '<span class="tag warn">not in JobTread yet</span>'}</h3>
-        <div class="muted small">${esc(j.address || '')} · started ${esc(fmtWhen(j.createdAt))}</div>
-        <div class="muted small">${ph ? esc(ph.id + ' ' + ph.name) : 'no phase set'}${cont && j.division !== 'restoration' ? ' · ' + esc(cont.name) : ''}${j.division === 'restoration' ? ' · restoration' : ''}${j.areaSqFt ? ' · ' + esc(String(j.areaSqFt)) + ' sq ft' : ''}</div>
-        <div class="muted small">${j.mobDate ? 'Mobilizing ' + esc(j.mobDate) + ' · ' : ''}Before it left the shop: ${pmDone} of ${pmItems.length} confirmed${pmDone < pmItems.length ? ', <span class="bad">' + (pmItems.length - pmDone) + ' not</span>' : ''}${j.expectedReturn ? ' · gear due back ' + esc(j.expectedReturn) : ''}</div>
+      <div class="jp-head">
+        <h3>${esc(jobLabel(j.id))} ${j.jobtreadId ? '<span class="tag ok">linked</span>' : '<span class="tag warn">not in JobTread yet</span>'}</h3>
+        <div class="muted small">${esc(j.address || 'no address on this job')} &middot; started ${esc(fmtWhen(j.createdAt))}${j.closed ? ' &middot; closed ' + esc(fmtWhen(j.closed)) : ''}</div>
+        <div class="muted small">${ph ? esc(ph.id + ' ' + ph.name) : 'no phase set'}${cont && j.division !== 'restoration' ? ' &middot; ' + esc(cont.name) : ''}${j.division === 'restoration' ? ' &middot; restoration' : ''}${j.areaSqFt ? ' &middot; ' + esc(String(j.areaSqFt)) + ' sq ft' : ''}</div>
+        <div class="muted small">Before it left the shop: ${pmDone} of ${pmItems.length} confirmed${pmDone < pmItems.length ? ', <span class="bad">' + (pmItems.length - pmDone) + ' not</span>' : ''}${j.mobDate ? ' &middot; mobilized ' + esc(j.mobDate) : ''}${j.expectedReturn ? ' &middot; gear due back ' + esc(j.expectedReturn) : ''}</div>
+      </div>
+
+      <div class="jp-figs">
+        <div class="jp-fig money">
+          <span class="jp-k">${money(usedCost)}</span>
+          <span class="jp-l">materials used up</span>
+          <span class="jp-n">what did not come back, at the last price paid</span>
         </div>
-        <div class="job-cost">
-          <div><b>${money(material)}</b><span>material used</span></div>
-          <div><b>${equipmentDays}</b><span>equipment days running</span></div>
-          ${dopOwed.units ? `<div><b>${money(dopOwed.cost)}</b><span>${dopOwed.units} certificate${dopOwed.units === 1 ? '' : 's'}${dopOwed.rounds > 1 ? ', two rounds' : ''}</span></div>` : ''}
-          ${w.bags ? `<div><b>${w.bags}</b><span>bags · ${Math.round(w.bags / bagsPerBin * 100)}% of a bin</span></div>` : ''}
+        <div class="jp-fig ${still ? 'warn' : ''}">
+          <span class="jp-k">${still}</span>
+          <span class="jp-l">${still === 1 ? 'line still on site' : 'lines still on site'}</span>
+          <span class="jp-n">${still ? money(atRiskCost) + ' of stock not back yet' : 'everything is accounted for'}</span>
+        </div>
+        <div class="jp-fig">
+          <span class="jp-k">${equipmentDays}</span>
+          <span class="jp-l">${equipmentDays === 1 ? 'equipment day' : 'equipment days'}</span>
+          <span class="jp-n">${unitsOnJob.length ? unitsOnJob.length + ' machine' + (unitsOnJob.length === 1 ? '' : 's') + ' running now' : 'no machines on site'}</span>
+        </div>
+        <div class="jp-fig">
+          <span class="jp-k">${bags}</span>
+          <span class="jp-l">${bags === 1 ? 'bag of waste' : 'bags of waste'}</span>
+          <span class="jp-n">${asb.bags} asbestos &middot; ${cln.bags} clean${bags ? ' &middot; ' + Math.round(bags / bagsPerBin * 100) + '% of a bin' : ''}</span>
         </div>
       </div>
       ${dopOwed.rounds > 1 ? `<p class="muted small">${esc(dopOwed.note)}</p>` : ''}
-      ${rows.length ? `<h4 class="grp">Return list against the Mobilization List</h4>
+
+      ${usedRows.length ? `<h4 class="grp">What this job used</h4>
+      <p class="muted small">Everything off the shelf that did not come back on the truck. Used up is what a crew marked as spent, and it is the only part that becomes a cost. Still on site has not been checked in yet, so it is not counted against the job. Price each is the last price A&amp;M paid, off the master list.</p>
+      ${priceSource()}
+      ${overLines ? `<p class="muted small warn-text">${overLines} line${overLines === 1 ? '' : 's'} on this job ${overLines === 1 ? 'was' : 'were'} written off twice: more had been checked in and marked used than ever went out. The money column shows what the job can honestly be charged, which is capped at what actually left the shop and stayed gone. Opening &ldquo;Fix the count&rdquo; on the crew screen writes the correction into the history and clears the flag.</p>` : ''}
+      <table class="tbl"><thead><tr>
+        <th>Item</th><th class="n">Used up</th><th class="n">Still on site</th><th class="n">Price each</th><th class="n">Cost</th>
+      </tr></thead><tbody>
+        ${usedRows.map(r => `<tr class="${r.stillOut > 0.001 ? 'low' : ''}">
+          <td><strong>${esc(r.s.name)}</strong><div class="line-id">${esc(r.s.id)} &middot; sold by the ${esc(AM.uomLabel(r.s, 1))}</div></td>
+          <td class="n">${r.used > 0.0001 ? esc(AM.qtyLabel(r.s, r.used)) : '&mdash;'}</td>
+          <td class="n ${r.stillOut > 0.001 ? 'bad' : ''}">${r.stillOut > 0.0001 ? esc(AM.qtyLabel(r.s, r.stillOut)) : '&mdash;'}</td>
+          <td class="n">${r.priced ? money(r.price) : '<span class="muted">no price</span>'}</td>
+          <td class="n">${r.used > 0.0001 && r.priced ? money(r.cost) : '&mdash;'}</td>
+        </tr>`).join('')}
+      </tbody><tfoot><tr><th colspan="4">Materials used up</th><th class="n">${money(usedCost)}</th></tr></tfoot></table>
+      ${unpriced ? `<p class="muted small warn-text">${unpriced} line${unpriced === 1 ? ' has' : 's have'} no price on the master list, so ${unpriced === 1 ? 'it is' : 'they are'} not in that total. Put a price on ${unpriced === 1 ? 'it' : 'them'} on the Shelf screen and this figure corrects itself.</p>` : ''}`
+      : '<p class="muted small">Nothing off the shelf has been used up on this job yet.</p>'}
+
+      ${rows.length ? `<h4 class="grp">Everything that went out, and what came back</h4>
       <table class="tbl"><thead><tr><th>Item</th><th class="n">Out</th><th class="n">Back</th><th class="n">Used up</th><th class="n">Still out</th><th class="n">Typed in</th></tr></thead><tbody>
         ${rows.map(l => {
-          const nm = d.unitById.get(l.id) ? `${d.unitById.get(l.id).name} ${d.unitById.get(l.id).unitNo || ''}` : (d.stockById.get(l.id) || {}).name || l.id;
-          const stillOut = l.out - l.back - l.consumed;
-          return `<tr class="${stillOut > 0.001 ? 'low' : ''}"><td><strong>${esc(nm)}</strong><div class="line-id">${esc(l.id)}</div></td>
-            <td class="n">${qty(l.out)}</td><td class="n">${qty(l.back)}</td><td class="n">${qty(l.consumed)}</td>
-            <td class="n ${stillOut > 0.001 ? 'bad' : ''}">${qty(Math.max(0, stillOut))}</td>
-            <td class="n">${l.unscanned ? qty(l.unscanned) : ''}</td></tr>`;
+          const u = d.unitById.get(l.id);
+          const s = d.stockById.get(l.id);
+          const nm = u ? `${u.name} ${u.unitNo || ''}` : (s || {}).name || l.id;
+          const st = AM.settled(l);
+          const q = n => s ? AM.qtyLabel(s, n) : qty(n);
+          return `<tr class="${st.still > 0.001 ? 'low' : ''}"><td><strong>${esc(nm)}</strong><div class="line-id">${esc(l.id)}</div>${st.over > 0.0001 ? `<div class="line-id warn-text">written off twice by ${esc(q(st.over))} — the crew can straighten it with "Fix the count"</div>` : ''}</td>
+            <td class="n">${esc(q(st.out))}</td>
+            <td class="n">${st.back > 0.001 ? esc(q(st.back)) : '&mdash;'}</td>
+            <td class="n">${st.used > 0.001 ? esc(q(st.used)) : '&mdash;'}</td>
+            <td class="n ${st.still > 0.001 ? 'bad' : ''}">${st.still > 0.001 ? esc(q(st.still)) : '&mdash;'}</td>
+            <td class="n">${l.unscanned ? esc(qty(l.unscanned)) : ''}</td></tr>`;
         }).join('')}
       </tbody></table>` : '<p class="muted small">Nothing has gone out on this job yet.</p>'}
 
@@ -731,16 +985,27 @@
       </tbody></table>` : ''}
 
       <h4 class="grp">Final cost summary, the part inventory owns</h4>
+      <p class="muted small">Only what this app can put a real price against is in the money column. Equipment days and disposal are counted below rather than costed, because the rate for those does not live in here. Labour comes from elsewhere entirely.</p>
+      ${priceSource()}
+      <table class="tbl jp-cost"><tbody>
+        <tr><td>Materials used up<div class="line-id">${usedLines.length} line${usedLines.length === 1 ? '' : 's'} off the shelf, priced from A&amp;M's own purchase history</div></td>
+            <td class="n">${money(usedCost)}</td></tr>
+        <tr class="${dopConfirmed ? '' : 'assumed'}"><td>Certificate testing<div class="line-id">${dopOwed.units} unit${dopOwed.units === 1 ? '' : 's'}${dopOwed.rounds > 1 ? ' over two rounds' : ''} at ${money(dopEach)} each${dopConfirmed ? '' : ' &mdash; <b>an assumed rate nobody has set</b>'}</div></td>
+            <td class="n">${dopConfirmed ? money(dopOwed.cost) : '<span class="muted">' + money(dopOwed.cost) + '?</span>'}</td></tr>
+        <tr class="jp-total"><th>Total inventory cost on this job${dopConfirmed ? '' : '<div class="line-id">materials only, until the test rate is confirmed</div>'}</th>
+            <th class="n">${money(dopConfirmed ? moneyTotal : usedCost)}</th></tr>
+      </tbody></table>
+      ${dopConfirmed ? '' : `<p class="muted small warn-text">The ${money(dopEach)} per filter test is a placeholder that shipped with the app, not a number A&amp;M has given. It is kept out of the total until somebody sets the real one in <a href="#/setup">Settings</a>. Everything above it is priced from what A&amp;M actually paid.</p>`}
+
+      <h4 class="grp">Counted, not costed</h4>
       <table class="tbl"><tbody>
-        <tr><td>Materials consumed</td><td class="n">${money(material)}</td></tr>
-        <tr><td>Equipment, ${equipmentDays} unit day${equipmentDays === 1 ? '' : 's'} on site</td><td class="n">${equipmentDays ? 'days recorded' : '—'}</td></tr>
-        <tr><td>Certificate testing, ${dopOwed.units} unit${dopOwed.units === 1 ? '' : 's'}${dopOwed.rounds > 1 ? ' × 2 rounds' : ''}</td><td class="n">${money(dopOwed.cost)}</td></tr>
-        <tr><td>Disposal, asbestos: ${asb.bags} bag${asb.bags === 1 ? '' : 's'}${asb.trailers ? ' and ' + qty(asb.trailers) + ' trailer loads' : ''}</td><td class="n">${asb.bags ? Math.round(asb.bags / bagsPerBin * 100) + '% of a bin' : '—'}</td></tr>
-        <tr><td>Disposal, clean demolition: ${cln.bags} bag${cln.bags === 1 ? '' : 's'}${cln.trailers ? ' and ' + qty(cln.trailers) + ' trailer loads' : ''}</td><td class="n">${cln.bags || cln.trailers ? 'charged at the clean rate' : '—'}</td></tr>
+        <tr><td>Equipment on site</td><td class="n">${equipmentDays} unit day${equipmentDays === 1 ? '' : 's'}</td></tr>
+        <tr><td>Disposal, asbestos</td><td class="n">${asb.bags} bag${asb.bags === 1 ? '' : 's'}${asb.trailers ? ' &middot; ' + qty(asb.trailers) + ' trailer loads' : ''}</td></tr>
+        <tr><td>Disposal, clean demolition</td><td class="n">${cln.bags} bag${cln.bags === 1 ? '' : 's'}${cln.trailers ? ' &middot; ' + qty(cln.trailers) + ' trailer loads' : ''}</td></tr>
+        <tr><td>Stock still standing on site</td><td class="n">${still} line${still === 1 ? '' : 's'}${still ? ' &middot; ' + money(atRiskCost) + ' at risk' : ''}</td></tr>
         <tr><td class="muted">Labour</td><td class="n muted">comes from elsewhere</td></tr>
       </tbody></table>
       <p class="muted small">The manual's close-out package wants waste disposal manifests and a final cost summary showing labour, materials, equipment and disposal. Three of those four are above.</p>
-
       <div class="row">
         <button class="btn-ghost jclose" data-id="${esc(j.id)}" ${still ? 'disabled title="Something is still on this job"' : ''}>${j.closed ? 'Reopen' : 'Close the job'}</button>
         ${still ? `<span class="muted small">${still} thing${still === 1 ? '' : 's'} still out. A job does not close with company gear standing on it.</span>` : ''}
@@ -829,6 +1094,7 @@
 
       AM.modal(`
         <h3>${esc(jobLabel(j.id))}</h3>
+        <p class="muted small">What shape this job is, so the app can work out what it takes. Nothing here comes from JobTread and nothing here waits on it: containment type and floor area are what the equipment counts are calculated from, the mobilization date is what puts the job on the shop's Coming up list, and gear due back is what makes a machine show as overdue rather than merely absent. Leave any of it blank and the app simply stops guessing that part.</p>
         <div class="grid2">
           ${rest ? `<label class="fld">Water category
             <select id="jdWater">${[1,2,3].map(n => `<option value="${n}" ${String(j.waterCategory)===String(n)?'selected':''}>Category ${n}</option>`).join('')}</select></label>`
@@ -842,7 +1108,7 @@
           <label class="fld">Gear due back<input id="jdDue" type="date" value="${esc(j.expectedReturn || '')}"></label>
         </div>
         <h4 class="grp">Before it leaves the shop</h4>
-        <p class="muted small">The manual's Phase 4 list, word for word. Ticked here, not by a crew standing in the shop at six in the morning.</p>
+        <p class="muted small">The manual's Phase 4 pre-mobilization list, word for word: the paperwork and notifications that are supposed to be done the day before a job goes out. It is ticked here, at a desk, by whoever actually did it. A crew loading the van sees the count and is asked once, at the end of the load, but is never stopped by it.</p>
         <div class="chk-list">
           ${items.map(i => `<label class="chk"><input type="checkbox" class="jd-chk" data-id="${esc(i.id)}" ${j.preMob && j.preMob[i.id] ? 'checked' : ''}>
             <span><strong>${esc(i.text)}</strong>${i.note ? `<em class="muted small">${esc(i.note)}</em>` : ''}</span></label>`).join('')}
@@ -895,7 +1161,9 @@
     const n = d.onHand.get(s.id);
     AM.modal(`
       <h3>${esc(s.name)}</h3>
-      <p class="muted small">${esc(s.id)} · ${n == null ? 'never counted' : qty(n) + ' ' + esc(s.uom || '') + ' on the shelf now'}</p>
+      <p class="muted small">${esc(s.id)} · sold by the ${esc(AM.uomLabel(s, 1))} · ${n == null
+        ? 'never counted' + (d.movedSince && d.movedSince.get(s.id) ? ', and ' + esc(AM.qtyLabel(s, d.movedSince.get(s.id))) + ' has gone out since' : '')
+        : esc(AM.qtyLabel(s, n)) + ' on the shelf now'}</p>
       <div class="grid2">
         <label class="fld">How many arrived<input id="rvQty" type="number" inputmode="decimal" step="0.25" placeholder="0"></label>
         <label class="fld">What each one cost<input id="rvCost" type="number" inputmode="decimal" step="0.01" value="${s.price != null ? s.price : ''}"></label>
@@ -910,7 +1178,7 @@
         await AM.record({ type: 'RECEIVE', itemId: s.id, qty: q, unitCost: isFinite(c) ? c : undefined });
         if (isFinite(c)) { s.price = c; await AM.saveCatalog(); }
         AM.closeModal();
-        AM.toast(`${qty(q)} ${s.uom || ''} on the shelf.`);
+        AM.toast(`${AM.qtyLabel(s, q)} on the shelf.`);
         if (after) after();
         AM.render();
       };
@@ -944,7 +1212,7 @@
             ${items.map(s => {
               const want = Math.max(1, Math.ceil((s.max != null ? s.max : s.min * 2) - s.onHand));
               return `<tr><td><strong>${esc(s.name)}</strong></td><td class="line-id">${esc(s.id)}</td>
-                <td class="n">${qty(s.onHand)}</td><td class="n"><strong>${want}</strong> ${esc(s.uom || '')}</td>
+                <td class="n">${qty(s.onHand)}</td><td class="n"><strong>${want}</strong> ${esc(AM.uomWord(s.uom, want))}</td>
                 <td class="n">${s.price != null ? money(s.price) : '—'}</td>
                 <td class="n">${s.price != null ? money(want * s.price) : '—'}</td></tr>`;
             }).join('')}
@@ -1033,8 +1301,24 @@
     <div class="wrap wide">
       <div class="panel">
         <div class="panel-head"><div>
-          <h2>${rows.filter(r => r.st.state !== 'ok').length} machines need a certificate</h2>
-          <p class="muted">Out of ${units.length} that are subject to the test. Worst first.</p></div>
+          <h2>${rows.filter(r => r.st.state !== 'ok').length} machines need a filter test</h2>
+          ${(() => {
+            /* Which of the four problems this is. On the day this went in, all
+               85 were the same one: nothing has ever been tested in here, so
+               every negative air unit, air scrubber and HEPA vacuum reads as
+               having no certificate on file. That is a true statement about the
+               register, not about the machines, and it is worth saying out loud
+               rather than leaving somebody to read 85 red rows and assume the
+               app is broken. */
+            const c = st => rows.filter(r => r.st.state === st).length;
+            const bits = [];
+            if (c('fail')) bits.push(c('fail') + ' failed a test');
+            if (c('overdue')) bits.push(c('overdue') + ' out of date');
+            if (c('none')) bits.push(c('none') + ' never tested in here');
+            if (c('due')) bits.push(c('due') + ' due within five days');
+            return `<p class="muted">Out of ${units.length} subject to the test: ${bits.join(', ') || 'all in date'}. Worst first.</p>
+              ${c('none') === units.length ? `<p class="muted small">Nothing has been recorded against any of them yet, which is what this reads as. Log a test on a machine and it turns green; the count is a starting position, not 85 separate faults.</p>` : ''}`;
+          })()}</div>
           <input id="dopq" class="search" placeholder="Filter" autocomplete="off">
         </div>
         ${AM.why('Alberta wants a DOP or PAO test on a HEPA vacuum or a negative air unit at least every 30 days while it is running, at least once a year while it is sitting, whenever a filter is changed, and on site before a negative air system starts filtering. Nothing sold as inventory software keeps this register. A failed unit cannot be checked out of here without somebody deliberately overriding it.')}
@@ -1993,7 +2277,7 @@
         return qr + `<div class="lb-t">
           <div class="lb-nm big">${esc(x.name)}</div>
           <div class="lb-tag">${esc(x.id)}</div>
-          <div class="lb-ser">${esc(x.uom || 'EA')}${x.min != null ? ' · minimum ' + qty(x.min) : ''}</div>
+          <div class="lb-ser">${esc(AM.uomLabel(x, 1))}${x.min != null ? ' · minimum ' + qty(x.min) : ''}</div>
         </div>`;
       };
 
@@ -2107,7 +2391,7 @@
       <div class="panel">
         <div class="panel-head"><div><h2>Waiting to be matched</h2>
           <p class="muted">Emergency work started here at 2am. The office creates the real job in JobTread anyway, because restoration cannot be billed without one. Match them here and everything logged over the weekend goes across.</p></div>
-          <button class="btn" id="jtPull">Pull jobs from JobTread</button></div>
+          <input id="jtSearch" placeholder="Job number or name, or leave empty for the newest" autocomplete="off" style="min-width:16rem"> <button class="btn" id="jtPull">Pull jobs from JobTread</button></div>
         ${unlinked.length ? unlinked.map(j => `
           <div class="find-row">
             <div><strong>${esc(jobLabel(j.id))}</strong><div class="muted small">${esc(j.address || '')} · started ${esc(fmtWhen(j.createdAt))} by ${esc(j.createdBy || '')}</div></div>
@@ -2245,7 +2529,7 @@
     };
 
     $('#jtPull').onclick = async () => {
-      const r = await fetch('/api/jobtread', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'jobs' }) });
+      const r = await fetch('/api/jobtread', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'jobs', search: (($('#jtSearch') || {}).value || '').trim() }) });
       const res = await r.json();
       if (res.error) { AM.toast(res.error, 'bad'); return; }
       jtJobs = res.jobs || [];
@@ -2263,7 +2547,7 @@
           if (res2.error) { AM.toast(res2.error, 'bad'); return; }
           local.jobtreadId = sel.value;
           await AM.saveCatalog();
-          AM.toast('Matched. Cost from this job can go across now.');
+          AM.toast('Matched, and stamped on the job in JobTread.');
           AM.render();
         };
       });
@@ -2349,11 +2633,11 @@
             const used = did.has(u.name);
             return `<div class="user-row">
               <div><strong>${esc(u.name)}</strong>
-                <div class="muted small">${u.pin && u.pin.hash
+                <div class="muted small">${AM.hasPin(u)
                   ? 'PIN issued' + (u.pinSetAt ? ' ' + esc(fmtWhen(u.pinSetAt)) : '') + (u.pinSetBy ? ' by ' + esc(u.pinSetBy) : '')
                   : 'no PIN yet, cannot sign in'}${used ? ' · has movements against this name' : ' · has never done anything in the app'}</div></div>
               <div class="row tight">
-                <button class="btn-ghost upin" data-n="${esc(u.name)}">${u.pin && u.pin.hash ? 'Reset the PIN' : 'Issue a PIN'}</button>
+                <button class="btn-ghost upin" data-n="${esc(u.name)}">${AM.hasPin(u) ? 'Reset the PIN' : 'Issue a PIN'}</button>
                 <button class="btn-ghost utog" data-n="${esc(u.name)}">${u.active === false ? 'Turn back on' : 'Take access away'}</button>
                 ${used ? '' : `<button class="btn-ghost udel" data-n="${esc(u.name)}">Remove</button>`}
               </div>
@@ -2366,7 +2650,27 @@
             </details>` : ''}`;
         })()}
         <div class="who-add"><input id="uNew" placeholder="Add somebody"><button class="btn" id="uAdd">Add</button></div>
-        ${AM.why('A PIN is shown once, here, when it is issued. Nobody can read it back afterwards, including this screen, so if somebody forgets theirs it gets reset rather than looked up. On their own phone they can put a fingerprint behind it the first time they sign in.', 'What happens when somebody forgets their PIN')}
+        ${(() => {
+          /* Everything needed to put the whole crew behind a PIN was already
+             here, one person at a time, and nobody had used it once. Eleven
+             people times four taps each, with a modal to dismiss between every
+             one, is why. So it is one button: everybody who has not got a PIN
+             gets one, and the list is shown once, in a form that can be read
+             down a tailgate while people sign in.
+
+             Nothing is issued to anybody who already has one. Resetting an
+             existing PIN stays deliberate and stays one person at a time,
+             because it silently drops that person's fingerprint on their own
+             phone and they need telling. */
+          const need = (S.catalog.users || []).filter(u => u.active !== false && !AM.hasPin(u));
+          if (!need.length) return `<p class="clear-note">Everybody on the list has a PIN. Nobody gets into the app without their own four digits.</p>`;
+          return `<div class="panel note">
+            <h2>${need.length} ${need.length === 1 ? 'person has' : 'people have'} no PIN yet</h2>
+            <p>${need.length === 1 ? 'That person cannot' : 'They cannot'} sign in, so ${need.length === 1 ? 'their' : 'their'} movements cannot carry a name. Issue them all in one go and hand them out in person.</p>
+            <div class="row"><button class="btn big" id="pinAll">Issue a PIN to all ${need.length}</button></div>
+          </div>`;
+        })()}
+        ${AM.why('Four digits each, generated here, shown once, and never readable again by anybody including this screen. Give them out face to face, watch each person sign in on their own phone, and let them put a fingerprint behind it when the app offers on that first sign-in. From then on they touch the sensor and nothing else. If somebody forgets theirs it is reset, not looked up, and a reset also clears the fingerprint on whatever phone they were using so they start again. Nobody shares a PIN: the whole reason the app knows who took a machine is that a PIN belongs to one person.', 'How to hand out PINs, and what to tell people')}
       </div>
 
       <div class="panel">
@@ -2398,12 +2702,20 @@
       <div class="panel">
         <h2>Numbers the app works off</h2>
         <div class="grid2">
-          <label class="fld">Bags in a full asbestos bin<input id="sBags" type="number" value="${st.bagsPerBin || 600}"></label>
-          <label class="fld">Cost of one certificate test<input id="sDop" type="number" value="${st.dopCostPerUnit || 50}"></label>
+          <label class="fld">Bags in a full asbestos bin<input id="sBags" type="number" value="${st.bagsPerBin || 600}">
+            ${st.bagsPerBinConfirmed ? '' : '<em class="fld-note">600 is a placeholder that shipped with the app. Save this page to confirm it or correct it.</em>'}</label>
+          <label class="fld">Cost of one certificate test<input id="sDop" type="number" value="${st.dopCostPerUnit || 50}">
+            ${st.dopCostConfirmed ? '' : '<em class="fld-note warn-text">A&amp;M has never set this. Until it is saved here, the app shows it as a guess and leaves it out of any job total.</em>'}</label>
           <label class="fld">Days between tests while running<input id="sIn" type="number" value="${st.dopDaysInService || 30}"></label>
           <label class="fld">Days between tests while sitting<input id="sIdle" type="number" value="${st.dopDaysIdle || 365}"></label>
           <label class="fld">Minutes idle before a phone locks<input id="sLock" type="number" value="${st.lockMinutes || 60}"></label>
+          <label class="fld">Who pulls what the crews ask for
+            <select id="sLead">
+              ${(S.catalog.users || []).filter(u => u.active !== false).map(u =>
+                `<option value="${esc(u.name)}" ${((st.shopLead || 'Max') === u.name) ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+            </select></label>
         </div>
+        <p class="muted small">That name is on the shop's own ask list and on every ask a crew sends, so there is one person it belongs to rather than a list everybody assumes somebody else is walking.</p>
         <button class="btn" id="sSave">Save</button>
       </div>
 
@@ -2437,7 +2749,7 @@
             <div class="step-n">3</div>
             <div class="step-b">
               <strong>Sign in once</strong>
-              <div class="row"><a class="btn" href="/api/qbo?action=connect">Connect QuickBooks</a>
+              <div class="row"><button class="btn" id="qConnect">Connect QuickBooks</button>
               <button class="btn-ghost" id="qPrices">Pull what things last cost</button>
               <button class="btn-ghost" id="qOff">Disconnect</button></div>
             </div>
@@ -2488,6 +2800,9 @@
       `, el => {
         $('#udYes', el).onclick = async () => {
           S.catalog.users = S.catalog.users.filter(x => x.name !== name);
+          /* Written down as a deliberate removal, or the next phone to sync
+             puts the name straight back. */
+          AM.markDeleted('users', name);
           await AM.saveCatalog();
           AM.closeModal();
           AM.toast(name + ' is off the list.');
@@ -2568,6 +2883,11 @@
       keep.prices = (keep.prices && keep.prices.length ? keep.prices : []).concat(x.prices || []);
       if (keep.price == null && x.price != null) { keep.price = x.price; keep.vendor = keep.vendor || x.vendor; }
       S.catalog.stock = S.catalog.stock.filter(y => y.id !== x.id);
+      /* Written down as a deliberate removal. Merging is additive now, so a row
+         that simply vanishes from one phone comes straight back from the next
+         one to sync; saying it was removed on purpose is what makes it stay
+         removed everywhere. */
+      AM.markDeleted('stock', x.id);
       await AM.saveCatalog();
       AM.toast(`One line now: ${keep.name}, with the supplier prices on it.`);
       AM.render();
@@ -2581,13 +2901,65 @@
       AM.render();
     });
 
+    /* Issuing the lot in one go. The PINs exist only inside this function and
+       inside the modal it draws: what gets written to the catalog is a salted
+       hash of each one, exactly as the single-person path does, so thirty
+       seconds after this screen is closed nobody can read any of them back,
+       including whoever ran it. That is the point, and it is why the sheet says
+       so on it. */
+    const pinAll = $('#pinAll');
+    if (pinAll) pinAll.onclick = async () => {
+      const need = (S.catalog.users || []).filter(u => u.active !== false && !AM.hasPin(u));
+      if (!need.length) return;
+
+      /* Not the first thing anybody would try, and no two people the same, so a
+         PIN read over a shoulder is not somebody else's as well. */
+      const taken = new Set();
+      const fresh = () => {
+        for (let i = 0; i < 500; i++) {
+          const v = String(Math.floor(1000 + Math.random() * 9000));
+          if (taken.has(v)) continue;
+          if (/^(\d)\1{3}$/.test(v) || v === '1234' || v === '0000') continue;
+          taken.add(v); return v;
+        }
+        return String(Math.floor(1000 + Math.random() * 9000));
+      };
+
+      pinAll.disabled = true;
+      pinAll.textContent = 'Making them…';
+      const issued = [];
+      for (const u of need) {
+        const v = fresh();
+        const salt = AM.newSalt();
+        u.id = u.id || AM.uid();
+        u.pin = { salt, hash: await AM.pinHash(v, salt) };
+        u.pinSetAt = AM.nowISO();
+        u.pinSetBy = S.me || '';
+        issued.push({ name: u.name, pin: v });
+      }
+      const ok = await AM.saveCatalog();
+
+      AM.modal(`
+        <h3>${issued.length} PIN${issued.length === 1 ? '' : 's'} issued</h3>
+        <p class="muted small">This is the only time these are readable. Once this box is closed they cannot be recovered from anywhere, by anybody, and a forgotten one is reset rather than looked up.</p>
+        <div class="pin-sheet">
+          ${issued.map(x => `<div class="pin-sheet-row"><span>${esc(x.name)}</span><b>${esc(x.pin)}</b></div>`).join('')}
+        </div>
+        <p class="muted small">Give each person theirs face to face. Have them open the app, tap their own name, type the four digits, and say yes when the phone offers to use their fingerprint. After that they touch the sensor and nothing else. Nobody shares a PIN, because the only reason the app can say who took a machine is that a PIN belongs to one person.</p>
+        ${ok ? '' : '<p class="bad small">These are saved on this device but have not reached the office yet. Stay on this screen until the status bar says Online, or they will not work on anybody else’s phone.</p>'}
+        <button class="btn big" id="pinSheetDone">I have written them down</button>
+      `, el => {
+        $('#pinSheetDone', el).onclick = () => { AM.closeModal(); AM.render(); };
+      });
+    };
+
     $$('.upin').forEach(b => b.onclick = () => {
       const u = S.catalog.users.find(x => x.name === b.dataset.n);
       if (!u) return;
       const suggested = String(Math.floor(1000 + Math.random() * 9000));
       AM.modal(`
-        <h3>${u.pin && u.pin.hash ? 'Reset' : 'Issue'} a PIN for ${esc(u.name)}</h3>
-        <p class="muted small">Four digits. Tell ${esc(u.name.split(' ')[0])} in person, and this is the only time it is shown. ${u.pin && u.pin.hash ? 'Resetting it also drops the fingerprint on whatever phone they were using, so they sign in again from scratch.' : ''}</p>
+        <h3>${AM.hasPin(u) ? 'Reset' : 'Issue'} a PIN for ${esc(u.name)}</h3>
+        <p class="muted small">Four digits. Tell ${esc(u.name.split(' ')[0])} in person, and this is the only time it is shown. ${AM.hasPin(u) ? 'Resetting it also drops the fingerprint on whatever phone they were using, so they sign in again from scratch.' : ''}</p>
         <label class="fld">PIN<input id="pnVal" inputmode="numeric" maxlength="4" value="${suggested}"></label>
         <div class="row"><button class="btn big" id="pnGo">Set it</button>
         <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button></div>
@@ -2660,11 +3032,18 @@
 
     $('#sSave').onclick = async () => {
       S.catalog.settings = S.catalog.settings || {};
+      /* Saving this page is a person putting their name to these numbers, which
+         is the only thing that turns them from a shipped placeholder into a rate
+         the app is allowed to add up. */
       S.catalog.settings.bagsPerBin = parseFloat($('#sBags').value) || 600;
       S.catalog.settings.dopCostPerUnit = parseFloat($('#sDop').value) || 50;
+      S.catalog.settings.bagsPerBinConfirmed = true;
+      S.catalog.settings.dopCostConfirmed = true;
       S.catalog.settings.dopDaysInService = parseFloat($('#sIn').value) || 30;
       S.catalog.settings.dopDaysIdle = parseFloat($('#sIdle').value) || 365;
       S.catalog.settings.lockMinutes = parseFloat($('#sLock').value) || 60;
+      const lead = $('#sLead');
+      if (lead && lead.value) S.catalog.settings.shopLead = lead.value;
       await AM.saveCatalog();
     };
     $('#pSync').onclick = () => AM.sync();
@@ -2678,6 +3057,19 @@
     if (cp) cp.onclick = () => navigator.clipboard.writeText(redirect).then(
       () => AM.toast('Copied'), () => AM.toast('Could not copy on this device', 'bad'));
 
+    /* Asks the office for the Intuit address with this sign-in attached, then
+       goes there. A plain link could not prove who started the connection. */
+    const qc = $('#qConnect');
+    if (qc) qc.onclick = async () => {
+      qc.disabled = true;
+      try {
+        const r = await fetch('/api/qbo?action=connect&mode=url');
+        const b = await r.json().catch(() => ({}));
+        if (r.ok && b.url) { location.href = b.url; return; }
+        AM.toast(b.message || b.error || 'Could not start the QuickBooks connection.', 'bad');
+      } catch (e) { AM.toast('No signal. Try again with a bar.', 'warn'); }
+      qc.disabled = false;
+    };
     $('#qOff').onclick = async () => { await fetch('/api/qbo?action=disconnect'); AM.toast('Disconnected'); };
     $('#qPrices').onclick = async () => {
       const r = await fetch('/api/qbo?action=prices');

@@ -202,6 +202,40 @@ main { min-height: 60vh; }
 .tile.in { background: var(--brand-2); }
 .tile.wide { grid-column: 1 / -1; min-height: 76px; flex-direction: row; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .tile.wide .tile-s { opacity: .9; }
+/* The two the shop is meant to notice: the list that has to be true before a
+   van leaves, and what the crews have asked for. Amber while there is
+   something outstanding, green once there is not, so the colour is the
+   message and nobody has to read the small line to know. */
+.tile.prep.not-ready { background: var(--warn); }
+.tile.prep.ready { background: var(--good); }
+.tile.asks { background: var(--accent); }
+
+/* ------------------------------------------------------- shop's ask list */
+.ask-grp { margin-top: 10px; }
+.ask-job { font-weight: bold; color: var(--ink-2); padding: 8px 0 4px; border-bottom: 1px solid var(--line); }
+.tab-badge {
+  display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px;
+  border-radius: 9px; background: var(--accent); color: #fff;
+  font-size: 11px; line-height: 18px; text-align: center; vertical-align: middle;
+}
+
+/* --------------------------------------------------------- waste receipt */
+.waste-log { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.waste-log-head { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.waste-log-row {
+  display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 5px 0; border-bottom: 1px solid var(--line-2); font-size: 13px;
+}
+.waste-log-row:last-child { border-bottom: 0; }
+
+/* A band across the pick list, so "what this shop pulls most" reads as a
+   heading and not as another thing to tap. */
+.pl-head {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--line-2); color: var(--ink-2);
+  font-size: 12px; font-weight: bold; padding: 6px 10px; margin: 6px 0 2px;
+  border-radius: 6px;
+}
 
 /* ------------------------------------------------------------------- stats */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 10px 0; }
@@ -293,6 +327,27 @@ main { min-height: 60vh; }
   border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff;
 }
 .ret-count .chkin { height: 46px; padding: 0 16px; }
+
+/* THE SAME NUMBER, TWO MEANINGS, ONE BUTTON EACH
+   A count at a van door answers one of two questions, and the app cannot tell
+   which from the number alone: three quarters of a box back on the shelf, or
+   three quarters of it used on the job. It used to have one button, so it only
+   ever heard one of them. Both are here now, full width under the counter and
+   the same height as it, because they are pressed in gloves and the wrong one
+   charges a job for stock that is sitting on the shelf. The label above them
+   names what is being counted, so neither button has to be guessed at. */
+.ret-commit { display: flex; align-items: center; gap: 8px; flex: 1 1 100%; flex-wrap: wrap; margin-top: 6px; }
+.rc-ask { color: var(--muted); font-size: 13px; }
+.ret-commit .btn { min-height: 46px; padding: 0 16px; }
+.ret-commit .btn.alt {
+  background: #fff; color: var(--good); border: 1px solid var(--good);
+}
+.ret-commit .btn.alt:hover { background: var(--good); color: #fff; }
+@media (max-width: 460px) {
+  .ret-commit { gap: 6px; }
+  .rc-ask { flex: 1 1 100%; }
+  .ret-commit .btn { flex: 1 1 0; }
+}
 
 /* Already off the truck. Quieter than the live list, because the work here is
    checking rather than doing. */
@@ -661,3 +716,148 @@ textarea.paste { width: 100%; font-family: ui-monospace, Menlo, Consolas, monosp
 .pull-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--line-2); font-size: 14px; }
 .pull-row:last-child { border-bottom: 0; }
 .pull-row.done { color: var(--good); }
+
+/* --------------------------------------------------------- job panel v2 ---
+   The figures at the top of a job used to be a flex row of bold numbers with
+   tiny grey captions, so a dollar figure, a day count and a bag count sat side
+   by side looking like the same kind of thing, and a lone "50" could land in
+   the middle of a row with nothing to anchor it. Each one is a card now, with
+   the number, what it is, and where it came from, in that order. */
+.jp-head { margin-bottom: 12px; }
+.jp-head h3 { margin: 0 0 4px; }
+
+.jp-figs {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px; margin: 12px 0 4px;
+}
+.jp-fig {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; min-width: 0;
+}
+.jp-fig.money { border-color: var(--brand-deep); }
+.jp-fig.warn { border-color: var(--warn); background: #fffbf2; }
+.jp-k { font-size: 24px; font-weight: bold; line-height: 1.1; overflow-wrap: anywhere; }
+.jp-fig.money .jp-k { color: var(--brand-deep); }
+.jp-fig.warn .jp-k { color: var(--warn); }
+.jp-l { font-size: 13px; font-weight: bold; color: var(--ink-2); }
+.jp-n { font-size: 11px; color: var(--muted); line-height: 1.35; }
+
+/* The money table reads down a single column, with the working underneath each
+   line rather than in a caption somewhere else on the screen. */
+.jp-cost td:first-child { line-height: 1.35; }
+.jp-cost .n { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.jp-total th { border-top: 2px solid var(--ink); font-size: 15px; }
+.jp-total .n { font-size: 17px; }
+.tbl tfoot th { border-top: 2px solid var(--line); font-weight: bold; }
+
+/* What a one of it actually is, on a pick list row. */
+.pl-uom { font-style: normal; font-size: 12px; color: var(--muted); }
+
+/* ------------------------------------------------------------- coming up ---
+   The planning tile sits above the work tiles and deliberately does not shout:
+   it is the only one on the screen that is not a thing to do right now, so it
+   reads as a heading with a number on it rather than a fifth button. */
+.tile.plan { background: #2c3e50; }
+.tile.plan.empty { background: #fff; color: var(--ink-2); border: 1px dashed var(--line); }
+.tile.plan.empty .tile-k { color: var(--ink); }
+
+.up-job .panel-head { align-items: flex-start; }
+.up-when { text-align: right; white-space: nowrap; }
+.up-when b { display: block; font-size: 17px; }
+.up-when.soon b { color: var(--warn); }
+
+/* ONE HEADING PER DAY
+   Three jobs going out tomorrow used to be three panels each saying
+   "tomorrow", and how many vans leave on a given morning is the question this
+   screen is actually being asked. So the day is the structure: a dark band
+   carrying the date and its own count, with that day's jobs indented under it
+   behind a rule, so which day is being looked at is never in question.
+
+   Deliberately not sticky. The topbar above it is already sticky and sits in
+   the flow, so a second sticky band would have to guess the topbar's height,
+   and that height changes when the tabs wrap on a narrow phone. The grouping
+   reads perfectly well scrolling with its own jobs. */
+.up-day { margin: 18px 0; }
+.up-day-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 10px 14px; border-radius: 8px;
+  background: #2c3e50; color: #fff;
+}
+.up-day-head h3 { margin: 0; font-size: 17px; color: #fff; }
+.up-day-n { font-size: 13px; opacity: .85; white-space: nowrap; }
+.up-day.soon .up-day-head { background: var(--brand-deep); }
+.up-day > .panel { margin-left: 10px; border-left: 3px solid var(--line); }
+@media (max-width: 460px) {
+  .up-day > .panel { margin-left: 0; }
+  .up-day-head { flex-wrap: wrap; gap: 2px; }
+}
+
+.up-need { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.up-need-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+}
+.up-need-row.guess { border-left: 3px solid var(--accent); }
+.up-need-row.short { border-left: 3px solid var(--bad); background: #fdf6f5; }
+.up-need-row > span:last-child { text-align: right; }
+
+/* The one time a set of PINs is readable. Big, spaced, and countable down a
+   tailgate, because it is read aloud once and then gone for good. */
+.pin-sheet { display: flex; flex-direction: column; gap: 4px; margin: 12px 0; }
+.pin-sheet-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+}
+.pin-sheet-row b { font-size: 22px; letter-spacing: .18em; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------ needs you ---
+   The one thing on the office screen that is a list of jobs rather than a list
+   of facts. It is absent whenever there is nothing to do, which is what stops
+   it becoming furniture people stop seeing. */
+.needs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.needs-head {
+  font-size: 13px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ink-2); font-weight: bold;
+}
+.needs-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 13px 14px; border: 1px solid var(--line); border-left-width: 4px;
+  border-radius: 10px; background: #fff; text-decoration: none; color: var(--ink);
+}
+.needs-row.bad { border-left-color: var(--bad); }
+.needs-row.warn { border-left-color: var(--warn); }
+.needs-row strong { display: block; font-size: 15px; }
+.needs-row em { display: block; font-style: normal; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.needs-go { font-size: 13px; font-weight: bold; color: var(--brand-deep); white-space: nowrap; }
+.needs-row:hover { background: var(--line-2); }
+
+/* A stat that needs a second line to be worth reading. */
+.stat-note { font-style: normal; opacity: .8; }
+
+/* A line whose number is a placeholder, not a fact. */
+.jp-cost tr.assumed td { background: #fffbf2; }
+.jp-cost tr.assumed .line-id b { color: var(--warn); }
+
+/* A note under a settings field explaining where its number came from. */
+.fld-note { display: block; font-style: normal; font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+
+/* The how-many-in-one cell. Highlighted only where the answer would actually
+   change how a crew counts something back. */
+.pack-cell input { width: 5.5em; }
+.pack-cell.wants input { border-color: var(--warn); background: #fffbf2; }
+
+/* Only a box of countable things gets asked how many are in one. Rolls and
+   liquids say what they are and are left alone. */
+.pack-cell.none { text-align: left; }
+.pack-cell.has-guess input { border-color: var(--brand-deep); }
+.pack-take {
+  display: block; margin-top: 4px; padding: 3px 8px; font-size: 12px; font-weight: bold;
+  border: 1px solid var(--brand-deep); background: #fff; color: var(--brand-deep);
+  border-radius: 6px; cursor: pointer;
+}
+.pack-take:hover { background: var(--brand-deep); color: #fff; }
+
+/* A line whose unit of measure looks wrong, rather than one missing a count. */
+.pack-cell.suspect { background: #fffbf2; }
+.pack-flag { display: inline-block; font-size: 12px; font-weight: bold; color: var(--warn); }
