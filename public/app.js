@@ -1936,6 +1936,21 @@ async function touchSession() {
 }
 AM.touchSession = touchSession;
 
+/* THE FRONT DOOR
+   This is one app. The owner, the office and the field leads land on the
+   command centre, where Equipment is one section among the rest. Crew land on
+   the shop screens, which is all they use. "Shop and settings" in the command
+   centre comes back here with #/ on the address, so it does not bounce. */
+function goCommand(justSignedIn) {
+  if (!S.role || S.role === 'crew') return false;
+  if (location.hash && location.hash !== '#') return false;
+  if (/[?&]shop\b/.test(location.search)) return false;
+  if (!justSignedIn && /[?&]signin\b/.test(location.search)) return false;
+  location.replace('/command.html');
+  return true;
+}
+AM.goCommand = goCommand;
+
 async function checkLock() {
   /* Whether sign-in is needed is the office's call, not this phone's copy of
      the list. A phone holding an old or starter list used to decide nobody had
@@ -1978,7 +1993,7 @@ async function bioEnrol(u) {
     const cred = await navigator.credentials.create({
       publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rp: { name: 'A&M Inventory' },
+        rp: { name: 'A&M Command Centre' },
         user: { id: crypto.getRandomValues(new Uint8Array(16)), name: u.name, displayName: u.name },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
         authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
@@ -2046,7 +2061,7 @@ async function renderLock() {
       <div class="lock">
         <div class="lock-card">
           <h2>Sign in</h2>
-          <p class="muted">Every movement carries your name, so the shop can put a mistake right instead of arguing about it. Four digits, and this phone remembers you until it has sat idle for an hour.</p>
+          <p class="muted">The A&amp;M Office Command Centre. Tap your name and type your four digits. This device remembers you until it has sat idle for an hour.</p>
           ${hasBio ? `<button class="btn big" id="bioGo">Unlock as ${esc(bio.name)}</button>
             <button class="btn-ghost" id="bioAlt">Somebody else, or use a PIN</button>` : ''}
           <div class="who-list ${hasBio ? 'tucked' : ''}" id="whoList">
@@ -2222,6 +2237,7 @@ async function renderLock() {
   };
 
   const afterUnlock = () => {
+    if (goCommand(true)) return;
     document.body.classList.remove('locked');
     render();
     /* Straight to the office, so a phone that was showing the starter list or
@@ -2393,6 +2409,7 @@ AM.boot = async function boot() {
 
   derive();
   await checkLock();
+  if (!S.locked && S.me && S.token && goCommand()) return;
   render();
   if (!S.locked && !S.me) pickMe();
 

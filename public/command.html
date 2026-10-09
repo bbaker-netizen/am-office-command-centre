@@ -272,7 +272,7 @@ const TABS = {
   sites:     { label:"Sites",        group:"Field" },
   closeout:  { label:"Closeout",     group:"Field" },
   equipment: { label:"Equipment",    group:"Field" },
-  drafts:    { label:"To send", group:"Robots" }
+  drafts:    { label:"To send", group:"Assistants" }
 };
 let CFG = ROLES[ROLE] || ROLES.craig;
 
@@ -921,30 +921,32 @@ function api(part, fresh){
     });
 }
 function appLoad(fresh){
-  api("jobs", fresh).then(d => {
+  const waits = [];
+  waits.push(api("jobs", fresh).then(d => {
     S.jobs = (d.nodes || []).map(flat); S.jobTotal = d.total; S.stamp = d.storedAt;
     S.jobsShort = d.total != null && (d.nodes || []).length < d.total;
     S.orders = d.orders || []; S.jobsErr = S.ordersErr = null; render();
-  }).catch(e => { S.jobsErr = S.ordersErr = e; render(); });
-  if(CFG.qb) api("money", fresh).then(d => {
+  }).catch(e => { S.jobsErr = S.ordersErr = e; render(); }));
+  if(CFG.qb) waits.push(api("money", fresh).then(d => {
     S.M.bs = d.bs; S.M.ar = d.ar; S.M.ap = d.ap; S.M.pl = d.pl;
     S.bsErr = S.arErr = S.apErr = S.plErr = null; render();
-  }).catch(e => { S.bsErr = S.arErr = S.apErr = S.plErr = e; render(); });
-  api("inventory", fresh).then(d => { S.inv = d; S.invErr = null; render(); })
-    .catch(e => { S.invErr = e; render(); });
-  if(CFG.tabs.includes("drafts")) loadMail();
-  if(CFG.tabs.includes("buying")) api("buying", fresh).then(d => { S.buy = d; render(); })
-    .catch(e => { S.buy = { errors:{ jobtread: errCopy(e), quickbooks: errCopy(e) } }; render(); });
+  }).catch(e => { S.bsErr = S.arErr = S.apErr = S.plErr = e; render(); }));
+  waits.push(api("inventory", fresh).then(d => { S.inv = d; S.invErr = null; render(); })
+    .catch(e => { S.invErr = e; render(); }));
+  if(CFG.tabs.includes("drafts")) waits.push(loadMail());
+  if(CFG.tabs.includes("buying")) waits.push(api("buying", fresh).then(d => { S.buy = d; render(); })
+    .catch(e => { S.buy = { errors:{ jobtread: errCopy(e), quickbooks: errCopy(e) } }; render(); }));
+  return Promise.all(waits);
 }
 function appStop(title, text){
   $("main").innerHTML = '<div class="tabhead"><h1>' + E(title) + '</h1></div><div class="verdict caution"><p>' + E(text) + '</p>' +
-    '<div class="meta"><a href="/">Open the A&amp;M app</a> and sign in, then come back here.</div></div>';
+    '<div class="meta"><a href="/?signin=1">Sign in to the A&amp;M app</a>. You come straight back here.</div></div>';
   $("conndot").className = "dot warn"; $("connlabel").textContent = "Not signed in";
 }
 async function startApp(){
   sizeTop();
   const back = document.createElement("a");
-  back.className = "refresh"; back.href = "/"; back.textContent = "Shop screens"; back.style.textDecoration = "none";
+  back.className = "refresh"; back.href = "/#/"; back.textContent = "Shop and settings"; back.style.textDecoration = "none";
   $("refresh").parentNode.insertBefore(back, $("refresh"));
   TOKEN = await idbToken();
   if(!TOKEN) return appStop("Sign in first", "This device has not signed in to the A&M app yet.");
@@ -956,7 +958,7 @@ async function startApp(){
   }
   if(me.role === "crew") return appStop("Not part of your screens", "The command centre is for the office and field leads. Your screens are the shop screens. If you need this, ask Jen.");
   ROLE = me.role === "owner" ? "craig" : me.role;
-  /* The robots' emails are sent from the app by the owner and the office. */
+  /* The assistants' emails are sent from the app by the owner and the office. */
   const tabs = ROLES[ROLE].tabs.filter(t => t !== "drafts").concat(["owner", "office"].includes(me.role) ? ["drafts"] : []);
   CFG = { ...ROLES[ROLE], tabs, gmail:false };
   const first = String(me.name || "").split(" ")[0];
@@ -971,7 +973,12 @@ async function startApp(){
   $("refresh").disabled = false;
   $("refresh").addEventListener("click", () => {
     const b = $("refresh"); b.disabled = true; b.textContent = "Refreshing";
-    appLoad(true); setTimeout(() => { b.disabled = false; b.textContent = "Refresh"; }, 1500);
+    /* Say when it has finished, so a press never looks like it did nothing. */
+    appLoad(true).then(() => {
+      const t = new Date().toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" });
+      b.textContent = "Updated " + t;
+      setTimeout(() => { b.disabled = false; b.textContent = "Refresh"; }, 2500);
+    });
   });
   setInterval(() => { if(!document.hidden) appLoad(false); }, 300000);
 }
@@ -1030,7 +1037,7 @@ document.addEventListener("click", ev => {
 });
 
 
-/* ---------- the robots' emails: read, send or discard (app only) ---------- */
+/* ---------- the assistants' emails: read, send or discard (app only) ---------- */
 function mailCall(params, body){
   const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) }
                     : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
@@ -1041,7 +1048,7 @@ function mailCall(params, body){
   });
 }
 function loadMail(){
-  mailCall("action=status").then(st => {
+  return mailCall("action=status").then(st => {
     S.mailStatus = st; S.mailErr = null; render();
     if(st.connected) return mailCall("action=list").then(l => { S.drafts = l.drafts; S.draftsErr = null; render(); });
   }).catch(e => { S.mailErr = e; S.draftsErr = e; render(); });
@@ -1118,7 +1125,7 @@ VIEWS.overview = {
                : ROLE === "office" ? "Estimating, dispatch, money and records for the office. Press a number to see the jobs behind it."
                : "Every won job from the day it is scheduled to the day it is closed out. Press a number to see the jobs behind it.";
     let html = head(ROLE === "craig" ? "Good morning, " + (S.meName || "Craig") : ROLE === "office" ? "Office overview" : "Field overview", lede);
-    html += verdictHtml(all, "Nothing on any tab needs a decision right now.", "Every section has been read. Check back after the morning robots have run.");
+    html += verdictHtml(all, "Nothing on any tab needs a decision right now.", "Every section has been read. Check back after the morning assistants have run.");
     html += kpis();
     if(S.jobs) html += flowStrip();
     html += '<div class="card"><h2>Needs a decision</h2><p class="lede">Worst first. Each line is worked out live from the systems, so it clears itself once the cause is fixed.</p>';
@@ -1711,20 +1718,20 @@ function invCards(){
 /* ================= DRAFTS (Craig) ================= */
 function mailAppView(view){
   const st = S.mailStatus;
-  let h = head("To send", "Emails the morning robots have written. They never send on their own. Read each one, then send or discard it here.");
-  if(!st) return h + (S.mailErr ? failBox(S.mailErr, "Mail") : wait("the robots' mailbox"));
-  if(!st.connected) return h + '<div class="card"><h2>Connect the robots\' mailbox</h2><p class="sub">The robots write into ' + E(st.mailbox) + '. Connect it once, signed in to Google as that account, and its drafts show here.</p>' +
+  let h = head("To send", "Emails the morning assistants have written. They never send on their own. Read each one, then send or discard it here.");
+  if(!st) return h + (S.mailErr ? failBox(S.mailErr, "Mail") : wait("the assistants' mailbox"));
+  if(!st.connected) return h + '<div class="card"><h2>Connect the assistants\' mailbox</h2><p class="sub">The assistants write into ' + E(st.mailbox) + '. Connect it once, signed in to Google as that account, and its drafts show here.</p>' +
     (st.missingEnv && st.missingEnv.length ? '<div class="state wait">Netlify still needs: ' + E(st.missingEnv.join(", ")) + '.</div>' : '<button class="btn" data-mail-connect>Connect ' + E(st.mailbox) + '</button>') + '</div>';
   if(!S.drafts) return h + (S.draftsErr ? failBox(S.draftsErr, "Mail") : wait("the drafts"));
   const out = S.drafts.filter(d => String(d.to || "").split(",").some(x => x.trim() && !/@amabatement\.com>?$/i.test(x.trim())));
   const inside = S.drafts.filter(d => !out.includes(d));
-  h += verdictHtml(view.alerts(), "Nothing to a client is waiting.", plural(inside.length, "robot report") + " waiting.");
+  h += verdictHtml(view.alerts(), "Nothing to a client is waiting.", plural(inside.length, "assistant report") + " waiting.");
   const row = d => { const age = daysSince(d.date); return '<tr data-mail-open="' + E(d.id) + '" style="cursor:pointer" tabindex="0"><td><span class="nm">' + E(d.subject || "(no subject)") + '</span><span class="sm">' + E((d.snippet || "").slice(0, 110)) + '</span></td><td>' + E(d.to || "Nobody yet") + '</td>' +
     '<td class="r"><span class="tag ' + (age >= 3 ? "stop" : age >= 1 ? "caution" : "mute") + '">' + (age === 0 ? "Today" : plural(age, "day")) + '</span></td><td class="r"><span class="go">Read</span></td></tr>'; };
   h += '<div class="grid"><div class="card wide"><h2>To clients and others outside A&amp;M</h2><p class="lede">Oldest first. Press one to read it, then send or discard.</p>' +
     tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', out.slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).map(row), "Nothing waiting to go to a client.", 40) + '</div>' +
-    '<div class="card wide"><h2>Robot reports</h2><p class="lede">Morning summaries addressed inside A&amp;M.</p>' +
-    tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', inside.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(row), "No robot reports waiting.", 15) + '</div></div>';
+    '<div class="card wide"><h2>Assistant reports</h2><p class="lede">Morning summaries addressed inside A&amp;M.</p>' +
+    tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', inside.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(row), "No assistant reports waiting.", 15) + '</div></div>';
   return h;
 }
 const isInside = a => /@amabatement\.com>?$/i.test(String(a || "").trim());
@@ -1734,22 +1741,22 @@ VIEWS.drafts = {
     const a = []; if(!S.drafts) return a;
     const out = S.drafts.filter(d => recips(d).some(x => !isInside(x)));
     const old = out.filter(d => daysSince(d.date) >= 1);
-    if(old.length){ const oldest = Math.max(...old.map(d => daysSince(d.date))); a.push({ lvl:"stop", text: plural(old.length, "email to a client is", "emails to clients are") + " written and waiting to be sent.", meta:"The oldest has waited " + plural(oldest, "day") + ". The robots draft, they never send. Somebody has to open each one and press Send." }); }
+    if(old.length){ const oldest = Math.max(...old.map(d => daysSince(d.date))); a.push({ lvl:"stop", text: plural(old.length, "email to a client is", "emails to clients are") + " written and waiting to be sent.", meta:"The oldest has waited " + plural(oldest, "day") + ". The assistants draft, they never send. Somebody has to open each one and press Send." }); }
     return a;
   },
   render(){
     if(PLATFORM === "app") return mailAppView(this);
-    let h = head("Waiting to send", "Emails the morning robots have written into your Gmail drafts. They never send on their own. Open one, check it, press Send.");
+    let h = head("Waiting to send", "Emails the morning assistants have written into your Gmail drafts. They never send on their own. Open one, check it, press Send.");
     if(!S.drafts) return h + (S.draftsErr ? failBox(S.draftsErr, "Gmail") : wait("your Gmail drafts"));
     const out = S.drafts.filter(d => (d.toRecipients || []).some(x => !isInside(x)));
     const inside = S.drafts.filter(d => !(d.toRecipients || []).some(x => !isInside(x)));
-    h += verdictHtml(this.alerts(), "Nothing to a client is waiting in drafts.", plural(inside.length, "robot report") + " to you in drafts.");
+    h += verdictHtml(this.alerts(), "Nothing to a client is waiting in drafts.", plural(inside.length, "assistant report") + " to you in drafts.");
     const row = d => { const age = daysSince(d.date); return '<tr><td><span class="nm">' + E(d.subject || "(no subject)") + '</span><span class="sm">' + E((d.snippet || "").slice(0, 110)) + '</span></td><td>' + E((d.toRecipients || []).join(", ") || "Nobody yet") + '</td>' +
       '<td class="r"><span class="tag ' + (age >= 3 ? "stop" : age >= 1 ? "caution" : "mute") + '">' + (age === 0 ? "Today" : plural(age, "day")) + '</span></td><td class="r">' + (d.viewUrl ? '<a class="go" href="' + E(d.viewUrl) + '" target="_blank" rel="noopener">Open in Gmail</a>' : '') + '</td></tr>'; };
     h += '<div class="grid"><div class="card wide"><h2>To clients and others outside A&amp;M</h2><p class="lede">Quote chases, site visit confirmations and replies. Oldest first.' + (S.draftsMore ? " Showing the newest 200 drafts." : "") + '</p>' +
       tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', out.slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).map(row), "Nothing waiting to go to a client.", 40) + '</div>';
-    h += '<div class="card wide"><h2>Robot reports to you</h2><p class="lede">Morning summaries addressed inside A&amp;M. Read them, then delete or file them.</p>' +
-      tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', inside.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(row), "No robot reports waiting.", 15) + '</div></div>';
+    h += '<div class="card wide"><h2>Assistant reports to you</h2><p class="lede">Morning summaries addressed inside A&amp;M. Read them, then delete or file them.</p>' +
+      tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', inside.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(row), "No assistant reports waiting.", 15) + '</div></div>';
     return h;
   }
 };
