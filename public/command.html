@@ -77,6 +77,77 @@ button{font:inherit;color:inherit}
 .tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;flex:none}
 .tools .live{margin-right:6px}
 
+/* post mortem */
+.pm-back{margin-bottom:10px}
+.pm-meta .pm-grid3{display:grid;gap:10px 16px;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))}
+.pm-meta input,.pm-meta select,.pm-stand input,.pm-keep input,.pm-crow input,.pm-crow select,.pm-any input,.pm-learn textarea,.pm-in input{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);color:var(--ink);min-width:0;width:100%;box-sizing:border-box}
+.pm-learn textarea{resize:vertical}
+.pm-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.pm-chips .sub{margin:0 4px 0 0}
+.pm-chip{font:inherit;font-size:12.5px;padding:4px 10px;border:1px solid var(--rule);border-radius:999px;background:var(--panel-2);color:var(--ink-2);cursor:pointer}
+.pm-chip:hover{border-color:var(--cyan)}
+#pmForm .card{margin-bottom:16px}
+.pm-total .pm-tot{display:grid;gap:12px 28px;grid-template-columns:minmax(0,220px) minmax(0,1fr);align-items:center}
+.pm-total .k,.pm-keep .k,.pm-commit .k,.pm-facts .k{display:block;font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+.big small{font-size:15px;color:var(--ink-3);font-weight:600;letter-spacing:0}
+.pm-bars{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.pm-bars li{display:grid;grid-template-columns:minmax(0,210px) minmax(0,1fr) 44px;gap:10px;align-items:center;font-size:13px}
+.pm-bars .track{height:10px;background:var(--rule-soft);border-radius:5px;overflow:hidden}
+.pm-bars .fill{display:block;height:100%;background:var(--cyan)}
+.pm-bars .fill.low{background:var(--caution)}
+.pm-bars .num{text-align:right;font-weight:700}
+.pm-fig{width:100%}
+.pm-fig th[scope="row"]{text-align:left;font-weight:600;white-space:nowrap}
+.pm-src{display:block;font-size:10.5px;font-weight:500;color:var(--ink-3);font-family:inherit;white-space:nowrap}
+.pm-src.typed{color:var(--caution)}
+.pm-src.none{color:var(--ink-3);font-style:italic}
+.pm-pct th[scope="row"] .pm-src{white-space:normal;max-width:300px}
+.pm-sum th,.pm-sum td{border-top:2px solid var(--rule)}
+.pm-bad{color:var(--stop)!important}
+.pm-in{width:150px}
+.pm-in input{padding:5px 8px;font-size:13px}
+.pm-facts{display:grid;gap:10px 18px;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));margin:14px 0;padding:12px 14px;background:var(--panel-2);border-radius:3px}
+.pm-facts .num{font-size:15px;font-weight:700}
+.pm-facts small{font-weight:500;font-size:12px;color:var(--ink-3)}
+.pm-scores{margin-top:16px;border-top:1px solid var(--rule-soft);padding-top:14px}
+.pm-sh{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+.pm-sec{font-size:22px;letter-spacing:-.02em;color:var(--ink)}
+.pm-sec small{font-size:12px;color:var(--ink-3)}
+.pm-line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule-soft)}
+.pm-q{font-size:14px;color:var(--ink)}
+.pm-btns{display:flex;gap:4px;flex-wrap:wrap}
+.pm-n{font:inherit;font-size:13px;font-weight:700;width:34px;height:34px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);color:var(--ink-2);cursor:pointer}
+.pm-n:hover{border-color:var(--ink-3)}
+.pm-n.on.lo{background:var(--stop);border-color:var(--stop);color:#fff}
+.pm-n.on.mid{background:var(--caution);border-color:var(--caution);color:#fff}
+.pm-n.on.hi{background:var(--clear);border-color:var(--clear);color:#fff}
+.pm-learn{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink-2);margin-top:12px}
+.pm-stand{margin:6px 0 4px}
+.pm-keep,.pm-commit{display:grid;gap:8px;margin-bottom:16px}
+.pm-crow{display:grid;grid-template-columns:110px minmax(0,1fr) 150px 150px auto auto;gap:6px;align-items:center}
+.pm-done{display:flex;align-items:flex-start;gap:8px;font-size:13.5px;color:var(--ink-2);margin:6px 0;line-height:1.4}
+.pm-done input{margin-top:3px;flex:none}
+.pm-crow .pm-done{white-space:nowrap;align-items:center;margin:0}
+.pm-crow .pm-done input{margin-top:0}
+.pm-crow input[type=checkbox]{width:auto}
+.pm-finish .actions{margin-top:10px}
+.pm-miss{margin:10px 0 0;font-size:13px}
+.pm-any{display:flex;gap:8px;align-items:flex-end;margin-top:14px;flex-wrap:wrap}
+.pm-any .fld{flex:1 1 260px}
+.pm-clist{list-style:none;margin:0;padding:0}
+.pm-clist li{display:flex;flex-direction:column;gap:3px;padding:8px 0;border-bottom:1px solid var(--rule-soft);font-size:13.5px}
+.pm-clist .sm{font-size:12px;color:var(--ink-3);padding-left:22px}
+@media (max-width:700px){
+  .pm-total .pm-tot{grid-template-columns:1fr}
+  .pm-bars li{grid-template-columns:minmax(0,1fr) 90px 36px}
+  .pm-line{grid-template-columns:1fr}
+  .pm-btns{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:3px}
+  .pm-n{width:auto;min-width:0;height:34px;font-size:12.5px}
+  .pm-crow{grid-template-columns:1fr 1fr}
+  .pm-crow input[data-c$=":what"]{grid-column:1/-1;order:-1}
+  .pm-in{width:110px}
+}
+
 /* walkthrough: the same look as the shop's, in the command centre's colours */
 #ccTour{position:fixed;inset:0;z-index:200;pointer-events:none}
 #ccSpot{position:fixed;border-radius:10px;pointer-events:none;box-shadow:0 0 0 9999px rgba(26,25,23,.62);
@@ -300,6 +371,7 @@ const TABS = {
   projects:  { label:"Projects",     group:"Field" },
   sites:     { label:"Sites",        group:"Field" },
   closeout:  { label:"Closeout",     group:"Field" },
+  postmortem:{ label:"Post mortem",  group:"Field" },
   equipment: { label:"Equipment",    group:"Field" },
   drafts:    { label:"To send", group:"Assistants" }
 };
@@ -576,6 +648,8 @@ function goSection(key){
 function render(){
   drawTabs(); tblN = 0;
   const v = VIEWS[current];
+  /* Somebody is typing in a form on this page. Leave it alone; the numbers catch up next time. */
+  if(v && v.hold && v.hold()) return;
   let html;
   try{ html = v ? v.render() : '<div class="state">Nothing here.</div>'; }
   catch(e){ html = '<div class="state err">This tab hit a fault while drawing: ' + E(e && e.message) + '. Press Refresh. If it keeps happening, tell Bruce.</div>'; }
@@ -588,9 +662,9 @@ function render(){
 function footer(){
   return '<div class="note"><b>Where these numbers come from.</b> Read live from ' +
     (CFG.qb ? "JobTread and QuickBooks" : "JobTread") + (PLATFORM === "app" ? ", plus the shop's own stock records," : "") + (CFG.gmail ? ", plus your Gmail drafts," : "") +
-    (PLATFORM === "app" ? ' through the A&amp;M app, every few minutes or when you press Refresh.' : ' using your own sign in, every time the page opens or you press Refresh.') + ' Nothing is copied or stored here and nothing here changes either system. ' +
+    (PLATFORM === "app" ? ' through the A&amp;M app, every few minutes or when you press Refresh.' : ' using your own sign in, every time the page opens or you press Refresh.') + (PLATFORM === "app" ? ' Nothing is copied into a second list. QuickBooks is only read. The only things saved back to JobTread are job details someone changes and finished post-mortem notes, each under that person\'s name. ' : ' Nothing is copied or stored here and nothing here changes either system. ') +
     'To change a job, open it and press <b>Open in JobTread</b>. Site photos live in Encircle and safety records live in SiteDocs, so neither is shown here. All money is Canadian dollars.</div>' +
-    '<div class="foot"><span>A&amp;M Abatement Services Ltd</span><span>' + E(CFG.title) + '</span><span class="sp"></span><span>Reads live, stores nothing, changes nothing</span></div>';
+    '<div class="foot"><span>A&amp;M Abatement Services Ltd</span><span>' + E(CFG.title) + '</span><span class="sp"></span><span>' + (PLATFORM === "app" ? 'Reads live; changes only what a person saves' : 'Reads live, stores nothing, changes nothing') + '</span></div>';
 }
 function go(tab){
   if(!CFG.tabs.includes(tab)) tab = "overview";
@@ -994,6 +1068,7 @@ function appLoad(fresh){
   waits.push(api("inventory", fresh).then(d => { S.inv = d; S.invErr = null; render(); })
     .catch(e => { S.invErr = e; render(); }));
   if(CFG.tabs.includes("drafts")) waits.push(loadMail());
+  if(CFG.tabs.includes("postmortem")) waits.push(loadPM());
   if(CFG.tabs.includes("buying")) waits.push(api("buying", fresh).then(d => { S.buy = d; render(); })
     .catch(e => { S.buy = { errors:{ jobtread: errCopy(e), quickbooks: errCopy(e) } }; render(); }));
   return Promise.all(waits);
@@ -1024,7 +1099,13 @@ async function startApp(){
   if(me.role === "crew") return appStop("Not part of your screens", "The command centre is for the office and field leads. Your screens are the shop screens. If you need this, ask Jen.");
   ROLE = me.role === "owner" ? "craig" : me.role;
   /* The assistants' emails are sent from the app by the owner and the office. */
-  const tabs = ROLES[ROLE].tabs.filter(t => t !== "drafts").concat(["owner", "office"].includes(me.role) ? ["drafts"] : []);
+  let tabs = ROLES[ROLE].tabs.filter(t => t !== "drafts").concat(["owner", "office"].includes(me.role) ? ["drafts"] : []);
+  /* Post mortems: in Field beside Closeout, or in Office for the office, who have no Field section. */
+  if(["owner", "office", "field"].includes(me.role)){
+    const at = tabs.indexOf("closeout") >= 0 ? tabs.indexOf("closeout") + 1 : (tabs.indexOf("records") >= 0 ? tabs.indexOf("records") + 1 : tabs.length);
+    tabs.splice(at, 0, "postmortem");
+    if(tabs.indexOf("closeout") < 0) TABS.postmortem.group = "Office";
+  }
   CFG = { ...ROLES[ROLE], tabs, gmail:false };
   const first = String(me.name || "").split(" ")[0];
   if(me.role === "owner") CFG.title = (first ? first + "'s" : "Owner's") + " command centre";
@@ -1991,6 +2072,371 @@ VIEWS.buying = {
   }
 };
 
+/* ================= POST MORTEM (inside the A&M app only) =================
+   At the end of every job Craig, Jen or Amir runs a post-mortem with everyone
+   who worked on it. Four perspectives, four lines each, scored 1 to 10. Each
+   perspective scores out of 10 and the job out of 40. The figures come from
+   JobTread and QuickBooks; only what no system holds yet is typed in. */
+const PMLINES = {
+  fin: { label:"Financial", lines:[
+    "Margin landed where we priced it",
+    "Every extra and change order was written up and billed",
+    "Nothing was done that we did not charge for (standby, extra disposal, extra trips)",
+    "Invoiced within 48 hours of finishing, with the paperwork the client needs"] },
+  ops: { label:"Operational", lines:[
+    "Finished on the schedule we promised",
+    "Labour hours and crew size came in on plan",
+    "Safe site: notice filed on time, no incidents, clearance passed first time",
+    "Gear and material logged out and back, nothing lost, disposal as estimated"] },
+  cli: { label:"Client", lines:[
+    "Client was satisfied at the final walkthrough",
+    "We kept the client informed the whole way through",
+    "Close-out package complete: clearance, waste manifests, photos, short deficiency list",
+    "Client would hire us again, and a Google review was asked for"] },
+  emp: { label:"Employees and subcontractors", lines:[
+    "Crew performance and teamwork on this job",
+    "Someone took ownership and stood out",
+    "Subcontractors and temps showed up and did quality work",
+    "Subcontractor and temp conduct, safety and paperwork (WCB, insurance, tickets)"] }
+};
+const PMKEYS = ["fin", "ops", "cli", "emp"];
+const PMGRADE = t => t === null ? "" : t >= 34 ? "Strong job. Work out what we did and repeat it." : t >= 28 ? "Solid job. One thing to fix." : t >= 22 ? "Watch this. Two or more perspectives are dragging." : "Problem job. Work out what it cost us before the next one is priced.";
+const PMSHORT = t => t === null ? "" : t >= 34 ? "Strong" : t >= 28 ? "Solid" : t >= 22 ? "Watch" : "Problem";
+const PM = { pageErr:null, list:null, listErr:null, open:null, rec:null, facts:null, factsErr:null, msg:"", saving:false, savedAt:null, timer:null, finishing:null };
+const P1 = v => (v === null || v === undefined || isNaN(v)) ? "" : (v * 100).toFixed(1) + "%";
+const N1 = v => (v === null || v === undefined || isNaN(v)) ? "" : (Math.round(v * 10) / 10).toLocaleString("en-CA");
+
+function pmCall(params, body){
+  const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) }
+                    : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
+  return fetch("/api/postmortem" + (params ? "?" + params : ""), opts).then(async r => {
+    const b = await r.json().catch(() => ({}));
+    if(!r.ok) throw { code: b.error || ("http_" + r.status), message: b.message || ("The app answered " + r.status + ".") };
+    return b;
+  });
+}
+function loadPM(){
+  return pmCall("action=list").then(d => { PM.list = d.records || []; PM.listErr = null; render(); })
+    .catch(e => { PM.listErr = e; render(); });
+}
+const pmSec = s => { const v = (s || []).filter(x => typeof x === "number"); return v.length === 4 ? Math.round(v.reduce((a, b) => a + b, 0) / 4 * 10) / 10 : null; };
+function pmTotals(rec){
+  const per = {}; PMKEYS.forEach(k => per[k] = pmSec(rec.scores[k]));
+  const all = PMKEYS.every(k => per[k] !== null);
+  return { per, total: all ? Math.round(PMKEYS.reduce((a, k) => a + per[k], 0) * 10) / 10 : null };
+}
+function pmReady(){
+  if(!S.jobs) return [];
+  const done = new Set((PM.list || []).filter(r => r.status === "finished").map(r => r.jobId));
+  return S.jobs.filter(j => !isSpecial(j) && !done.has(j._id) && (st(j) === "Job Post Mortem" || (st(j) === "Closed Won" && (d => d !== null && d <= 30)(daysSince(j._closed)))));
+}
+function pmOpenCommitments(){
+  const out = [];
+  (PM.list || []).forEach(r => (r.commitments || []).forEach((c, i) => { if(!c.done) out.push({ r, c, i }); }));
+  return out.sort((a, b) => String(a.c.due || "9999").localeCompare(String(b.c.due || "9999")));
+}
+
+/* ---------- the figures: system value, or what somebody typed ---------- */
+function pmFig(key, sys){
+  const o = PM.rec && PM.rec.figures && PM.rec.figures[key];
+  if(o && o.value !== null && o.value !== undefined && o.value !== "") return { v: Number(o.value), typed: true, by: o.by };
+  return { v: (sys === null || sys === undefined) ? null : Number(sys), typed: false };
+}
+function pmNumbers(){
+  const f = PM.facts || {}, p = f.plan || {}, a = f.actual || {}, inv = f.invoices || null;
+  const price = pmFig("price", inv && inv.list && inv.list.length ? inv.billed : null);
+  const lab = pmFig("labourCost", a.labourCost), hrs = pmFig("labourHours", a.labourHours);
+  const mat = pmFig("materials", a.materials), sub = pmFig("subs", a.subs), eq = pmFig("equipment", a.equipment), dis = pmFig("disposal", a.disposal), oth = pmFig("other", a.other);
+  const parts = [lab, mat, sub, eq, dis, oth];
+  const known = parts.filter(x => x.v !== null);
+  const cost = known.length ? known.reduce((s, x) => s + x.v, 0) : null;
+  const planCost = p.cost === undefined ? null : p.cost;
+  const m = (pr, c) => (pr && c !== null) ? (pr - c) / pr : null;
+  const mk = (pr, c) => (pr !== null && c) ? (pr - c) / c : null;
+  const complete = parts.every(x => x.v !== null);
+  return { p, a, inv, price, lab, hrs, mat, sub, eq, dis, oth, cost, planCost, complete,
+    planMargin: m(p.price, planCost), actMargin: complete ? m(price.v, cost) : null, planMarkup: mk(p.price, planCost), actMarkup: complete ? mk(price.v, cost) : null,
+    days: pmFig("days", a.days), crew: pmFig("crew", a.crew), rework: pmFig("rework", null), missing: parts.filter(x => x.v === null).length };
+}
+const SRC = { jt:"JobTread", ts:"JobTread timesheets", bills:"JobTread supplier bills", qb:"QuickBooks invoices", est:"JobTread estimate", field:"JobTread job field" };
+function figRow(label, key, plan, planSrc, act, actSrc, fmt, lowerIsBetter){
+  fmt = fmt || M;
+  let var_ = (plan !== null && plan !== undefined && act.v !== null) ? act.v - plan : null;
+  if(var_ !== null && Math.abs(var_) < 0.005 * Math.max(1, Math.abs(plan)) && Math.abs(var_) < 0.5) var_ = 0;
+  const bad = var_ !== null && (lowerIsBetter ? var_ > 0.005 : var_ < -0.005);
+  const src = act.typed ? '<span class="pm-src typed">Typed by ' + E(act.by || "someone") + '</span>' : (act.v !== null ? '<span class="pm-src">' + E(actSrc) + '</span>' : '<span class="pm-src none">Not in any system yet</span>');
+  const val = act.typed ? act.v : "";
+  return '<tr><th scope="row">' + E(label) + '</th><td class="r num">' + (plan === null || plan === undefined ? '<span class="pm-src none">n/a</span>' : fmt(plan)) + (planSrc ? '<span class="pm-src">' + E(planSrc) + '</span>' : '') + '</td>' +
+    '<td class="r num">' + (act.v === null ? "" : fmt(act.v)) + src + '</td>' +
+    '<td class="r num' + (bad ? ' pm-bad' : '') + '">' + (var_ === null ? "" : (var_ > 0 ? "+" : "") + fmt(var_)) + '</td>' +
+    (key ? '<td class="pm-in"><input type="number" step="0.01" inputmode="decimal" data-fig="' + key + '" value="' + E(val) + '" placeholder="Type to correct" aria-label="Type the actual ' + E(label) + '"></td>' : '<td></td>') + '</tr>';
+}
+function pctRow(label, plan, act, hint){
+  const d = (plan !== null && act !== null) ? act - plan : null;
+  return '<tr class="pm-pct"><th scope="row">' + E(label) + (hint ? '<span class="pm-src">' + E(hint) + '</span>' : '') + '</th><td class="r num">' + P1(plan) + '</td><td class="r num">' + P1(act) + '</td><td class="r num' + (d !== null && d < -0.0005 ? ' pm-bad' : '') + '">' + (d === null ? "" : (d > 0 ? "+" : "") + (d * 100).toFixed(1) + " pts") + '</td><td></td></tr>';
+}
+function scoreBlock(k){
+  const rec = PM.rec, sec = PMLINES[k], sc = pmSec(rec.scores[k]);
+  let h = '<div class="pm-scores"><div class="pm-sh"><span>Score each line 1 to 10</span><span class="pm-sec num">' + (sc === null ? "–" : N1(sc)) + '<small> / 10</small></span></div>';
+  sec.lines.forEach((t, i) => {
+    const v = rec.scores[k][i];
+    h += '<div class="pm-line"><div class="pm-q">' + E(t) + '</div><div class="pm-btns" role="radiogroup" aria-label="' + E(t) + '">' +
+      [1,2,3,4,5,6,7,8,9,10].map(n => '<button type="button" role="radio" aria-checked="' + (v === n) + '" class="pm-n' + (v === n ? " on" : "") + (n <= 4 ? " lo" : n <= 7 ? " mid" : " hi") + '" data-score="' + k + ':' + i + ':' + n + '">' + n + '</button>').join("") + '</div></div>';
+  });
+  h += '<label class="pm-learn"><span>What we learned</span><textarea data-learn="' + k + '" rows="2" placeholder="What happened, and what we do about it next time">' + E(rec.learned[k] || "") + '</textarea></label></div>';
+  return h;
+}
+
+/* ---------- the form for one job ---------- */
+function pmForm(){
+  const rec = PM.rec, f = PM.facts || {}, j = f.job || {}, n = pmNumbers(), t = pmTotals(rec);
+  const people = ((f.actual && f.actual.people) || []).map(p => p.name);
+  const chips = Array.from(new Set([rec.pm || j.pm, "Craig", "Jen", "Amir"].concat(people).filter(Boolean))).slice(0, 18);
+  let h = '<div class="pm-back"><button class="go" data-pm-close>All post mortems</button></div>';
+  h += '<div class="tabhead" data-tour="page"><h1>Post mortem: ' + E(rec.number) + ' ' + E(rec.name) + '</h1><p>' + E([rec.client, rec.jobType, rec.pm ? "PM " + rec.pm : "", j.status ? "JobTread status: " + j.status : ""].filter(Boolean).join(" · ")) + '</p></div>';
+  if(rec.status === "finished") h += '<div class="state ok" style="margin-bottom:14px">Finished ' + E(showDate(rec.finishedAt)) + ' by ' + E(rec.updatedBy) + '. You can still correct it; changes save as you go.' + (rec.notePostedAt ? ' The summary was posted to the job in JobTread on ' + E(showDate(rec.notePostedAt)) + '.' : '') + '</div>';
+  if(PM.factsErr) h += failBox(PM.factsErr, "Reading this job");
+  const errs = f.errors || {};
+  if(errs.jobtread) h += '<div class="state err" style="margin-bottom:10px">JobTread: ' + E(errs.jobtread) + ' The scores still save; the figures can be typed in.</div>';
+  if(errs.quickbooks) h += '<div class="state wait" style="margin-bottom:10px">QuickBooks: ' + E(errs.quickbooks) + ' Type what was invoiced in the Price line instead.</div>';
+
+  h += '<form id="pmForm" onsubmit="return false">';
+  /* who, when */
+  h += '<div class="card pm-meta"><div class="pm-grid3">' +
+    '<label class="fld"><span>Run by</span><select data-meta="facilitator">' + ["Craig", "Jen", "Amir"].concat(S.meName && !["Craig","Jen","Amir"].includes(S.meName) ? [S.meName] : []).map(x => '<option' + (rec.facilitator === x ? " selected" : "") + '>' + E(x) + '</option>').join("") + '</select></label>' +
+    '<label class="fld"><span>Date of the meeting</span><input type="date" data-meta="date" value="' + E(rec.date) + '"></label>' +
+    '<label class="fld"><span>Who was in the room</span><input type="text" data-meta="attendees" value="' + E(rec.attendees.join(", ")) + '" placeholder="Names, separated by commas"></label></div>' +
+    '<div class="pm-chips"><span class="sub">Tap to add:</span>' + chips.map(c => '<button type="button" class="pm-chip" data-attend="' + E(c) + '">' + E(c) + '</button>').join("") + '</div></div>';
+
+  /* overall */
+  h += '<div class="card pm-total"><div class="pm-tot"><div><div class="k">Job score</div><div class="big num">' + (t.total === null ? "–" : N1(t.total)) + '<small> / 40</small></div>' +
+    '<p class="sub">' + E(t.total === null ? "Score all sixteen lines to see the total." : PMGRADE(t.total)) + '</p></div>' +
+    '<ul class="pm-bars">' + PMKEYS.map(k => '<li><span>' + E(PMLINES[k].label) + '</span><span class="track"><span class="fill' + (t.per[k] !== null && t.per[k] < 7 ? " low" : "") + '" style="width:' + (t.per[k] === null ? 0 : t.per[k] * 10) + '%"></span></span><span class="num">' + (t.per[k] === null ? "–" : N1(t.per[k])) + '</span></li>').join("") + '</ul></div></div>';
+
+  /* financial */
+  const p = n.p, a = n.a, inv = n.inv;
+  h += '<div class="card pm-card"><h2>Financial</h2><p class="lede">Plan is the job budget from the approved estimate in JobTread. Actual labour is from the crew\'s timesheets. Price is what was invoiced in QuickBooks, before GST. Where a system does not have the actual yet, type it in the last column. <button type="button" class="go" data-pm-reread>Read the figures again</button></p>';
+  h += '<div class="scroll"><table class="pm-fig"><thead><tr><th></th><th class="r">Plan</th><th class="r">Actual</th><th class="r">Difference</th><th>Correct it</th></tr></thead><tbody>' +
+    figRow("Price, before GST", "price", p.price, SRC.est, n.price, SRC.qb) +
+    figRow("Labour", "labourCost", p.labourCost, "", n.lab, SRC.ts, null, true) +
+    figRow("Materials and supplies", "materials", p.materials, "", n.mat, SRC.bills, null, true) +
+    figRow("Subcontractors", "subs", p.subs, "", n.sub, SRC.bills, null, true) +
+    figRow("Equipment", "equipment", p.equipment, "", n.eq, SRC.bills, null, true) +
+    figRow("Disposal", "disposal", p.disposal, "", n.dis, SRC.bills, null, true) +
+    figRow("Other costs", "other", p.other, "", n.oth, SRC.bills, null, true) +
+    '<tr class="pm-sum"><th scope="row">Total cost</th><td class="r num">' + (n.planCost === null ? "" : M(n.planCost)) + '</td><td class="r num">' + (n.cost === null ? "" : M(n.cost) + (n.complete ? "" : '<span class="pm-src none">So far. ' + n.missing + ' line' + (n.missing === 1 ? " has" : "s have") + ' no actual yet</span>')) + '</td><td class="r num' + (n.complete && n.planCost !== null && n.cost > n.planCost ? " pm-bad" : "") + '">' + (n.complete && n.planCost !== null ? ((n.cost - n.planCost) > 0 ? "+" : "") + M(n.cost - n.planCost) : "") + '</td><td></td></tr>' +
+    pctRow("Gross margin", n.planMargin, n.actMargin, "What is left of each dollar of the price after the job's own costs") +
+    pctRow("Markup", n.planMarkup, n.actMarkup, "What was added on top of cost to set the price") +
+    pctRow("Labour share of the price", p.price && p.labourCost !== null ? p.labourCost / p.price : null, n.price.v && n.lab.v !== null ? n.lab.v / n.price.v : null) +
+    '</tbody></table></div>';
+  if(n.missing) h += '<div class="state wait pm-miss">The actual margin shows once every cost line has an actual. Supplier bills are not entered against jobs in JobTread yet, so type them in from the bills. If a line came in about as planned, press <button type="button" class="go" data-pm-useplan>Use the plan for the ' + n.missing + ' missing line' + (n.missing === 1 ? "" : "s") + '</button> and correct any you know were different.</div>';
+  if(inv){
+    const last = a.lastDay, first = inv.firstDate, gap = (last && first) ? Math.round((new Date(first) - new Date(last)) / 86400000) : null;
+    h += '<div class="pm-facts"><div><span class="k">Invoices found</span><span class="num">' + inv.list.length + '</span></div><div><span class="k">Invoiced, before GST</span><span class="num">' + M(inv.billed) + '</span></div><div><span class="k">Still unpaid, with GST</span><span class="num">' + M(inv.unpaid) + '</span></div>' +
+      (inv.holdback ? '<div><span class="k">Of it, holdback</span><span class="num">' + M(inv.holdback) + '</span></div>' : '') +
+      '<div><span class="k">First invoice</span><span class="num">' + E(first || "none yet") + (gap !== null ? ' <small>(' + (gap <= 2 ? gap + " days after the last day on site" : '<b class="pm-bad">' + gap + ' days after the last day on site</b>') + ')</small>' : '') + '</span></div></div>';
+    if(inv.list.length) h += '<p class="sub">' + inv.list.map(x => E(x.doc) + ' ' + E(x.date) + ' ' + M(x.beforeGst) + (x.unpaid ? ' (' + M(x.unpaid) + ' unpaid)' : ' (paid)')).join(" · ") + '</p>';
+  }
+  if(f.estimates && f.estimates.length > 1) h += '<p class="sub">' + plural(f.estimates.length - 1, "change order was", "change orders were") + ' approved in JobTread after the first estimate.</p>';
+  h += scoreBlock("fin") + '</div>';
+
+  /* operational */
+  h += '<div class="card pm-card"><h2>Operational</h2><p class="lede">Plan is from the job fields and the estimate in JobTread. Actual days, hours and crew size are counted from the crew\'s timesheets.</p>';
+  h += '<div class="scroll"><table class="pm-fig"><thead><tr><th></th><th class="r">Plan</th><th class="r">Actual</th><th class="r">Difference</th><th>Correct it</th></tr></thead><tbody>' +
+    figRow("Days on site", "days", p.days, SRC.field, n.days, SRC.ts, N1, true) +
+    figRow("Labour hours", "labourHours", p.labourHours, SRC.est, n.hrs, SRC.ts, N1, true) +
+    figRow("Crew size per day", "crew", p.crew, SRC.field, n.crew, "Average from timesheets", N1, true) +
+    figRow("Rework cost", "rework", 0, "", n.rework, "", M, true) +
+    '</tbody></table></div>';
+  h += '<div class="pm-facts"><div><span class="k">Planned start</span><span class="num">' + E(p.start || "not set") + '</span></div><div><span class="k">First day on site</span><span class="num">' + E((a && a.firstDay) || "no timesheets") + '</span></div><div><span class="k">Last day on site</span><span class="num">' + E((a && a.lastDay) || "") + '</span></div><div><span class="k">Daily logs written</span><span class="num">' + (f.dailyLogs || 0) + '</span></div>' +
+    (j.nopFiled ? '<div><span class="k">Notice filed</span><span class="num">' + E(showDate(j.nopFiled)) + '</span></div>' : '') + (j.riskLevel ? '<div><span class="k">Risk level</span><span class="num">' + E(j.riskLevel) + '</span></div>' : '') + '</div>';
+  h += scoreBlock("ops") + '</div>';
+
+  /* client */
+  h += '<div class="card pm-card"><h2>Client</h2><p class="lede">How the client saw the job. Ask the person who dealt with them most.</p>' + scoreBlock("cli") + '</div>';
+
+  /* employees and subcontractors */
+  h += '<div class="card pm-card"><h2>Employees and subcontractors</h2><p class="lede">Who worked on it, from the timesheets. Score the work, not the person, and name who stood out.</p>';
+  if(a && a.people && a.people.length) h += '<p class="sub">' + a.people.map(x => E(x.name) + ' ' + N1(x.hours) + ' h').join(" · ") + (a.tempShare !== null ? '. Temps worked ' + a.tempShare + '% of the hours.' : '') + '</p>';
+  h += '<label class="fld pm-stand"><span>Who stood out, and why</span><input type="text" data-meta="standout" value="' + E(rec.standout) + '" placeholder="For example: Zach kept the containment tight and the logs current"></label>';
+  h += scoreBlock("emp") + '</div>';
+
+  /* keep, commitments */
+  h += '<div class="card pm-card"><h2>What we keep, and what we commit to</h2><p class="lede">Agree these in the room. Every commitment needs one owner and a date, or it will not happen. Open commitments show on the Overview until they are ticked off.</p>';
+  h += '<div class="pm-keep"><span class="k">Keep doing</span>' + [0, 1, 2].map(i => '<input type="text" data-keep="' + i + '" value="' + E(rec.keep[i] || "") + '" placeholder="' + ["For example: walk the site with the client before mobilizing", "Something else that worked", "And one more"][i] + '">').join("") + '</div>';
+  h += '<div class="pm-commit"><span class="k">Start, stop or change</span>' + (rec.commitments.length ? '' : '<p class="sub">No commitments yet.</p>') +
+    rec.commitments.map((c, i) => '<div class="pm-crow"><select data-c="' + i + ':kind" aria-label="Start, stop or change">' + [["start","Start"],["stop","Stop"],["change","Change"]].map(([v, l]) => '<option value="' + v + '"' + (c.kind === v ? " selected" : "") + '>' + l + '</option>').join("") + '</select>' +
+      '<input type="text" data-c="' + i + ':what" value="' + E(c.what) + '" placeholder="What, exactly" aria-label="What">' +
+      '<input type="text" list="pmPeople" data-c="' + i + ':owner" value="' + E(c.owner) + '" placeholder="Owner" aria-label="Owner">' +
+      '<input type="date" data-c="' + i + ':due" value="' + E(c.due) + '" aria-label="Due date">' +
+      '<label class="pm-done"><input type="checkbox" data-c="' + i + ':done"' + (c.done ? " checked" : "") + '> Done</label>' +
+      '<button type="button" class="go" data-c-del="' + i + '" aria-label="Remove">Remove</button></div>').join("") +
+    '<button type="button" class="btn ghost" data-c-add>Add a commitment</button></div>';
+  h += '<datalist id="pmPeople">' + chips.map(c => '<option value="' + E(c) + '">').join("") + '</datalist></div>';
+
+  /* save and finish */
+  const canClose = j.status === "Job Post Mortem";
+  h += '<div class="card pm-card pm-finish"><h2>' + (rec.status === "finished" ? "Finished" : "Finish the post mortem") + '</h2>' +
+    '<p class="lede">Everything saves as you go. Finishing marks it done and adds it to the dashboard.</p>' +
+    (rec.notePostedAt ? '' : '<label class="pm-done"><input type="checkbox" id="pmNote" checked> Post the summary to the job in JobTread, as a pinned note only A&amp;M staff can see</label>') +
+    (canClose ? '<label class="pm-done"><input type="checkbox" id="pmCloseJob" checked> Move the job from Job Post Mortem to Closed Won in JobTread</label>' : '') +
+    '<div class="actions"><button type="button" class="btn" data-pm-finish>' + (rec.status === "finished" ? "Save the changes" : "Finish and save") + '</button><span class="sub" id="pmMsg" style="align-self:center;margin:0">' + E(PM.msg || (PM.savedAt ? "Saved " + new Date(PM.savedAt).toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" }) : "")) + '</span></div></div>';
+  h += '</form>';
+  return h;
+}
+
+/* ---------- the list, dashboard and commitments ---------- */
+VIEWS.postmortem = {
+  hold(){ const a = document.activeElement; return !!(PM.open && a && a.closest && a.closest("#pmForm") && /INPUT|TEXTAREA|SELECT/.test(a.tagName)); },
+  alerts(){
+    const out = []; if(!PM.list) return out;
+    const ready = pmReady();
+    if(ready.length) out.push({ lvl:"caution", text: plural(ready.length, "finished job is", "finished jobs are") + " waiting for a post mortem.", meta:"The SOP asks for it within a week of finishing, while people still remember what happened." });
+    const late = pmOpenCommitments().filter(x => x.c.due && daysTo(x.c.due) < 0);
+    if(late.length) out.push({ lvl:"stop", text: plural(late.length, "post-mortem commitment is past its due date.", "post-mortem commitments are past their due date."), meta: late.slice(0, 3).map(x => (x.c.owner || "No owner") + ": " + x.c.what).join(" · ") });
+    return out;
+  },
+  render(){
+    if(PM.open) return PM.rec ? pmForm() : head("Post mortem", "") + '<div class="state">Reading the job from JobTread and QuickBooks.</div>';
+    let h = head("Post mortem", "At the end of every job, Craig, Jen or Amir runs this with everyone who worked on it. Four perspectives, each scored 1 to 10, so every job teaches us something and the next one is priced and run better.");
+    if(PM.pageErr){ h += failBox(PM.pageErr, "Opening that post mortem"); PM.pageErr = null; }
+    if(PM.listErr) return h + failBox(PM.listErr, "Post mortems");
+    if(!PM.list) return h + wait("the post mortems");
+    h += verdictHtml(this.alerts(), "Every finished job has had its post mortem.", plural(PM.list.filter(r => r.status === "finished").length, "post mortem") + " on record.");
+    const ready = pmReady(), drafts = PM.list.filter(r => r.status !== "finished");
+    h += '<div class="grid">';
+    h += '<div class="card wide"><h2>Ready for a post mortem</h2><p class="lede">Jobs at Job Post Mortem in JobTread, and jobs closed in the last 30 days that never had one. Press Start to open it in the meeting.</p>' +
+      tbl('<th>Job</th><th>Status</th><th>PM</th><th></th>', ready.concat([]).map(j => {
+        const d = drafts.find(r => r.jobId === j._id);
+        return '<tr><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td class="r"><button class="btn" data-pm-open="' + E(j._id) + '">' + (d ? "Continue" : "Start") + '</button></td></tr>';
+      }), "No finished job is waiting.", 20) +
+      '<div class="pm-any"><label class="fld"><span>Any other job</span><input type="text" id="pmAny" placeholder="Type the job number, for example 26-20035" list="pmJobs"></label><button class="btn ghost" data-pm-any>Start</button></div>' +
+      '<datalist id="pmJobs">' + (S.jobs || []).filter(j => !isSpecial(j)).slice(0, 400).map(j => '<option value="' + E(j._number) + '">' + E(j._name) + '</option>').join("") + '</datalist></div>';
+    if(drafts.length) h += '<div class="card wide"><h2>Started, not finished</h2>' + tbl('<th>Job</th><th>Run by</th><th>Last saved</th><th></th>', drafts.map(r =>
+      '<tr><td><span class="nm">' + E(r.number + " " + r.name) + '</span><span class="sm">' + E(r.client) + '</span></td><td>' + E(r.facilitator) + '</td><td>' + E(showDate(r.updatedAt)) + ' by ' + E(r.updatedBy) + '</td><td class="r"><button class="btn ghost" data-pm-open="' + E(r.jobId) + '">Continue</button></td></tr>'), "", 20) + '</div>';
+
+    const fin = PM.list.filter(r => r.status === "finished" && r.total !== null);
+    const avg = k => fin.length ? Math.round(fin.reduce((s, r) => s + (r.per[k] || 0), 0) / fin.length * 10) / 10 : null;
+    const avgT = fin.length ? Math.round(fin.reduce((s, r) => s + r.total, 0) / fin.length * 10) / 10 : null;
+    const lows = PMKEYS.map(k => [k, avg(k)]).filter(x => x[1] !== null).sort((a, b) => a[1] - b[1]);
+    h += '<div class="card"><h2>Across every job</h2><p class="lede">The lowest of the four is the perspective dragging the business, and the one to work on next.</p>' +
+      (fin.length ? '<div class="big num">' + N1(avgT) + '<small> / 40</small></div><p class="sub">Average job score over ' + plural(fin.length, "post mortem") + '. ' + E(PMSHORT(avgT)) + '.</p>' +
+        '<ul class="pm-bars">' + PMKEYS.map(k => { const v = avg(k); return '<li><span>' + E(PMLINES[k].label) + (lows.length > 1 && lows[0][0] === k ? ' <span class="tag caution">Work on this</span>' : '') + '</span><span class="track"><span class="fill' + (v !== null && v < 7 ? " low" : "") + '" style="width:' + (v || 0) * 10 + '%"></span></span><span class="num">' + N1(v) + '</span></li>'; }).join("") + '</ul>'
+      : '<div class="state">No finished post mortems yet. The first one starts the picture.</div>') + '</div>';
+    const open = pmOpenCommitments();
+    h += '<div class="card"><h2>Open commitments</h2><p class="lede">What each post mortem promised to change. Tick one off when it is done.</p>' +
+      (open.length ? '<ul class="pm-clist">' + open.slice(0, 30).map(x => {
+        const d = x.c.due ? daysTo(x.c.due) : null;
+        return '<li><label><input type="checkbox" data-pm-tick="' + E(x.r.jobId) + ':' + x.i + '"> <b>' + E(x.c.kind === "start" ? "Start" : x.c.kind === "stop" ? "Stop" : "Change") + ':</b> ' + E(x.c.what) + '</label><span class="sm">' + E(x.c.owner || "No owner") + ' · ' + (x.c.due ? '<span class="tag ' + (d < 0 ? "stop" : d <= 7 ? "caution" : "mute") + '">' + E(x.c.due) + '</span>' : "no date") + ' · ' + E(x.r.number) + '</span></li>';
+      }).join("") + '</ul>' : '<div class="state ok">Nothing open.</div>') + '</div>';
+    if(fin.length) h += '<div class="card wide"><h2>Finished post mortems</h2>' + tbl('<th>Job</th><th>Date</th><th class="r">Financial</th><th class="r">Operational</th><th class="r">Client</th><th class="r">Employees</th><th class="r">Total</th><th>Grade</th><th class="r">Margin</th>',
+      fin.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(r => '<tr data-pm-open="' + E(r.jobId) + '" tabindex="0" style="cursor:pointer"><td><span class="nm">' + E(r.number + " " + r.name) + '</span><span class="sm">' + E(r.client) + ' · run by ' + E(r.facilitator) + '</span></td><td>' + E(r.date) + '</td>' +
+        PMKEYS.map(k => '<td class="r num">' + N1(r.per[k]) + '</td>').join("") + '<td class="r num"><b>' + N1(r.total) + '</b></td><td><span class="tag ' + (r.total >= 28 ? "clear" : r.total >= 22 ? "caution" : "stop") + '">' + E(PMSHORT(r.total)) + '</span></td><td class="r num">' + P1(r.margin) + '</td></tr>'), "", 30) + '</div>';
+    return h + '</div>';
+  }
+};
+
+/* ---------- opening, editing, saving ---------- */
+function pmOpen(jobId){
+  PM.open = jobId; PM.rec = null; PM.facts = null; PM.factsErr = null; PM.msg = ""; PM.savedAt = null;
+  if(current !== "postmortem") go("postmortem"); else render();
+  window.scrollTo(0, 0);
+  const j = (S.jobs || []).find(x => x._id === jobId) || {};
+  Promise.all([pmCall("action=get&jobId=" + encodeURIComponent(jobId)), pmCall("action=facts&jobId=" + encodeURIComponent(jobId)).catch(e => ({ _err: e }))]).then(([g, f]) => {
+    if(PM.open !== jobId) return;
+    if(f && f._err){ PM.factsErr = f._err; f = {}; }
+    PM.facts = f;
+    const fj = f.job || {};
+    PM.rec = g.record || { jobId, number: fj.number || j._number || "", name: fj.name || j._name || "", client: fj.client || j._cust || "", pm: fj.pm || pm(j) || "", jobType: fj.jobType || F(j["Job Type"]) || "",
+      status: "draft", facilitator: ["Craig","Jen","Amir"].includes(S.meName) ? S.meName : "Craig", date: iso(new Date()), attendees: [], standout: "",
+      scores: { fin:[null,null,null,null], ops:[null,null,null,null], cli:[null,null,null,null], emp:[null,null,null,null] }, learned: { fin:"", ops:"", cli:"", emp:"" },
+      figures: {}, keep: [], commitments: [] };
+    render();
+  }).catch(e => { PM.rec = null; PM.open = null; PM.pageErr = e; render(); });
+}
+function pmSnapshot(){
+  const n = pmNumbers();
+  return { price: n.price.v, cost: n.cost, margin: n.actMargin, planPrice: n.p.price || null, planCost: n.planCost, planMargin: n.planMargin,
+    labourHours: n.hrs.v, planHours: n.p.labourHours || null, days: n.days.v, planDays: n.p.days || null };
+}
+function pmSave(finish){
+  if(!PM.rec) return Promise.resolve();
+  clearTimeout(PM.timer); PM.timer = null;
+  const rec = Object.assign({}, PM.rec, { snapshot: pmSnapshot() });
+  if(finish) rec.status = "finished";
+  PM.saving = true;
+  return pmCall("", { action:"save", record: rec }).then(r => {
+    PM.saving = false; PM.savedAt = Date.now();
+    const typing = VIEWS.postmortem.hold();
+    PM.rec.updatedBy = r.record.updatedBy; PM.rec.figures = r.record.figures; PM.rec.status = r.record.status; PM.rec.finishedAt = r.record.finishedAt; PM.rec.notePostedAt = r.record.notePostedAt;
+    const i = (PM.list || []).findIndex(x => x.jobId === r.summary.jobId);
+    if(PM.list){ if(i >= 0) PM.list[i] = r.summary; else PM.list.push(r.summary); }
+    const m = $("pmMsg"); if(m) m.textContent = "Saved " + new Date().toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" });
+    if(!typing) drawTabs();
+    return r;
+  }).catch(e => { PM.saving = false; const m = $("pmMsg"); if(m) m.textContent = "Not saved: " + errCopy(e); throw e; });
+}
+function pmLater(){ clearTimeout(PM.timer); PM.timer = setTimeout(() => pmSave(false).catch(() => {}), 2500); const m = $("pmMsg"); if(m) m.textContent = "Saving…"; }
+function pmRedraw(){ const y = window.scrollY; render(); window.scrollTo(0, y); }
+
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-pm-useplan],[data-pm-reread],[data-pm-open],[data-pm-close],[data-pm-any],[data-score],[data-attend],[data-c-add],[data-c-del],[data-pm-finish]");
+  if(!t) return;
+  if(t.dataset.pmOpen){ pmOpen(t.dataset.pmOpen); return; }
+  if(t.dataset.pmClose !== undefined){ if(PM.timer) pmSave(false).catch(() => {}); PM.open = null; PM.rec = null; PM.facts = null; render(); window.scrollTo(0, 0); return; }
+  if(t.dataset.pmAny !== undefined){
+    const v = ($("pmAny").value || "").trim().toLowerCase();
+    const j = (S.jobs || []).find(x => String(x._number).toLowerCase() === v) || (S.jobs || []).find(x => v && (String(x._number) + " " + x._name).toLowerCase().includes(v));
+    if(j) pmOpen(j._id); else { $("pmAny").setCustomValidity("No job with that number."); $("pmAny").reportValidity(); setTimeout(() => $("pmAny") && $("pmAny").setCustomValidity(""), 2000); }
+    return;
+  }
+  if(!PM.rec) return;
+  if(t.dataset.pmUseplan !== undefined){ const n = pmNumbers(), p = n.p; [["labourCost", n.lab, p.labourCost], ["materials", n.mat, p.materials], ["subs", n.sub, p.subs], ["equipment", n.eq, p.equipment], ["disposal", n.dis, p.disposal], ["other", n.oth, p.other]].forEach(([k, a, pv]) => { if(a.v === null && pv !== null && pv !== undefined) PM.rec.figures[k] = { value: pv, by: (S.meName || "someone") + ", from the plan", fromPlan: true }; }); pmRedraw(); pmLater(); return; }
+  if(t.dataset.pmReread !== undefined){ t.disabled = true; t.textContent = "Reading…"; pmCall("action=facts&fresh=1&jobId=" + encodeURIComponent(PM.rec.jobId)).then(f => { PM.facts = f; pmRedraw(); }).catch(e => { t.textContent = errCopy(e); }); return; }
+  if(t.dataset.score){ const [k, i, n] = t.dataset.score.split(":"); PM.rec.scores[k][+i] = PM.rec.scores[k][+i] === +n ? null : +n; pmRedraw(); pmLater(); return; }
+  if(t.dataset.attend){ const a = PM.rec.attendees; if(!a.includes(t.dataset.attend)) a.push(t.dataset.attend); pmRedraw(); pmLater(); return; }
+  if(t.dataset.cAdd !== undefined){ PM.rec.commitments.push({ kind:"change", what:"", owner:"", due:"", done:false }); pmRedraw(); return; }
+  if(t.dataset.cDel !== undefined){ PM.rec.commitments.splice(+t.dataset.cDel, 1); pmRedraw(); pmLater(); return; }
+  if(t.dataset.pmFinish !== undefined){
+    const missing = PMKEYS.reduce((s, k) => s + PM.rec.scores[k].filter(x => x === null).length, 0);
+    const msg = $("pmMsg");
+    if(missing && PM.rec.status !== "finished"){ msg.textContent = plural(missing, "line is", "lines are") + " not scored yet. Score all sixteen to finish."; return; }
+    if(PM.rec.commitments.some(c => c.what && (!c.owner || !c.due))){ msg.textContent = "Every commitment needs an owner and a date."; return; }
+    const note = $("pmNote") && $("pmNote").checked, close = $("pmCloseJob") && $("pmCloseJob").checked;
+    t.disabled = true; msg.textContent = "Saving…";
+    const jobId = PM.rec.jobId, done = [];
+    pmSave(true).then(() => {
+      done.push("Saved");
+      return note ? pmCall("", { action:"note", jobId }).then(() => { done.push("summary posted to JobTread"); PM.rec.notePostedAt = new Date().toISOString(); }).catch(e => done.push("the JobTread note did not post (" + errCopy(e) + ")")) : null;
+    }).then(() => close ? apiPost({ jobId, changes:{ Status:"Closed Won" } }).then(() => { done.push("job moved to Closed Won"); return api("jobs", true).then(d => { S.jobs = (d.nodes || []).map(flat); S.stamp = d.storedAt; }); }).catch(e => done.push("the status did not change (" + errCopy(e) + ")")) : null)
+      .then(() => { PM.msg = done.join(", ") + "."; pmRedraw(); })
+      .catch(() => { t.disabled = false; });
+  }
+});
+document.addEventListener("input", ev => {
+  const el = ev.target; if(!PM.rec || !el.closest || !el.closest("#pmForm")) return;
+  const d = el.dataset;
+  if(d.fig){ PM.rec.figures[d.fig] = el.value === "" ? undefined : { value: Number(el.value), by: S.meName }; if(el.value === "") delete PM.rec.figures[d.fig]; pmLater(); return; }
+  if(d.learn){ PM.rec.learned[d.learn] = el.value; pmLater(); return; }
+  if(d.keep){ PM.rec.keep[+d.keep] = el.value; PM.rec.keep = PM.rec.keep.map(x => x || ""); pmLater(); return; }
+  if(d.meta){ if(d.meta === "attendees") PM.rec.attendees = el.value.split(",").map(x => x.trim()).filter(Boolean); else PM.rec[d.meta] = el.value; pmLater(); return; }
+  if(d.c){ const [i, k] = d.c.split(":"); const c = PM.rec.commitments[+i]; if(!c) return; c[k] = k === "done" ? el.checked : el.value; pmLater(); }
+});
+/* Figures redraw the table once the person leaves the box, so totals update without stealing the cursor. */
+document.addEventListener("change", ev => {
+  const el = ev.target; if(!PM.rec || !el.closest || !el.closest("#pmForm")) return;
+  if(el.dataset.fig || el.dataset.meta === "facilitator" || el.dataset.c) setTimeout(() => { if(!VIEWS.postmortem.hold()) pmRedraw(); }, 0);
+});
+document.addEventListener("change", ev => {
+  const el = ev.target; if(!el.dataset || !el.dataset.pmTick) return;
+  const [jobId, i] = el.dataset.pmTick.split(":");
+  el.disabled = true;
+  pmCall("", { action:"commitment", jobId, index:+i, done: el.checked }).then(r => {
+    const k = PM.list.findIndex(x => x.jobId === jobId); if(k >= 0) PM.list[k] = r.summary; render();
+  }).catch(() => { el.disabled = false; el.checked = !el.checked; });
+});
+document.addEventListener("keydown", ev => { if(ev.key === "Enter" && ev.target.closest && ev.target.closest("tr[data-pm-open]")) ev.target.closest("tr[data-pm-open]").click(); });
+
 /* ---------- the command centre walkthrough ----------
    Built to the same house standard as the shop's walkthrough (public/tour.js):
    - it points at real parts of the screen through data-tour attributes
@@ -2028,6 +2474,9 @@ const CCTOUR = (function(){
       { id:"shop", target:'[data-tour="shop"]', at:"projects",
         title:"The shop is part of Field",
         body:"Shop opens the shop screens: gear going out to a job and coming back, transfers between sites, the shelf, ordering and filter certificates. It is the same app. The Command centre button on those screens brings you straight back to Field." },
+      { id:"postmortem", target:'[data-tour="page"]', at:"postmortem",
+        title:"Post mortems",
+        body:"When a job is finished, Craig, Jen or Amir runs a post mortem here with everyone who worked on it. Four perspectives, financial, operational, client, and employees and subcontractors, each scored 1 to 10. The plan and the actual figures come from JobTread and QuickBooks, and every commitment gets an owner and a date." },
       { id:"decisions", target:'[data-tour="decisions"]', at:"overview",
         title:"What needs a decision",
         body:"This list is the reason the command centre exists. Every line is worked out live from the systems, worst first. Now means today, Soon means this week. Fix the cause in JobTread or QuickBooks and the line clears itself. The button on the right of each line takes you to the page behind it." },
