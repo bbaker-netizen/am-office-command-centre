@@ -74,16 +74,45 @@ button{font:inherit;color:inherit}
   border:1px solid #4a4844;border-radius:3px;padding:7px 12px}
 .refresh:hover{border-color:var(--cyan)}
 .refresh[disabled]{opacity:.5;cursor:default}
+.tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;flex:none}
+.tools .live{margin-right:6px}
+
+/* walkthrough: the same look as the shop's, in the command centre's colours */
+#ccTour{position:fixed;inset:0;z-index:200;pointer-events:none}
+#ccSpot{position:fixed;border-radius:10px;pointer-events:none;box-shadow:0 0 0 9999px rgba(26,25,23,.62);
+  outline:3px solid var(--cyan);outline-offset:2px;transition:top .18s ease,left .18s ease,width .18s ease,height .18s ease}
+#ccCard{position:fixed;pointer-events:auto;width:min(460px,calc(100vw - 28px));background:var(--panel);color:var(--ink);
+  border-radius:14px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.3);border-top:4px solid var(--cyan)}
+#ccCard h3{margin:6px 0 8px;font-size:18px;font-weight:800;letter-spacing:-.01em;text-wrap:balance}
+.cct-head{display:flex;justify-content:space-between;align-items:center}
+.cct-count{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3)}
+.cct-x{background:none;border:0;color:var(--ink-3);cursor:pointer;font:inherit;font-size:13px;padding:4px}
+.cct-body{margin:0;font-size:14.5px;line-height:1.55;color:var(--ink-2)}
+.cct-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px}
+.cct-nav{display:flex;gap:8px}
+.cct-mute{background:none;border:0;color:var(--ink-3);font:inherit;font-size:12.5px;cursor:pointer;text-decoration:underline;padding:0}
+.cct-back{background:var(--panel);border:1px solid var(--rule);color:var(--ink-2);border-radius:8px;padding:9px 14px;cursor:pointer;font:inherit;font-size:14px}
+.cct-next{background:var(--ink);border:0;color:var(--panel);border-radius:8px;padding:9px 20px;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.cct-next[disabled]{opacity:.35;cursor:not-allowed}
+.cct-wait{margin-top:10px;font-size:12.5px;color:var(--ink-2);background:var(--cyan-wash);padding:8px 10px;border-radius:8px}
+@media (max-width:480px){#ccCard{width:calc(100vw - 20px);padding:15px}.cct-body{font-size:14px}}
 
 /* tabs */
 .tabsWrap{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--topH,62px));z-index:15;background:var(--panel);border-bottom:1px solid var(--rule)}
-.tabs{max-width:1240px;margin:0 auto;padding-left:20px;padding-right:20px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:thin}
-.tabs .grp{align-self:center;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);
-  padding:0 6px 0 14px;white-space:nowrap}
-.tabs .grp:first-child{padding-left:0}
+.secs{max-width:1240px;margin:0 auto;padding:10px 20px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.secs::-webkit-scrollbar{display:none}
+.sec{display:flex;align-items:center;gap:8px;padding:8px 16px;border:1px solid var(--rule);border-radius:999px;background:var(--panel);
+  color:var(--ink-2);font:inherit;font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap;text-decoration:none}
+.sec:hover{border-color:var(--ink-3);color:var(--ink)}
+.sec[aria-current="true"]{background:var(--ink);border-color:var(--ink);color:var(--panel)}
+@media (max-width:480px){.secs{gap:5px;padding:8px 12px}.sec{padding:6px 10px;font-size:13.5px;gap:5px}.sec .badge{min-width:16px;padding:0 4px;font-size:10px}}
+.sec[aria-current="true"] .badge:not(.stop):not(.caution){background:var(--ink-2);color:var(--panel)}
+.tabs{max-width:none;margin:0;padding-left:max(20px, calc((100% - 1200px) / 2));padding-right:20px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:thin;
+  background:var(--panel-2);border-top:1px solid var(--rule-soft)}
 .tab{position:relative;background:none;border:0;border-bottom:3px solid transparent;padding:13px 10px 11px;cursor:pointer;
   font-size:14px;font-weight:600;color:var(--ink-2);white-space:nowrap;display:flex;align-items:center;gap:7px}
 .tab:hover{color:var(--ink)}
+a.tab{text-decoration:none}
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--cyan)}
 .badge{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;min-width:20px;padding:1px 6px;border-radius:10px;
   text-align:center;background:var(--rule-soft);color:var(--ink-3)}
@@ -221,21 +250,21 @@ details.sub summary{cursor:pointer;color:var(--cyan-deep);font-weight:600}
 .btn.ghost{background:transparent;color:var(--ink)}
 .btn:hover{background:var(--cyan-deep);border-color:var(--cyan-deep);color:#fff}
 .drawer h3{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin:18px 0 6px}
-@media (max-width:620px){ .who{border-left:0;padding-left:0} .find{flex-basis:100%;max-width:none;order:5} .big{font-size:28px} .tabhead h1{font-size:21px} }
+@media (max-width:620px){ .tools{flex:1 1 100%} .tools .live{flex:1 1 100%;margin-right:0} .who{border-left:0;padding-left:0} .find{flex-basis:100%;max-width:none;order:5} .big{font-size:28px} .tabhead h1{font-size:21px} }
 </style>
 </head><body><header class="top" id="top">
   <div class="in">
     <div class="mark"><div class="am">A<b>&amp;</b>M</div></div>
     <div class="who"><b id="roleTitle">Command centre</b><span id="roleWho"></span></div>
-    <div class="find">
+    <div class="find" data-tour="find">
       <input id="find" type="search" placeholder="Find a job by number, name, client or address" autocomplete="off" aria-label="Find a job">
       <div class="hits" id="hits" hidden></div>
     </div>
-    <div class="live"><span class="dot" id="conndot"></span><span id="connlabel">Connecting</span></div>
-    <button class="refresh" id="refresh" disabled>Refresh</button>
+    <div class="tools" data-tour="tools"><div class="live"><span class="dot" id="conndot"></span><span id="connlabel">Connecting</span></div>
+    <button class="refresh" id="refresh" disabled>Refresh</button></div>
   </div>
 </header>
-<div class="tabsWrap"><nav class="tabs" id="tabs" role="tablist" aria-label="Sections"></nav></div>
+<div class="tabsWrap"><nav class="secs" id="secs" aria-label="Sections"></nav><nav class="tabs" id="tabs" role="tablist" aria-label="Pages in this section" hidden></nav></div>
 <main id="main"><div class="state">Opening the command centre.</div></main>
 <div class="scrim" id="scrim" hidden></div>
 <aside class="drawer" id="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="dtitle">
@@ -499,21 +528,50 @@ function verdictHtml(list, calm, calmMeta){
   return '<div class="verdict ' + top.lvl + '"><p>' + E(top.text) + '</p><div class="meta">' + E(top.meta || "") +
     (a.length > 1 ? (top.meta ? " " : "") + plural(a.length - 1, "more thing") + " below." : "") + '</div></div>';
 }
-function head(title, lede){ return '<div class="tabhead"><h1>' + E(title) + '</h1><p>' + E(lede) + '</p></div>'; }
+function head(title, lede){ return '<div class="tabhead" data-tour="page"><h1>' + E(title) + '</h1><p>' + E(lede) + '</p></div>'; }
 
 /* ---------- shell ---------- */
+/* Two rows. The top row is the sections of the business (Overview, Office,
+   Field, Assistants, and inside the app, Shop and settings). The row under it
+   holds the pages of whichever section is open. */
+const SECTIONS = [
+  { key:"",           label:"Overview" },
+  { key:"Office",     label:"Office" },
+  { key:"Field",      label:"Field" },
+  { key:"Assistants", label:"Assistants" }
+];
+const secOf = t => (TABS[t] && TABS[t].group) || "";
+function badgeFor(list){
+  let stops = 0, cautions = 0;
+  list.forEach(t => { if(t === "overview") return; alertsFor(t).forEach(a => { if(a.lvl === "stop") stops++; else if(a.lvl === "caution") cautions++; }); });
+  return stops ? '<span class="badge stop">' + stops + '</span>' : (cautions ? '<span class="badge caution">' + cautions + '</span>' : '');
+}
 function drawTabs(){
-  let html = "", lastGrp = null;
-  CFG.tabs.forEach(t => {
-    const def = TABS[t];
-    if(ROLE === "craig" && def.group !== lastGrp && def.group){ html += '<span class="grp">' + E(def.group) + '</span>'; }
-    lastGrp = def.group;
-    const al = t === "overview" ? [] : alertsFor(t);
-    const stops = al.filter(a => a.lvl === "stop").length, cautions = al.filter(a => a.lvl === "caution").length;
-    const badge = stops ? '<span class="badge stop">' + stops + '</span>' : (cautions ? '<span class="badge caution">' + cautions + '</span>' : '');
-    html += '<button class="tab" role="tab" data-tab="' + t + '" aria-selected="' + (t === current) + '">' + E(def.label) + badge + '</button>';
+  const here = secOf(current);
+  let secs = "";
+  SECTIONS.forEach(sec => {
+    const pages = CFG.tabs.filter(t => secOf(t) === sec.key);
+    if(!pages.length) return;
+    secs += '<button class="sec" data-sec="' + E(sec.key || "overview") + '" aria-current="' + (sec.key === here) + '">' + E(sec.label) + badgeFor(pages) + '</button>';
   });
+  $("secs").innerHTML = secs;
+  const pages = here ? CFG.tabs.filter(t => secOf(t) === here) : [];
+  let html = "";
+  pages.forEach(t => {
+    html += '<button class="tab" role="tab" data-tab="' + t + '" aria-selected="' + (t === current) + '">' + E(TABS[t].label) + badgeFor([t]) + '</button>';
+  });
+  /* The shop is part of Field. Its screens (stock out and back, transfers,
+     shelf, orders, filter certificates) are the inventory side of this same
+     app, so the Shop page opens them. */
+  if(PLATFORM === "app" && here === "Field") html += '<a class="tab" href="/#/" data-tour="shop">Shop</a>';
   $("tabs").innerHTML = html;
+  $("tabs").hidden = !pages.length;
+}
+function goSection(key){
+  if(key === "overview") return go("overview");
+  const pages = CFG.tabs.filter(t => secOf(t) === key);
+  const last = store("sec." + ROLE + "." + key);
+  go(pages.includes(last) ? last : pages[0]);
 }
 function render(){
   drawTabs(); tblN = 0;
@@ -537,6 +595,7 @@ function footer(){
 function go(tab){
   if(!CFG.tabs.includes(tab)) tab = "overview";
   current = tab; store("tab." + ROLE, tab);
+  if(secOf(tab)) store("sec." + ROLE + "." + secOf(tab), tab);
   try{ history.replaceState(null, "", "#" + tab); }catch(e){}
   render(); window.scrollTo(0, 0);
 }
@@ -613,10 +672,11 @@ function searchJobs(q){
 
 /* ---------- wiring ---------- */
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-tab],[data-job],[data-list],[data-go],[data-pm],[data-back],[data-hit],[data-expand]");
+  const t = ev.target.closest("[data-sec],[data-tab],[data-job],[data-list],[data-go],[data-pm],[data-back],[data-hit],[data-expand]");
   if(!t) return;
   if(t.dataset.expand){ const y = window.scrollY; EXPANDED[t.dataset.expand] = 1; render(); window.scrollTo(0, y); return; }
   if(t.dataset.hit){ $("hits").hidden = true; $("find").value = ""; drawerStateBack = null; openJob(t.dataset.hit); return; }
+  if(t.dataset.sec){ goSection(t.dataset.sec); return; }
   if(t.dataset.tab){ go(t.dataset.tab); return; }
   if(t.dataset.go){ closeDrawer(); go(t.dataset.go); return; }
   if(t.dataset.pm !== undefined){ PMSEL = t.dataset.pm; store("pm", PMSEL); render(); return; }
@@ -945,9 +1005,14 @@ function appStop(title, text){
 }
 async function startApp(){
   sizeTop();
-  const back = document.createElement("a");
-  back.className = "refresh"; back.href = "/#/"; back.textContent = "Shop and settings"; back.style.textDecoration = "none";
-  $("refresh").parentNode.insertBefore(back, $("refresh"));
+  /* Settings is its own small button beside Refresh. The shop is a page in Field. */
+  const set = document.createElement("a");
+  set.className = "refresh"; set.href = "/#/setup"; set.textContent = "Settings"; set.style.textDecoration = "none";
+  $("refresh").parentNode.insertBefore(set, $("refresh"));
+  /* The walkthrough. Starts on its own the first time; this button replays it. */
+  const tour = document.createElement("button");
+  tour.className = "refresh"; tour.textContent = "Tour"; tour.onclick = () => CCTOUR.replay();
+  $("refresh").parentNode.insertBefore(tour, set);
   TOKEN = await idbToken();
   if(!TOKEN) return appStop("Sign in first", "This device has not signed in to the A&M app yet.");
   let me;
@@ -969,7 +1034,7 @@ async function startApp(){
   const h = (location.hash || "").replace("#", "");
   current = CFG.tabs.includes(h) ? h : (CFG.tabs.includes(store("tab." + ROLE)) ? store("tab." + ROLE) : "overview");
   render();
-  appLoad(false);
+  appLoad(false).then(() => { try{ CCTOUR.ready(); }catch(e){} });
   $("refresh").disabled = false;
   $("refresh").addEventListener("click", () => {
     const b = $("refresh"); b.disabled = true; b.textContent = "Refreshing";
@@ -1128,7 +1193,7 @@ VIEWS.overview = {
     html += verdictHtml(all, "Nothing on any tab needs a decision right now.", "Every section has been read. Check back after the morning assistants have run.");
     html += kpis();
     if(S.jobs) html += flowStrip();
-    html += '<div class="card"><h2>Needs a decision</h2><p class="lede">Worst first. Each line is worked out live from the systems, so it clears itself once the cause is fixed.</p>';
+    html += '<div class="card" data-tour="decisions"><h2>Needs a decision</h2><p class="lede">Worst first. Each line is worked out live from the systems, so it clears itself once the cause is fixed.</p>';
     if(!all.length) html += S.jobs ? '<div class="state ok">Nothing waiting on anybody.</div>' : wait("the systems");
     else html += '<ul class="alerts">' + all.slice(0, 14).map(a =>
       '<li><span class="tag ' + (a.lvl === "stop" ? "stop" : a.lvl === "caution" ? "caution" : "mute") + '">' + (a.lvl === "stop" ? "Now" : a.lvl === "caution" ? "Soon" : "Note") + '</span>' +
@@ -1175,11 +1240,11 @@ function kpis(){
     }
   }
   if(ROLE === "craig" && S.M.pl) list.push(kpi("Sales since 1 April", MK(S.M.pl.income), "Invoiced this fiscal year", "money"));
-  return '<div class="kpis">' + list.join("") + '</div>';
+  return '<div class="kpis" data-tour="numbers">' + list.join("") + '</div>';
 }
 function flowStrip(){
   const J = live();
-  return '<div class="flow">' + STAGES.map((g, i) => {
+  return '<div class="flow" data-tour="flow">' + STAGES.map((g, i) => {
     const n = J.filter(j => g.statuses.includes(st(j))).length;
     return '<button data-list="stage:' + g.key + '"><div class="step">Step ' + (i + 1) + '</div><div class="n num">' + n + '</div><div class="l">' + E(g.label) + '</div><div class="fx">' + E(g.statuses.length === 1 ? g.statuses[0] : plural(g.statuses.length, "status", "statuses")) + '</div></button>';
   }).join("") + '</div>';
@@ -1925,6 +1990,210 @@ VIEWS.buying = {
     return h + '</div>';
   }
 };
+
+/* ---------- the command centre walkthrough ----------
+   Built to the same house standard as the shop's walkthrough (public/tour.js):
+   - it points at real parts of the screen through data-tour attributes
+   - every step is spoken AND written on screen in the same words
+   - the voice is on by default, the first step says so, and one press of
+     "Stop the voice" keeps it quiet for the rest of the tour and the next one
+   - two steps ask the person to do the thing, and neither can trap anybody:
+     each lets go on its own after 45 seconds
+   - a step whose part of the screen is not there for this person is skipped,
+     and the chapter count adapts (Jen has no Field section, Amir has no Office)
+   - it starts on its own once, the first time someone opens the command centre
+     on a device, and only after the numbers have loaded
+   One difference from the shop's tour: the shop's voice is recorded clips. This
+   one uses the voice built into the phone or computer, so it needs no files and
+   every word can change without re-recording, but it sounds like that device. */
+const CCTOUR = (function(){
+  const SEEN = "am-command-tour-seen.v1", MUTE = "am-command-tour-muted", RELEASE_MS = 45000;
+  const q = s => document.querySelector(s);
+  const has = sec => CFG.tabs.some(t => secOf(t) === sec);
+
+  function chapters(){
+    const name = S.meName ? S.meName + ", this" : "This";
+    const fieldOrOffice = has("Field") ? "Field" : "Office";
+    return [
+      { id:"welcome", bookend:true, at:"overview",
+        title:"The whole company on one screen",
+        body: name + " is the A&M Office Command Centre. It reads JobTread, QuickBooks and the shop, and puts what needs a decision in one place. I will take you round it in about three minutes. I am talking as we go and the words are on screen too, so turn the sound off if you need to. Press Stop the voice once and I stay quiet." },
+      { id:"sections", target:"#secs", at:"overview",
+        title:"Sections across the top",
+        body:"These big buttons are the sections of the business." + (has("Office") ? " Office is estimating, dispatch, money, buying and records." : "") + (has("Field") ? " Field is projects, sites, closeout, equipment and the shop." : "") + (has("Assistants") ? " Assistants is the emails the AI assistants have written for you." : "") + " A red number on a button means something in that section needs a decision. Press " + fieldOrOffice + " now.",
+        gate:{ click:"#secs .sec" } },
+      { id:"pages", target:"#tabs",
+        title:"The pages in that section",
+        body:"The row underneath holds the pages of the section you are in. Each page carries its own number when something on it needs you. Each section remembers the page you were last on, so coming back puts you where you left off." },
+      { id:"shop", target:'[data-tour="shop"]', at:"projects",
+        title:"The shop is part of Field",
+        body:"Shop opens the shop screens: gear going out to a job and coming back, transfers between sites, the shelf, ordering and filter certificates. It is the same app. The Command centre button on those screens brings you straight back to Field." },
+      { id:"decisions", target:'[data-tour="decisions"]', at:"overview",
+        title:"What needs a decision",
+        body:"This list is the reason the command centre exists. Every line is worked out live from the systems, worst first. Now means today, Soon means this week. Fix the cause in JobTread or QuickBooks and the line clears itself. The button on the right of each line takes you to the page behind it." },
+      { id:"numbers", target:'[data-tour="numbers"]',
+        title:"The numbers that matter",
+        body:"These are the few numbers worth knowing every morning. Press any one of them to go to the page that explains it. All money is Canadian dollars, read from QuickBooks." },
+      { id:"flow", target:'[data-tour="flow"]',
+        title:"Every job, left to right",
+        body:"A job moves through these seven steps, from new lead to closing out. Each number is how many jobs are sitting at that step right now. Press one of the steps to see the jobs behind it.",
+        gate:{ click:'[data-tour="flow"] [data-list]' } },
+      { id:"drawer", target:"#drawer", keepDrawer:true,
+        title:"The jobs open at the side",
+        body:"The list opens over here. Press any job to see everything on it, what is missing in JobTread, and the button that opens it in JobTread. If your role allows it, you can change the status, project manager, start date and notice dates right here, and it saves to JobTread under your name." },
+      { id:"find", target:'[data-tour="find"]',
+        title:"Find any job",
+        body:"Type a job number, a client, a name or part of an address and the job comes up as you type. Press it to open it at the side." },
+      { id:"tosend", target:'[data-tour="page"]', at:"drafts",
+        title:"Emails waiting for a person",
+        body:"The AI assistants check the inboxes, JobTread and QuickBooks every morning and write the emails that need to go: quote follow-ups, payment reminders, requests for missing paperwork. They never send anything themselves. Open one, read it, then press Send or Discard. A client who replies gets estimating at A&M, not a robot." },
+      { id:"tools", target:'[data-tour="tools"]', at:"overview",
+        title:"Live, Refresh and Settings",
+        body:"The dot tells you the numbers are live and when they were last read. They update every few minutes on their own, and Refresh reads them again now. Settings is where people, PINs and the JobTread and QuickBooks connections live." },
+      { id:"done", bookend:true, at:"overview",
+        title:"That is the whole of it",
+        body:"That is the command centre. Sections across the top, pages underneath, what needs a decision first. Nothing here sends an email or changes a job unless a person presses the button. You can run this tour again any time with the Tour button at the top." }
+    ];
+  }
+
+  let steps = [], i = 0, liveTour = false, muted = false, gateOk = true, gateOff = null, releaseTimer = null;
+  const countable = () => steps.filter(s => !s.bookend);
+
+  /* ---------- the voice ---------- */
+  function voice(){
+    try{
+      const vs = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+      return vs.find(v => /en-CA/i.test(v.lang)) || vs.find(v => /natural|google|samantha|aria|jenny/i.test(v.name)) || vs[0] || null;
+    }catch(e){ return null; }
+  }
+  function speak(text){
+    hush();
+    if(muted || !text || !window.speechSynthesis) return;
+    try{
+      const u = new SpeechSynthesisUtterance(text);
+      const v = voice(); if(v) u.voice = v;
+      u.rate = 1; speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  function hush(){ try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){} }
+  function setMuted(v){
+    muted = v; try{ localStorage.setItem(MUTE, v ? "1" : "0"); }catch(e){}
+    if(v) hush(); else speak(steps[i] && steps[i].body);
+    paint();
+  }
+
+  /* ---------- the spotlight ---------- */
+  function spot(el){
+    const s = q("#ccSpot"); if(!s) return;
+    if(!el){ s.style.display = "none"; return; }
+    const r = el.getBoundingClientRect(), pad = 6;
+    s.style.display = "block";
+    s.style.top = (r.top - pad) + "px"; s.style.left = (r.left - pad) + "px";
+    s.style.width = (r.width + pad * 2) + "px"; s.style.height = (r.height + pad * 2) + "px";
+  }
+  function place(el){
+    const c = q("#ccCard"); if(!c) return;
+    c.style.left = "50%"; c.style.transform = "translateX(-50%)";
+    if(!el){ c.style.top = ""; c.style.bottom = "20px"; return; }
+    const r = el.getBoundingClientRect();
+    if(window.innerHeight - r.bottom > 280){ c.style.top = Math.max(r.bottom + 14, 10) + "px"; c.style.bottom = ""; }
+    else if(r.top > 280){ c.style.bottom = (window.innerHeight - r.top + 14) + "px"; c.style.top = ""; }
+    else { c.style.top = ""; c.style.bottom = "14px"; }
+  }
+
+  /* ---------- try-it steps ---------- */
+  function clearGate(){ if(gateOff){ gateOff(); gateOff = null; } clearTimeout(releaseTimer); releaseTimer = null; }
+  function armGate(step){
+    clearGate();
+    if(!step.gate){ gateOk = true; return; }
+    gateOk = false;
+    const pass = () => { if(!gateOk){ gateOk = true; paint(); } };
+    const h = e => { if(e.target && e.target.closest && e.target.closest(step.gate.click)) setTimeout(pass, 250); };
+    document.addEventListener("click", h, true);
+    gateOff = () => document.removeEventListener("click", h, true);
+    releaseTimer = setTimeout(pass, RELEASE_MS);   /* a nudge, never a lock */
+  }
+
+  /* ---------- drawing ---------- */
+  function paint(){
+    const step = steps[i]; if(!step) return;
+    const el = step.target ? q(step.target) : null;
+    spot(el); place(el);
+    const total = countable().length, no = step.bookend ? 0 : countable().indexOf(step) + 1, last = i === steps.length - 1;
+    q("#ccCard").innerHTML =
+      '<div class="cct-head"><span class="cct-count">' + (no ? "Step " + no + " of " + total : (last ? "Done" : "Welcome")) + '</span>' +
+      '<button class="cct-x" id="cctSkip">' + (last ? "Close" : "Skip the tour") + '</button></div>' +
+      '<h3>' + E(step.title) + '</h3><p class="cct-body">' + E(step.body) + '</p>' +
+      '<div class="cct-foot"><button class="cct-mute" id="cctMute">' + (muted ? "Play the voice" : "Stop the voice") + '</button>' +
+      '<div class="cct-nav">' + (i > 0 ? '<button class="cct-back" id="cctBack">Back</button>' : '') +
+      '<button class="cct-next" id="cctNext"' + (gateOk ? '' : ' disabled') + '>' + (last ? "Finish" : "Next") + '</button></div></div>' +
+      (gateOk ? '' : '<div class="cct-wait">Have a go at it, then Next opens.</div>');
+    q("#cctSkip").onclick = finish;
+    q("#cctMute").onclick = () => setMuted(!muted);
+    const b = q("#cctBack"); if(b) b.onclick = () => show(i - 1, -1);
+    q("#cctNext").onclick = () => { if(gateOk) last ? finish() : show(i + 1, 1); };
+  }
+  function waitFor(sel, ms){
+    return new Promise(res => {
+      if(!sel || q(sel)) return res(true);
+      const t0 = Date.now(), iv = setInterval(() => {
+        if(q(sel)){ clearInterval(iv); res(true); }
+        else if(Date.now() - t0 > (ms || 2000)){ clearInterval(iv); res(false); }
+      }, 120);
+    });
+  }
+  async function show(n, dir){
+    if(n < 0) n = 0;
+    if(n >= steps.length) return finish();
+    i = n; const step = steps[i];
+    if(!step.keepDrawer && drawerState) closeDrawer();
+    if(step.at && current !== step.at && CFG.tabs.includes(step.at)) go(step.at);
+    if(step.target){
+      const there = await waitFor(step.target);
+      /* Not on this person's screen: move on in the direction they were going. */
+      if(!there) return show(n + (dir || 1), dir || 1);
+      const el = q(step.target);
+      if(el && step.target !== "#drawer" && step.target !== "#secs" && step.target !== "#tabs") el.scrollIntoView({ block:"center" });
+      await new Promise(r => setTimeout(r, 200));
+    }
+    armGate(step); speak(step.body); paint();
+  }
+
+  /* ---------- start and stop ---------- */
+  function start(){
+    if(liveTour) return;
+    liveTour = true;
+    try{ muted = localStorage.getItem(MUTE) === "1"; }catch(e){ muted = false; }
+    steps = chapters().filter(s => !s.at || CFG.tabs.includes(s.at));
+    if(!q("#ccTour")){
+      const d = document.createElement("div"); d.id = "ccTour";
+      d.innerHTML = '<div id="ccSpot"></div><div id="ccCard" role="dialog" aria-live="polite" aria-label="Walkthrough"></div>';
+      document.body.appendChild(d);
+    }
+    document.body.classList.add("cct-on");
+    show(0, 1);
+  }
+  function finish(){
+    liveTour = false; clearGate(); hush();
+    const d = q("#ccTour"); if(d) d.remove();
+    document.body.classList.remove("cct-on");
+    if(drawerState) closeDrawer();
+    try{ localStorage.setItem(SEEN, "1"); }catch(e){}
+    go("overview");
+  }
+  window.addEventListener("resize", () => { if(liveTour) paint(); });
+  window.addEventListener("scroll", () => { if(liveTour) paint(); }, true);
+  /* The page redraws itself every few minutes. Put the spotlight back on top. */
+  const keep = new MutationObserver(() => { if(liveTour) requestAnimationFrame(paint); });
+  const watchMain = () => { const m = q("#main"); if(m) keep.observe(m, { childList:true }); };
+  if(q("#main")) watchMain(); else document.addEventListener("DOMContentLoaded", watchMain);
+
+  return {
+    start,
+    ready(){ try{ if(localStorage.getItem(SEEN) === "1") return; }catch(e){ return; } start(); },
+    replay(){ try{ localStorage.removeItem(SEEN); }catch(e){} start(); }
+  };
+})();
 
 start();
 </script>

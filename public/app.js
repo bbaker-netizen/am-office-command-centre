@@ -1699,7 +1699,7 @@ function renderTabs() {
   /* The command centre lives in this same app, one page over. Shown to the
      office, the field leads and the owner; the server decides who that is. */
   const command = (S.role && S.role !== 'crew')
-    ? `<button class="tab-set" data-href="/command.html">${narrow ? 'Command' : 'Command centre'}</button>` : '';
+    ? `<button class="tab-set" data-href="/command.html#equipment">${narrow ? 'Command' : 'Command centre'}</button>` : '';
   /* On a phone these used to wrap onto four lines and eat a third of the
      screen before any of the work showed. The tabs now scroll sideways in one
      line, and Settings and the door to the other side are pinned outside the
