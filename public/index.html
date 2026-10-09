@@ -11,39 +11,71 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="am-logo.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%231a1917'/><text x='50' y='70' font-size='54' font-family='Arial' font-weight='bold' fill='%23329dbb' text-anchor='middle'>A</text></svg>">
-<link rel="stylesheet" href="styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&display=swap">
+<style>
+:root{
+  --ink:#1a1917; --ink-2:#4a4844; --ink-3:#77746d; --rule:#ddd9d2; --ground:#f4f3ef; --panel:#fff; --panel-2:#faf9f6;
+  --bar:#1a1917; --bar-ink:#f4f3ef; --bar-3:#9a968e; --cyan:#329dbb; --cyan-deep:#1f7691; --stop:#b3341f;
+  --shadow:0 1px 2px rgba(26,25,23,.05), 0 12px 32px -18px rgba(26,25,23,.35);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ink:#f2efe9; --ink-2:#b8b3aa; --ink-3:#8b867d; --rule:#33312d; --ground:#121110; --panel:#1c1b19; --panel-2:#211f1d;
+  --bar:#0b0b0a; --cyan:#5cc0dc; --cyan-deep:#8ad5ea; --stop:#e8735a; --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 32px -18px rgba(0,0,0,.8); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --ink:#f2efe9; --ink-2:#b8b3aa; --ink-3:#8b867d; --rule:#33312d; --ground:#121110; --panel:#1c1b19; --panel-2:#211f1d;
+  --bar:#0b0b0a; --cyan:#5cc0dc; --cyan-deep:#8ad5ea; --stop:#e8735a; --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 32px -18px rgba(0,0,0,.8); color-scheme:dark }
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--ground);color:var(--ink);font-family:Archivo,Arial,Helvetica,sans-serif;font-size:15px;-webkit-font-smoothing:antialiased}
+.top{background:var(--bar);color:var(--bar-ink);padding-top:env(safe-area-inset-top,0px)}
+.top .in{max-width:1240px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:16px}
+.am{font-weight:800;font-size:24px;letter-spacing:-.03em;line-height:1}
+.am b{color:var(--cyan)}
+.who-t{display:flex;flex-direction:column;line-height:1.25;padding-left:16px;border-left:1px solid #3a3834}
+.who-t b{font-size:15px;font-weight:700}
+.who-t span{font-size:11px;color:var(--bar-3)}
+main{padding:40px 16px calc(48px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center}
+.card{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--rule);border-top:4px solid var(--cyan);border-radius:4px;box-shadow:var(--shadow);padding:26px 24px}
+.logo{display:block;width:150px;height:auto;margin:0 0 18px;background:#fff;border-radius:4px;padding:6px 8px}
+h1{margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:-.02em}
+.lede{margin:0 0 18px;font-size:14.5px;line-height:1.5;color:var(--ink-2)}
+.lede.bad,.msg.bad{color:var(--stop);font-weight:600}
+.small{font-size:12.5px;color:var(--ink-3);margin:16px 0 0;line-height:1.45}
+.msg{margin:10px 0 0;font-size:13.5px;min-height:1px}
+.who{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(130px,100%),1fr));gap:8px}
+.who.tucked{display:none}
+.who-pick{font:inherit;font-size:15px;font-weight:600;text-align:left;padding:13px 14px;border:1px solid var(--rule);border-radius:4px;background:var(--panel-2);color:var(--ink);cursor:pointer}
+.who-pick:hover,.who-pick:focus-visible{border-color:var(--cyan);outline:none}
+.btn{font:inherit;font-weight:700;border:0;border-radius:4px;background:var(--ink);color:var(--panel);padding:13px 16px;cursor:pointer;width:100%}
+.btn.big{font-size:16px;margin-bottom:10px}
+.btn[disabled]{opacity:.5}
+.link{font:inherit;background:none;border:0;color:var(--cyan-deep);font-weight:600;cursor:pointer;padding:6px 0;margin-bottom:12px;text-decoration:underline}
+.pin-dots{display:flex;gap:14px;justify-content:center;margin:6px 0 22px}
+.pin-dots span{width:15px;height:15px;border-radius:50%;border:2px solid var(--rule)}
+.pin-dots span.on{background:var(--ink);border-color:var(--ink)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pin-k{font:inherit;font-size:24px;font-weight:600;padding:16px 0;border:1px solid var(--rule);border-radius:6px;background:var(--panel);color:var(--ink);cursor:pointer}
+.pin-k:active{background:var(--panel-2)}
+.pin-k.ghost{font-size:14px;color:var(--ink-3)}
+.foot{max-width:440px;margin:14px auto 0;text-align:center;font-size:12px;color:var(--ink-3)}
+noscript p{max-width:440px;margin:0 auto}
+@media (max-width:480px){ main{padding-top:20px} .card{padding:22px 18px} .who-t span{display:none} }
+</style>
 </head>
 <body>
-
-<header class="topbar">
-  <div class="topbar-inner">
-    <a class="brandmark" href="#/" title="A&amp;M Abatement Services">
-      <img src="am-logo.png" alt="A&amp;M Abatement Services" onerror="this.remove()">
-      <span class="wordmark">A&amp;M <span>Command Centre</span></span>
-    </a>
-    <nav class="tabs" id="tabs"></nav>
-    <div class="statusbar" id="statusbar"></div>
+<header class="top"><div class="in"><div class="am">A<b>&amp;</b>M</div><div class="who-t"><b>Office Command Centre</b><span>A&amp;M Abatement Services Ltd</span></div></div></header>
+<main>
+  <div>
+    <div class="card">
+      <img class="logo" src="am-logo.png" alt="A&amp;M Abatement Services" onerror="this.remove()">
+      <div id="door"><p class="lede">Opening the A&amp;M app…</p></div>
+    </div>
+    <p class="foot">Edmonton and Calgary. One sign-in for jobs, money, the assistants and the shop.</p>
   </div>
-</header>
-
-<main id="view">
-  <div class="loading">Opening the A&amp;M app…</div>
 </main>
-
-<div id="scanlayer" hidden></div>
-<div id="modal" hidden></div>
-<div id="toast" hidden></div>
-
-<footer class="foot" id="foot"></footer>
-
-<script src="vendor/html5-qrcode.min.js"></script>
-<script src="vendor/qrcode.min.js"></script>
-<script src="seed.js"></script>
-<script src="sop.js"></script>
-<script src="app.js"></script>
-<script src="crew.js"></script>
-<script src="office.js"></script>
-<script src="tour.js"></script>
-<script>window.AM && AM.boot();</script>
+<noscript><p>The A&amp;M app needs JavaScript switched on in this browser.</p></noscript>
+<script src="door.js"></script>
 </body>
 </html>

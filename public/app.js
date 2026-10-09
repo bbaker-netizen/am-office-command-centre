@@ -2028,7 +2028,22 @@ async function bioUnlock() {
    closing the app does not clear it. */
 async function failState() { return (await kvGet('pinFail')) || { n: 0, until: 0 }; }
 
+/* ONE SIGN-IN FOR THE WHOLE APP
+   The shop screens no longer draw their own sign-in. Anybody who needs to sign
+   in, because they have never signed in on this device, the hour idle ran out,
+   or the office switched them off, is sent to the app's front door (/), which
+   signs them in the same way, with the same names, PINs and fingerprint, and
+   sends them straight back to the shop screen they were on. The front door is
+   stored on the device too, so this works with no signal. The session is
+   cleared first, so the front door never sends them straight back here. */
 async function renderLock() {
+  try { await kvSet('session', null); } catch (e) {}
+  const h = location.hash && location.hash !== '#' && location.hash !== '#/' ? location.hash : '';
+  location.replace('/?next=shop' + (h ? '&h=' + encodeURIComponent(h) : ''));
+}
+
+/* The shop's own sign-in screen, kept only for reference. Nothing calls it. */
+async function renderLockInShop() {
   document.body.classList.add('locked');
   const tabs = $('#tabs'); if (tabs) tabs.innerHTML = '';
   const sb = $('#statusbar');

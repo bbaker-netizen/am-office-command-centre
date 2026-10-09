@@ -635,7 +635,7 @@ function drawTabs(){
   /* The shop is part of Field. Its screens (stock out and back, transfers,
      shelf, orders, filter certificates) are the inventory side of this same
      app, so the Shop page opens them. */
-  if(PLATFORM === "app" && here === "Field") html += '<a class="tab" href="/#/" data-tour="shop">Shop</a>';
+  if(PLATFORM === "app" && here === "Field") html += '<a class="tab" href="/shop.html#/" data-tour="shop">Shop</a>';
   $("tabs").innerHTML = html;
   $("tabs").hidden = !pages.length;
 }
@@ -1021,31 +1021,60 @@ document.addEventListener("input", ev => {
 });
 
 /* ---------- inside the A&M app: data comes from the app's own server ----------
-   Same sign-in as the shop screens. The token the app saved on this device is
-   read straight from its storage, so nobody signs in twice. What each person can
-   see is decided on the server by their role; this page only draws it. */
+   Everybody signs in once, at the app's front door (/). The token and session it
+   saves on this device are read straight from its storage. What each person can
+   see is decided on the server by their role; this page only draws it. Like the
+   shop screens, this page locks after an hour idle and sends people back to the
+   front door, which brings them straight back here. */
 let TOKEN = "";
-function idbToken(){
-  return new Promise(res => {
-    try{
-      const rq = indexedDB.open("am-inventory", 1);
-      rq.onupgradeneeded = () => {
-        /* Same shape the app makes, so opening here first never breaks it. */
-        const d = rq.result;
-        if(!d.objectStoreNames.contains("kv")) d.createObjectStore("kv");
-        if(!d.objectStoreNames.contains("events")) d.createObjectStore("events", { keyPath:"id" });
-        if(!d.objectStoreNames.contains("outbox")) d.createObjectStore("outbox", { keyPath:"id" });
-      };
-      rq.onsuccess = () => {
-        try{
-          const g = rq.result.transaction("kv", "readonly").objectStore("kv").get("token");
-          g.onsuccess = () => res(g.result || ""); g.onerror = () => res("");
-        }catch(e){ res(""); }
-      };
-      rq.onerror = () => res("");
-    }catch(e){ res(""); }
+function idbToken(){ return idbGet("token").then(v => v || ""); }
+function idbOpen(){
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open("am-inventory", 1);
+    rq.onupgradeneeded = () => {
+      /* Same shape the app makes, so opening here first never breaks it. */
+      const d = rq.result;
+      if(!d.objectStoreNames.contains("kv")) d.createObjectStore("kv");
+      if(!d.objectStoreNames.contains("events")) d.createObjectStore("events", { keyPath:"id" });
+      if(!d.objectStoreNames.contains("outbox")) d.createObjectStore("outbox", { keyPath:"id" });
+    };
+    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
   });
 }
+function idbGet(k){
+  return idbOpen().then(d => new Promise(res => {
+    try{ const g = d.transaction("kv", "readonly").objectStore("kv").get(k); g.onsuccess = () => res(g.result); g.onerror = () => res(undefined); }catch(e){ res(undefined); }
+  })).catch(() => undefined);
+}
+function idbSet(k, v){
+  return idbOpen().then(d => new Promise(res => {
+    try{ const t = d.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); t.oncomplete = () => res(); t.onerror = () => res(); }catch(e){ res(); }
+  })).catch(() => {});
+}
+/* Back to the front door: signing in again, or signing out. */
+async function toDoor(out){
+  await idbSet("session", null);
+  if(out) return location.replace("/?out=1");
+  const sec = current || (location.hash || "").replace("#", "");
+  const h = sec && sec !== "overview" && /^[a-z]+$/.test(sec) ? "&h=" + encodeURIComponent("#" + sec) : "";
+  location.replace("/?next=command" + h);
+}
+let LOCK_MIN = 60, touchedAt = 0;
+const idleMinutes = s => s ? (Date.now() - new Date(s.lastSeen || s.at).getTime()) / 60000 : Infinity;
+/* Using the page keeps the session awake, exactly as using the shop screens does. */
+function touch(){
+  const now = Date.now(); if(now - touchedAt < 20000) return; touchedAt = now;
+  idbGet("session").then(s => { if(s){ s.lastSeen = new Date().toISOString(); return idbSet("session", s); } });
+}
+/* A token the office has switched off or that has run out sends people to sign in again, from any screen. */
+const _cfetch = window.fetch.bind(window);
+window.fetch = function(input, init){
+  return _cfetch(input, init).then(r => {
+    const u = typeof input === "string" ? input : (input && input.url) || "";
+    if(r.status === 401 && /\/api\//.test(u) && TOKEN) { TOKEN = ""; idbSet("token", null); toDoor(); }
+    return r;
+  });
+};
 function api(part, fresh){
   return fetch("/api/command?part=" + part + (fresh ? "&fresh=1" : ""), { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
     .then(async r => {
@@ -1075,28 +1104,38 @@ function appLoad(fresh){
 }
 function appStop(title, text){
   $("main").innerHTML = '<div class="tabhead"><h1>' + E(title) + '</h1></div><div class="verdict caution"><p>' + E(text) + '</p>' +
-    '<div class="meta"><a href="/?signin=1">Sign in to the A&amp;M app</a>. You come straight back here.</div></div>';
+    '<div class="meta"><a href="/?next=command">Sign in to the A&amp;M app</a>. You come straight back here.</div></div>';
   $("conndot").className = "dot warn"; $("connlabel").textContent = "Not signed in";
 }
 async function startApp(){
   sizeTop();
   /* Settings is its own small button beside Refresh. The shop is a page in Field. */
   const set = document.createElement("a");
-  set.className = "refresh"; set.href = "/#/setup"; set.textContent = "Settings"; set.style.textDecoration = "none";
+  set.className = "refresh"; set.href = "/shop.html#/setup"; set.textContent = "Settings"; set.style.textDecoration = "none";
   $("refresh").parentNode.insertBefore(set, $("refresh"));
+  const out = document.createElement("button");
+  out.className = "refresh"; out.textContent = "Sign out"; out.title = "Sign out of the whole app on this device"; out.onclick = () => toDoor(true);
+  $("refresh").parentNode.appendChild(out);
   /* The walkthrough. Starts on its own the first time; this button replays it. */
   const tour = document.createElement("button");
   tour.className = "refresh"; tour.textContent = "Tour"; tour.onclick = () => CCTOUR.replay();
   $("refresh").parentNode.insertBefore(tour, set);
   TOKEN = await idbToken();
-  if(!TOKEN) return appStop("Sign in first", "This device has not signed in to the A&M app yet.");
+  const sess = await idbGet("session"), cat = await idbGet("catalog");
+  LOCK_MIN = (cat && cat.settings && cat.settings.lockMinutes) || 60;
+  /* Not signed in on this device, or idle for over an hour: the front door. */
+  if(!TOKEN || !sess || idleMinutes(sess) > LOCK_MIN) return toDoor();
   let me;
   try{ me = await api("me"); }
   catch(e){
-    if(e.status === 401) return appStop("Sign in again", e.message || "Your sign-in has run out.");
+    if(e.status === 401) return toDoor();
     return appStop("Cannot reach the app", e.message || "The app did not answer. Check for signal and reload.");
   }
-  if(me.role === "crew") return appStop("Not part of your screens", "The command centre is for the office and field leads. Your screens are the shop screens. If you need this, ask Jen.");
+  /* Crew sign in to the same app; their part of it is the shop screens. */
+  if(me.role === "crew") return location.replace("/shop.html#/");
+  touch();
+  ["click", "keydown", "touchstart"].forEach(ev => document.addEventListener(ev, touch, { passive:true, capture:true }));
+  setInterval(() => { idbGet("session").then(s => { if(!s || idleMinutes(s) > LOCK_MIN) toDoor(); }); }, 60000);
   ROLE = me.role === "owner" ? "craig" : me.role;
   /* The assistants' emails are sent from the app by the owner and the office. */
   let tabs = ROLES[ROLE].tabs.filter(t => t !== "drafts").concat(["owner", "office"].includes(me.role) ? ["drafts"] : []);
@@ -2497,8 +2536,8 @@ const CCTOUR = (function(){
         title:"Emails waiting for a person",
         body:"The AI assistants check the inboxes, JobTread and QuickBooks every morning and write the emails that need to go: quote follow-ups, payment reminders, requests for missing paperwork. They never send anything themselves. Open one, read it, then press Send or Discard. A client who replies gets estimating at A&M, not a robot." },
       { id:"tools", target:'[data-tour="tools"]', at:"overview",
-        title:"Live, Refresh and Settings",
-        body:"The dot tells you the numbers are live and when they were last read. They update every few minutes on their own, and Refresh reads them again now. Settings is where people, PINs and the JobTread and QuickBooks connections live." },
+        title:"Live, Refresh, Settings and Sign out",
+        body:"The dot tells you the numbers are live and when they were last read. They update every few minutes on their own, and Refresh reads them again now. Settings is where people, PINs and the JobTread and QuickBooks connections live. Sign out signs you out of the whole app on this device; it also locks itself after an hour idle." },
       { id:"done", bookend:true, at:"overview",
         title:"That is the whole of it",
         body:"That is the command centre. Sections across the top, pages underneath, what needs a decision first. Nothing here sends an email or changes a job unless a person presses the button. You can run this tour again any time with the Tour button at the top." }
