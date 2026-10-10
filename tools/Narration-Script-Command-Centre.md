@@ -159,3 +159,84 @@ Up here, the dot shows the numbers are live and when they were last read. They r
 > Closing step.
 
 And that's the whole tour! Sections across the top, pages underneath, and what needs a decision first. Nothing here sends an email or changes a job unless a person presses the button. You can take this tour again any time with the Tour button at the top. Enjoy!
+
+
+# Added 2026-10-10 (Upload 3)
+
+## crewboard
+
+> Spotlights the crew board on Dispatch.
+
+This is where crews get built. Drag someone onto a job, or on a phone, tap a person and then tap Add here. Pick the crew lead and the start times, and it all lands on the job's Site Work task in JobTread, so the crew see it in their own JobTread app. A red name means that person is booked somewhere else the same day. Work order prints a one-page sheet for the crew lead.
+
+## tm
+
+> Spotlights the T&M and extras page.
+
+This page looks after the money that goes missing when the paperwork does. T&M jobs get a sheet built straight from the timesheets, ready for the client to sign. Change orders show how long they've waited, and jobs on site with hours but no approved quote are flagged, because that's usually extra work nobody has written up yet.
+
+## invoicing
+
+> Spotlights Invoicing deadlines on Closeout.
+
+Every client has their own billing rules: where the invoice goes, the cut-off date, and whether it needs a PO, a subcontract number, holdback or a portal. They live on the customer in JobTread, and this card lines up finished work by the soonest cut-off, so nothing slides into next month.
+
+## clients
+
+> Spotlights the Clients page.
+
+Clients shows every customer in one place: what we've won and lost, quotes waiting, what they owe, and whether their billing rules are on file. Gone quiet lists good repeat clients who haven't sent anything in a while, so someone can pick up the phone.
+
+## scorecards
+
+> Admins only. Spotlights Scorecards.
+
+Scorecards pulls together the numbers from each position profile that the systems can actually measure, for the monthly reviews. It's a starting point for a conversation, not the whole story.
+
+## drive
+
+> Spotlights My account.
+
+One more thing worth doing today. Open My account and press Connect Google Drive. It's read only, and it uses your own Google access, so you never see anything you couldn't already open. After that, each job shows its Drive folder, and Claude can answer from the SOP and your role profile.
+
+## pay-intro
+
+> Payroll walkthrough, started from Walk me through it on Payroll.
+
+Hi! This page does the hour-by-hour split that used to be done by hand. The crews' hours come straight from JobTread timesheets, and the app sorts them into your buckets. Let's walk through it once.
+
+## pay-period
+
+> Spotlights the pay period buttons.
+
+Up here you pick the two-week pay period. Previous and Next move a period at a time, and Refresh reads the timesheets again. The two Download buttons give you the summary or every line, as a spreadsheet.
+
+## pay-check
+
+> Spotlights the box at the top.
+
+This box lists anything that would make the split wrong: hours not approved yet, someone still clocked in, or a job with no city. Fix those in JobTread first, then press Refresh, and the box clears itself.
+
+## pay-summary
+
+> Spotlights Hours by employee and bucket.
+
+This is the report you asked for. Each person's hours, split by service line, Edmonton or Calgary, with shop and office time kept in general payroll. ACES temps are shown separately, because they aren't A&M payroll.
+
+## pay-journal
+
+> Spotlights the journal entry.
+
+Once the pay run is done in QuickBooks, type each person's payroll cost here. The app splits it by their share of hours, with overtime counted at one and a half, and builds the journal entry. Press Show the entry to check it, then Post sends it to QuickBooks, once per period.
+
+## pay-settings
+
+> Spotlights Payroll settings.
+
+The first time, open Payroll settings and pick the QuickBooks account for each bucket. After that you shouldn't need to touch it.
+
+## pay-done
+
+> Closing step of the payroll walkthrough.
+
+That's it! Check the box at the top, download or post, and you're done. If anything looks off, press the round Claude button and ask, or press Walk me through it to see this again.
