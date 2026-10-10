@@ -26,13 +26,23 @@ const PAVE = "https://api.jobtread.com/pave";
 const store = () => getStore({ name: STORE, consistency: "strong" });
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 
+/* A key can be made for one company or for every company the person belongs
+   to. The second kind has no company of its own, so A&M is picked from the
+   person's memberships. */
+const AM_ORG = process.env.JOBTREAD_ORG_ID || "22PRQFH4cHFm";
 async function probe(grantKey) {
   const r = await fetch(PAVE, { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ query: { $: { grantKey }, currentGrant: { id: {}, user: { name: {} }, organization: { id: {}, name: {} } } } }) });
+    body: JSON.stringify({ query: { $: { grantKey }, currentGrant: { id: {}, user: { name: {}, memberships: { nodes: { organization: { id: {}, name: {} } } } }, organization: { id: {}, name: {} } } } }) });
   const body = await r.json().catch(() => ({}));
   const g = body && body.currentGrant;
-  if (!r.ok || !g || !g.organization) throw new Error("JobTread did not accept that key. Copy it again from JobTread, Settings, API, and paste the whole thing.");
-  return { organizationId: g.organization.id, organizationName: g.organization.name, grantUser: (g.user && g.user.name) || "" };
+  if (!r.ok || !g) throw new Error("JobTread did not accept that key. Keys stop working after 90 days without use. Make a new one in JobTread under your profile, Grants, and paste the whole thing.");
+  let org = g.organization;
+  if (!org) {
+    const orgs = ((g.user && g.user.memberships && g.user.memberships.nodes) || []).map(m => m.organization).filter(Boolean);
+    org = orgs.find(o => o.id === AM_ORG) || orgs.find(o => /a\s*&\s*m/i.test(o.name || "")) || (orgs.length === 1 ? orgs[0] : null);
+  }
+  if (!org) throw new Error("That key works, but it does not reach A&M's company in JobTread. Make the key while signed in to A&M's JobTread.");
+  return { organizationId: org.id, organizationName: org.name, grantUser: (g.user && g.user.name) || "" };
 }
 
 export default async (req) => {
@@ -44,8 +54,20 @@ export default async (req) => {
     if (req.method === "GET") {
       const c = (await s.get(KEY_BLOB, { type: "json" })) || {};
       const t = await readTokens().catch(() => null);
+      /* A saved key is not the same as a working one. Ask JobTread, every time
+         this page opens, and fill in the company and person the key belongs to
+         (a key saved from the shop's settings never recorded them). */
+      let working = false, problem = "";
+      if (c.grantKey) {
+        try {
+          const p = await probe(c.grantKey); working = true;
+          if (p.organizationId !== c.organizationId || p.organizationName !== c.organizationName || p.grantUser !== c.grantUser) {
+            Object.assign(c, p); await s.setJSON(KEY_BLOB, c);
+          }
+        } catch (e) { problem = e.message; }
+      }
       return json({
-        jobtread: { connected: !!c.grantKey, organizationId: c.organizationId || "", organizationName: c.organizationName || "", grantUser: c.grantUser || "", savedAt: c.savedAt || null, savedBy: c.savedBy || "" },
+        jobtread: { connected: !!c.grantKey, working, problem, organizationId: c.organizationId || "", organizationName: c.organizationName || "", grantUser: c.grantUser || "", savedAt: c.savedAt || null, savedBy: c.savedBy || "" },
         quickbooks: { connected: !!(t && t.refresh_token), realmId: (t && t.realmId) || null, connectedAt: (t && t.connected_at) || null, connectedBy: (t && t.connected_by) || "", missingEnv: missingEnv() }
       });
     }

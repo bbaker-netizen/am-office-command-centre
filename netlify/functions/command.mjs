@@ -66,7 +66,7 @@ async function pave(query, grantKey) {
 async function readJobs(s) {
   const c = (await s.get("jobtread-key", { type: "json" })) || {};
   if (!c.grantKey || !c.organizationId) {
-    const e = new Error("JobTread is not connected yet. The office connects it in Settings, JobTread link.");
+    const e = new Error("JobTread is not connected yet. An admin connects it in Settings, Connections.");
     e.status = 409; throw e;
   }
   const nodes = []; let total = null, page = null, guard = 0;

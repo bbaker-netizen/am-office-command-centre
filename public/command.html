@@ -374,7 +374,7 @@ button:focus-visible,.btn:focus-visible,a:focus-visible,[tabindex]:focus-visible
 #amWork{position:fixed;top:10px;left:50%;transform:translate(-50%,-140%);z-index:91;background:var(--ink);color:var(--panel);font-size:12px;font-weight:700;padding:6px 12px 6px 10px;border-radius:999px;box-shadow:var(--shadow);transition:transform .25s ease;display:flex;align-items:center;gap:8px;pointer-events:none}
 #amWork.on{transform:translate(-50%,0)}
 #amWork::before{content:"";width:10px;height:10px;border:2px solid var(--cyan);border-right-color:transparent;border-radius:50%;animation:am-spin .7s linear infinite}
-.state.loading{position:relative;overflow:hidden}
+.state.loading{position:relative;overflow:hidden;animation:am-fade .3s ease .15s both}
 .state.loading::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 20%,rgba(50,157,187,.16) 50%,transparent 80%);animation:am-shimmer 1.3s linear infinite}
 @keyframes am-shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 .dots::after{content:"";animation:am-dots 1.2s steps(4) infinite}
@@ -395,10 +395,8 @@ main.enter .kpi:nth-child(2){animation-delay:.05s}main.enter .kpi:nth-child(3){a
 @keyframes am-slide{from{transform:translateX(40px);opacity:.4}to{transform:none;opacity:1}}
 .scrim:not([hidden]){animation:am-fade .25s ease}
 @keyframes am-fade{from{opacity:0}to{opacity:1}}
-.verdict.stop{animation:am-pulse 2.6s ease-in-out 2}
+main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-pulse 2.6s ease-in-out .4s 2}
 @keyframes am-pulse{50%{box-shadow:0 0 0 4px var(--stop-wash)}}
-.badge{animation:am-pop .35s cubic-bezier(.2,.9,.3,1.4)}
-@keyframes am-pop{from{transform:scale(.4)}to{transform:scale(1)}}
 /* dragging the number tiles into your own order */
 .kpis.can-drag .kpi{cursor:grab;touch-action:pan-y}
 .kpi.drag-ghost{position:fixed;z-index:80;pointer-events:none;cursor:grabbing;transform:rotate(-2deg) scale(1.04);box-shadow:0 24px 50px -18px rgba(0,0,0,.55);opacity:.95;transition:none}
@@ -789,7 +787,11 @@ function render(){
   $("main").innerHTML = html + footer();
   try{ afterRender(); }catch(e){}
   const n = S.jobs ? S.jobs.length : 0;
-  $("connlabel").textContent = S.jobs ? ("Live · " + n + " jobs" + (S.stamp ? " · " + new Date(S.stamp).toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit"}) : "")) : (S.jobsErr ? "JobTread not answering" : "Reading");
+  $("connlabel").textContent = S.jobs ? ("Live · " + n + " jobs" + (S.stamp ? " · " + new Date(S.stamp).toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit"}) : "")) : (S.jobsErr ? (S.jobsErr.code === "not_connected" ? "JobTread not connected" : "JobTread not answering") : "Reading");
+  /* When JobTread is down or not connected, the label says why and, for an admin, opens Connections. */
+  const cl = $("connlabel"); cl.title = S.jobsErr ? errCopy(S.jobsErr) : "";
+  cl.style.cursor = S.jobsErr && ME.admin ? "pointer" : ""; cl.style.textDecoration = S.jobsErr && ME.admin ? "underline" : "";
+  cl.onclick = S.jobsErr && ME.admin ? () => go("connections") : null;
   $("conndot").className = "dot " + (S.jobsErr ? "bad" : (S.jobs ? (S.jobsShort ? "warn" : "ok") : ""));
   if(drawerState && drawerState.kind === "list") openList(drawerState.key, true);
 }
@@ -3158,7 +3160,13 @@ function uxKpis(){
 function afterRender(){
   if(!UX) return;
   const main = document.getElementById("main");
-  if(UX.enterNext){ UX.enterNext = false; main.classList.remove("enter"); void main.offsetWidth; main.classList.add("enter"); setTimeout(() => main.classList.remove("enter"), 900); }
+  /* The entrance plays once when a page opens. A page usually draws two or
+     three times as its numbers arrive; replaying the entrance on each of those
+     is what made pages look like they flickered. The one exception: if the
+     first draw was only a "Reading" note, the real content gets the entrance. */
+  const onlyWaiting = !!main.querySelector(".state.loading") && !main.querySelector(".card,.kpis,table,.verdict");
+  if(UX.enterNext && !onlyWaiting){ UX.enterNext = false; main.classList.add("enter"); clearTimeout(UX.enterTimer); UX.enterTimer = setTimeout(() => main.classList.remove("enter"), 700); }
+  else if(!UX.enterNext){ clearTimeout(UX.enterTimer); main.classList.remove("enter"); }
   if(current === "overview") uxKpis();
   const q = new URLSearchParams(location.search);
   if(q.get("qbo") === "connected"){ toast("QuickBooks is connected.", "ok"); try{ history.replaceState(null, "", location.pathname + location.hash); }catch(e){} }
@@ -3368,6 +3376,8 @@ VIEWS.connections = {
   hold(){ const a = document.activeElement; return !!(a && a.closest && a.closest("[data-cn-form]") && /INPUT/.test(a.tagName)); },
   alerts(){ const d = CN.data; if(!d) return []; const out = [];
     if(!d.jobtread.connected) out.push({ lvl:"stop", text:"JobTread is not connected.", meta:"Nothing in the command centre can read jobs until it is." });
+    else if(!d.jobtread.working) out.push({ lvl:"stop", text:"A JobTread key is saved, but JobTread refused it.", meta: d.jobtread.problem || "Paste a fresh key below." });
+    if(d.jobtread.working && d.jobtread.grantUser && !/a&m|automation|admin|office|robot/i.test(d.jobtread.grantUser)) out.push({ lvl:"info", text:"JobTread is connected through " + d.jobtread.grantUser + "'s own login.", meta:"It stops working if that login changes. Make a key under an A&M account when you can." });
     if(!d.quickbooks.connected) out.push({ lvl:"caution", text:"QuickBooks is not connected.", meta:"Money, buying and payroll posting need it." });
     return out; },
   render(){
@@ -3377,8 +3387,9 @@ VIEWS.connections = {
     const d = CN.data, j = d.jobtread, q = d.quickbooks;
     h += verdictHtml(this.alerts(), "Everything is connected.", "JobTread " + (j.organizationName || "") + ", QuickBooks company " + (q.realmId || ""));
     h += '<div class="conn" style="margin-top:16px">';
-    h += '<div class="card" data-cn-form><h2><span class="lamp' + (j.connected ? " on" : "") + '"></span>JobTread</h2>' +
-      (j.connected ? '<p class="lede">Connected to <b>' + E(j.organizationName || j.organizationId) + '</b>' + (j.grantUser ? ', through ' + E(j.grantUser) + '\'s key' : '') + '. Saved ' + E(showWhen(j.savedAt)) + (j.savedBy ? ' by ' + E(j.savedBy) : '') + '.</p>' : '<p class="lede">Not connected. In JobTread, open Settings, then API, create a key, and paste it here. The app tests it before saving.</p>') +
+    h += '<div class="card" data-cn-form><h2><span class="lamp' + (j.working ? " on" : "") + '"></span>JobTread</h2>' +
+      (j.connected && !j.working ? '<div class="state err" style="margin-bottom:10px">A key is saved but JobTread did not accept it just now. ' + E(j.problem || "") + '</div>' : '') +
+      (j.working ? '<p class="lede">Connected and working, checked just now. Company: <b>' + E(j.organizationName || j.organizationId) + '</b>' + (j.grantUser ? ', through ' + E(j.grantUser) + '\'s key' : '') + '. Saved ' + E(showWhen(j.savedAt)) + (j.savedBy ? ' by ' + E(j.savedBy) : '') + '.</p>' : '<p class="lede">Not connected. In JobTread, open Settings, then API, create a key, and paste it here. The app tests it before saving.</p>') +
       '<label class="fld"><b>' + (j.connected ? "Replace the key" : "JobTread key") + '</b><input type="password" id="cnKey" autocomplete="off" placeholder="Paste the key"></label>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-cn-jt>Test and save</button>' + (j.connected ? '<button class="btn ghost" data-cn-jtforget>Disconnect</button>' : '') + '</div>' +
       '<p class="sm" style="margin-top:8px">Use a key made under an A&amp;M account, not a person\'s own login, so it keeps working when people change.</p></div>';
