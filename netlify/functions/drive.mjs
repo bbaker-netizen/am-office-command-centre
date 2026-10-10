@@ -34,7 +34,7 @@ export default async (req) => {
   try {
     if (req.method === "GET" && !action) { const t = await tokenInfo(s, u.id); return json({ ready: driveReady(), connected: !!t, email: t ? t.email : "", since: t ? t.at : "" }); }
     if (req.method === "GET" && action === "start") {
-      if (!driveReady()) return json({ error: "setup", message: "Drive needs GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and AUTH_SECRET in Netlify." }, 409);
+      if (!driveReady()) return json({ error: "setup", message: "Drive needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Netlify, the same ones the robots' mailbox uses." }, 409);
       const p = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: redirectUri(req), response_type: "code", scope: SCOPES, access_type: "offline", prompt: "consent", include_granted_scopes: "true", state: await makeState(u.id), login_hint: u.email || "" });
       return json({ url: "https://accounts.google.com/o/oauth2/v2/auth?" + p.toString() });
     }

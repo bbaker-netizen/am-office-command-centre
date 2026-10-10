@@ -8,11 +8,11 @@
    Uses the Google Cloud project the robots' mailbox already uses (Internal to
    amabatement.com, so only A&M Google accounts can connect, and Drive's
    read-only permission needs no Google review). Netlify needs the same
-   GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as the mailbox, and in Google
+   GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as the mailbox (nothing new), and in Google
    Cloud the Drive API switched on and this address added as an authorized
    redirect: https://<the app's address>/api/drive?action=callback
 
-   Each person's Google refresh token is kept encrypted with AUTH_SECRET in
+   Each person's Google refresh token is kept encrypted with the sign-in secret in
    Netlify Blobs. Disconnect removes it and tells Google to cancel it; a
    switched-off account cannot reach it because every call checks the account. */
 
@@ -21,13 +21,24 @@ import { getStore } from "@netlify/blobs";
 export const store = () => getStore({ name: "am-inventory", consistency: "strong" });
 const KEY = "drive-tokens";
 export const SCOPES = "openid email https://www.googleapis.com/auth/drive.readonly";
-export const driveReady = () => !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.AUTH_SECRET);
+export const driveReady = () => !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+/* The same secret the sign-in uses: AUTH_SECRET if Netlify has one, otherwise
+   the one sign-in made and keeps in Blobs (see _auth.mjs). So Drive needs no
+   new setting of its own. */
+let SECRET = null;
+async function secret() {
+  if (SECRET) return SECRET;
+  SECRET = process.env.AUTH_SECRET || await store().get("auth-secret", { type: "text" });
+  if (!SECRET) throw new Error("The app's sign-in secret is not set up yet. Sign in once, then try again.");
+  return SECRET;
+}
 
 const enc = new TextEncoder(), dec = new TextDecoder();
 const b64 = u8 => btoa(String.fromCharCode(...u8)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), c => c.charCodeAt(0));
 async function aesKey() {
-  const raw = await crypto.subtle.digest("SHA-256", enc.encode("am-drive|" + process.env.AUTH_SECRET));
+  const raw = await crypto.subtle.digest("SHA-256", enc.encode("am-drive|" + await secret()));
   return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 async function seal(text) {
@@ -40,7 +51,7 @@ async function open(sealed) {
   return dec.decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(iv) }, await aesKey(), unb64(ct)));
 }
 async function hmac(text) {
-  const k = await crypto.subtle.importKey("raw", enc.encode("am-drive-state|" + process.env.AUTH_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const k = await crypto.subtle.importKey("raw", enc.encode("am-drive-state|" + await secret()), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return b64(new Uint8Array(await crypto.subtle.sign("HMAC", k, enc.encode(text))));
 }
 export async function makeState(uid) { const p = b64(enc.encode(JSON.stringify({ uid, t: Date.now() }))); return p + "." + await hmac(p); }
