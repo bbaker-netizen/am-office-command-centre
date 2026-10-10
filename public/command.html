@@ -852,10 +852,9 @@ function render(){
   if(drawerState && drawerState.kind === "list") openList(drawerState.key, true);
 }
 function footer(){
-  return '<div class="note"><b>Where these numbers come from.</b> Read live from ' +
-    (CFG.qb ? "JobTread and QuickBooks" : "JobTread") + (PLATFORM === "app" ? ", plus the shop's own stock records," : "") + (CFG.gmail ? ", plus your Gmail drafts," : "") +
-    (PLATFORM === "app" ? ' through the A&amp;M app, every few minutes or when you press Refresh.' : ' using your own sign in, every time the page opens or you press Refresh.') + (PLATFORM === "app" ? ' Nothing is copied into a second list. QuickBooks is only read, apart from the payroll journal entry posted on the Payroll page. The only things saved back to JobTread are job details someone changes, crews and start times on a job\'s Site Work task, and finished post-mortem notes, each under that person\'s name. ' : ' Nothing is copied or stored here and nothing here changes either system. ') +
-    'To change a job, open it and press <b>Open in JobTread</b>. Site photos live in Encircle and safety records live in SiteDocs, so neither is shown here. All money is Canadian dollars.</div>' +
+  /* Kept to two short lines on purpose (Bruce, 2026-10-10): the long version
+     was being skipped. The detail is in Claude's guide for anyone who asks. */
+  return '<div class="note">Live from ' + (CFG.qb ? "JobTread and QuickBooks" : "JobTread") + (PLATFORM === "app" ? " and the shop" : "") + ', refreshed every few minutes. Nothing changes unless a person saves it. All money is Canadian dollars.</div>' +
     '<div class="foot"><span>A&amp;M Abatement Services Ltd</span><span>' + E(CFG.title) + '</span><span class="sp"></span><span>' + (PLATFORM === "app" ? 'Reads live; changes only what a person saves' : 'Reads live, stores nothing, changes nothing') + '</span></div>';
 }
 function go(tab){
@@ -1914,7 +1913,7 @@ VIEWS.records = {
     const sp = (S.jobs || []).filter(j => isOpen(j) && isSpecial(j));
     h += '<div class="card"><h2>Test and overhead jobs</h2><p class="lede">Left out of every count on this page. Close test jobs once they are done with.</p>' +
       tbl('<th>Job</th><th>Status</th>', sp.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td></tr>'), "None open.") + '</div>';
-    h += '<div class="card"><h2>Safety records</h2><p class="lede">SiteDocs owns safety records: hazard assessments, toolbox talks, tickets and inspections. They are not copied here.</p><p class="sub">Once SiteDocs can be connected, this card will show forms due and tickets running out. Until then, open SiteDocs directly.</p></div>';
+    h += '<div class="card"><h2>Safety and training records</h2><p class="lede">These will live in A&amp;M\'s HR system once it is chosen and connected. Until then they are not shown here.</p></div>';
     return shortWarn() + h + '</div>';
   }
 };
@@ -3674,7 +3673,7 @@ function billingAlerts(){
 }
 function invoicingCard(){
   const L = readyToBill();
-  let h = '<div class="card wide"><h2>Invoicing deadlines</h2><p class="lede">Finished work not yet invoiced, with each client\'s own billing rules from JobTread: where the invoice goes, the cut-off date, and what it must carry. Soonest cut-off first.</p>';
+  let h = '<div class="card wide"><h2>Invoicing deadlines</h2><p class="lede">Finished work not yet invoiced, with each client\'s billing rules. Soonest cut-off first.</p>';
   if(!S.billing) return h + (S.billingErr ? failBox(S.billingErr, "the billing rules") : wait("the billing rules")) + '</div>';
   if(S.billing.ready === false) return h + '<div class="state wait">The billing rule fields are not in JobTread yet. An admin adds them in Settings, Connections, Set up billing fields.</div></div>';
   const rows = L.map(j => ({ j, p: billPlan(j) })).sort((a, b) => ((a.p && a.p.days !== null) ? a.p.days : 999) - ((b.p && b.p.days !== null) ? b.p.days : 999));
@@ -3803,7 +3802,7 @@ function workOrder(id){
       row("Crew lead", E(leadOf(j))) + row("Crew", E(crewOf(j).join(", "))) + row("People required", v("Number of Guys Required")) + '</table>' +
     '<h2>Getting in</h2><table>' + row("Site contact phone", v("Site Contact Phone Number")) + row("Site access", v("Site Access Notes")) + row("Entry code", F(j["Entry Code"]) ? "On file in JobTread, ask the PM" : "") + '</table>' +
     '<h2>Scope</h2><table>' + row("Notes", v("Notes")) + row("NOP filed", E(showWhen(F(j["NOP Filed Date and Time"]) || ""))) + '</table>' +
-    '<p class="foot">From JobTread through the A&amp;M command centre. Change anything here in JobTread, not on paper. Safety paperwork for this job is in SiteDocs; site photos go in Encircle.</p>' +
+    '<p class="foot">From JobTread through the A&amp;M command centre. Change anything here in JobTread, not on paper. Site photos go in Encircle.</p>' +
     '<script>window.onload=function(){window.print()}<\/script></body></html>';
   const w = window.open("", "_blank"); if(!w){ toast("Your browser blocked the new window. Allow pop-ups for this site and press Work order again.", "bad"); return; }
   w.document.open(); w.document.write(html); w.document.close();
@@ -3885,7 +3884,7 @@ function logAlerts(){
   return g.length ? [{ lvl:"caution", text: plural(g.length, "job", "jobs") + " had a crew on the clock on " + lastWorkdayKey() + " and no daily log.", meta:"The daily log is how the PM hears what happened on site (SOP Phase 5): " + g.map(x => x.j._number).join(", ") + "." }] : [];
 }
 function logCard(){
-  let h = '<div class="card wide"><h2>Daily logs</h2><p class="lede">Every job with someone on the clock today or on the last working day, and whether a daily log was written in JobTread for it. Today\'s can still be written before the crew leaves.</p>';
+  let h = '<div class="card wide"><h2>Daily logs</h2><p class="lede">Jobs with a crew on the clock today or last working day, and whether a daily log was written.</p>';
   if(!fieldOn()) return h + fieldWait() + '</div>';
   const g = logGaps().sort((a, b) => (!!a.log - !!b.log) || b.day.localeCompare(a.day));
   return h + tbl('<th>Job</th><th>Day</th><th>On the clock</th><th class="r">Hours</th><th>Daily log</th>', g.map(x =>
@@ -3917,7 +3916,7 @@ function emergAlerts(){
   return a;
 }
 function emergCard(){
-  let h = '<div class="card wide"><h2>Emergencies and drying</h2><p class="lede">Open emergency, flood and mitigation jobs: how fast someone got there (first time on the clock after the job was opened), how long it has run, the last daily log, and machines still out from the shop.</p>';
+  let h = '<div class="card wide"><h2>Emergencies and drying</h2><p class="lede">Open emergency and drying jobs: how fast a crew got there, days running, last daily log, machines out.</p>';
   if(!fieldOn()) return h + fieldWait() + '</div>';
   const L = emergencies();
   return h + tbl('<th>Job</th><th>Status</th><th class="r">First on the clock</th><th class="r">Running</th><th>Last daily log</th><th class="r">Machines out</th>', L.map(x =>
@@ -3956,7 +3955,7 @@ function leadAlerts(){
 }
 function leadCard(){
   const L = leadClock();
-  return '<div class="card wide"><h2>Lead clock</h2><p class="lede">New leads and leads being estimated from the last 45 days, timed in business hours (7 a.m. to 5 p.m. weekdays) from when the job was opened in JobTread. The SOP\'s clock: assigned within 4 hours, site visit within 48 hours if urgent and 5 business days if planned.</p>' +
+  return '<div class="card wide"><h2>Lead clock</h2><p class="lede">Open leads, timed in business hours from when they were opened. SOP: assigned within 4 hours, site visit within 2 business days if urgent, 5 if planned.</p>' +
     tbl('<th>Job</th><th>Status</th><th class="r">Age</th><th>Site visit</th><th>Clock</th>', L.map(x =>
       '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td>' + stTag(x.j) + '</td><td class="r num">' + (x.bh < 10 ? x.bh + " h" : Math.round(x.bh / 10) + " days") + '</td><td>' + (x.sv ? E(showWhen(x.sv)) : '<span class="sm">Not booked</span>') + '</td><td>' +
       (x.flag ? '<span class="tag ' + x.flag.lvl + '">' + E(x.flag.t) + '</span>' : '<span class="tag clear">On time</span>') + '</td></tr>'), "No open leads from the last 45 days.", 20) + '</div>';
@@ -3994,18 +3993,18 @@ VIEWS.tm = {
     let h = head("T&M and extras", "Time and material work, change orders, and hours on jobs with no approved quote. This is the money that goes missing when the paperwork does.");
     h += verdictHtml(this.alerts(), "Every T&M hour and every extra has its paperwork.", "");
     h += '<div class="grid">';
-    h += '<div class="card wide"><h2>T&amp;M jobs</h2><p class="lede">Jobs marked T&amp;M in their number, name or notes, with the hours on JobTread timesheets over the last three weeks. Press a week\'s sheet for a page the client signs, built straight from the timesheets.</p>';
+    h += '<div class="card wide"><h2>T&amp;M jobs</h2><p class="lede">Jobs marked T&amp;M (number ends -TM, or T&amp;M in the name). Each sheet is built from JobTread timesheets for the client to sign.</p>';
     if(!fieldOn()) h += fieldWait();
     else h += tbl('<th>Job</th><th>Status</th><th class="r">This week</th><th class="r">Three weeks</th><th class="r">People</th><th>Last daily log</th><th></th>', tmJobs().map(x =>
       '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td>' + stTag(x.j) + '</td><td class="r num">' + hrs(x.m7) + ' h</td><td class="r num">' + hrs(x.m21) + ' h</td><td class="r num">' + x.people + '</td><td>' + (x.lastLog ? E(x.lastLog) : '<span class="tag caution">None</span>') + '</td>' +
       '<td class="r"><button class="btn ghost" data-tm-sheet="' + E(x.j._id) + '" data-week="0">This week\'s sheet</button> <button class="btn ghost" data-tm-sheet="' + E(x.j._id) + '" data-week="1">Last week\'s sheet</button></td></tr>'), "No T&M jobs with hours in the last three weeks. A job counts as T&M when its number ends in -TM or its name or notes say T&M.", 20);
     h += '</div>';
     const co = changeOrders();
-    h += '<div class="card wide"><h2>Change orders</h2><p class="lede">Quotes in JobTread named as a change order or extra. Approved ones are billed with the job; pending ones are work at risk.</p>' +
+    h += '<div class="card wide"><h2>Change orders</h2><p class="lede">Quotes named Change order, CO or extra. Pending ones are work at risk.</p>' +
       tbl('<th>Job</th><th>Change order</th><th>State</th><th class="r">Before GST</th><th class="r">Age</th>', co.map(x =>
         '<tr' + (x.j ? ' data-job="' + E(x.j._id) + '" tabindex="0"' : '') + '><td>' + (x.j ? jobCell(x.j) : "") + '</td><td>' + E(x.o.name) + '</td><td><span class="tag ' + (x.o.status === "approved" ? "clear" : x.o.status === "denied" ? "stop" : x.age > 7 ? "caution" : "") + '">' + E(x.o.status) + '</span></td><td class="r num">' + M(x.o.price) + '</td><td class="r">' + (x.age === null ? "" : x.age + " days") + '</td></tr>'),
         "No quotes in JobTread are named as a change order. Name them \"Change order 1\" and so on, and they show here.", 20) + '</div>';
-    h += '<div class="card wide"><h2>On site with no approved quote</h2><p class="lede">Jobs at Site work with hours on the clock in the last three weeks and no approved quote in JobTread. T&amp;M jobs are left out, they are above.</p>' +
+    h += '<div class="card wide"><h2>On site with no approved quote</h2><p class="lede">Jobs on site with hours but no approved quote. Likely extra work that needs paperwork.</p>' +
       (fieldOn() ? tbl('<th>Job</th><th>PM</th><th class="r">Hours, three weeks</th>', noQuoteOnSite().map(x => '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td>' + E(pm(x.j) || "Nobody") + '</td><td class="r num">' + hrs(x.m) + ' h</td></tr>'), "Every job on site with hours has an approved quote.", 20) : fieldWait()) + '</div>';
     return shortWarn() + h + '</div>';
   }
@@ -4065,12 +4064,12 @@ VIEWS.clients = {
     let h = head("Clients", "Every client in JobTread: work won and lost, quotes approved and waiting, what they owe in QuickBooks, and whether their billing rules are on file. Press a client to see their jobs.");
     h += '<div class="grid">';
     const quiet = R.filter(c => c.won >= 2 && c.last && daysSince(c.last) > 90).sort((a, b) => b.apprV - a.apprV);
-    h += '<div class="card wide"><h2>Clients</h2><p class="lede">Biggest by approved quotes first. Win rate is approved quotes out of approved and lost, where JobTread knows. Owed is from QuickBooks, matched by name.</p>' +
+    h += '<div class="card wide"><h2>Clients</h2><p class="lede">Biggest first. Owed is from QuickBooks.</p>' +
       tbl('<th>Client</th><th class="r">Jobs</th><th class="r">Open</th><th class="r">Won</th><th class="r">Lost</th><th class="r">Approved</th><th class="r">Waiting</th><th class="r">Win rate</th><th class="r">Owed</th><th>Billing rules</th>', R.map(c =>
         '<tr class="click" data-list="client:' + E(c.key) + '" tabindex="0"><td><span class="nm">' + E(c.name) + '</span><span class="sm">Last job opened ' + E(showDate(c.last)) + '</span></td><td class="r num">' + c.jobs.length + '</td><td class="r num">' + c.open + '</td><td class="r num">' + c.won + '</td><td class="r num">' + c.lost + '</td>' +
         '<td class="r num">' + (c.apprV ? MK(c.apprV) : "") + '</td><td class="r num">' + (c.pendV ? MK(c.pendV) : "") + '</td><td class="r num">' + (c.rate === null ? "" : c.rate + "%") + '</td><td class="r num">' + (c.owed ? MK(c.owed) : "") + '</td><td>' + (c.rules ? '<span class="tag clear">On file</span>' : '<span class="sm">None</span>') + '</td></tr>'),
         "No clients yet.", 30) + '</div>';
-    h += '<div class="card wide"><h2>Gone quiet</h2><p class="lede">Clients A&amp;M has won at least twice who have not sent a new job in 90 days. Repeat business is the business development manager\'s first measure.</p>' +
+    h += '<div class="card wide"><h2>Gone quiet</h2><p class="lede">Repeat clients with no new job in 90 days.</p>' +
       tbl('<th>Client</th><th class="r">Won</th><th class="r">Approved</th><th class="r">Last job opened</th>', quiet.map(c => '<tr class="click" data-list="client:' + E(c.key) + '" tabindex="0"><td>' + E(c.name) + '</td><td class="r num">' + c.won + '</td><td class="r num">' + MK(c.apprV) + '</td><td class="r">' + E(showDate(c.last)) + ' <span class="sm">' + daysSince(c.last) + ' days</span></td></tr>'), "Every repeat client has sent work in the last 90 days.", 15) + '</div>';
     return shortWarn() + h + '</div>';
   }
@@ -4123,7 +4122,7 @@ VIEWS.scorecards = {
       const P = {}; S.field.entries.filter(e => e.m > 0 && new Date(e.at) > since14).forEach(e => { const p = P[e.who] = P[e.who] || { days:{}, m:0 }; p.days[dkey(e.at)] = 1; p.m += e.m; });
       const L = {}; S.field.logs.filter(l => dOnly(l.date) > since14).forEach(l => { L[l.who] = (L[l.who] || 0) + 1; });
       const rows = Object.entries(P).filter(([w]) => w && !/\(aces\)/i.test(w)).sort((a, b) => b[1].m - a[1].m).map(([w, p]) => '<tr><td>' + E(w) + '</td><td class="r num">' + Object.keys(p.days).length + '</td><td class="r num">' + hrs(p.m) + '</td><td class="r num">' + (L[w] || 0) + '</td></tr>');
-      h += '<div class="card" data-nofold><h2>Field: last 14 days</h2><p class="lede">Site supervisors and crews, from JobTread timesheets and daily logs. ACES temps left out. Documentation is a site supervisor KPI; a supervisor on site most days should be writing most days.</p>' +
+      h += '<div class="card" data-nofold><h2>Field: last 14 days</h2><p class="lede">From JobTread timesheets and daily logs. ACES temps left out.</p>' +
         tbl('<th>Person</th><th class="r">Days on the clock</th><th class="r">Hours</th><th class="r">Daily logs written</th>', rows, "Nobody on the clock in 14 days.", 20) + '</div>';
     } else h += '<div class="card"><h2>Field: last 14 days</h2>' + fieldWait() + '</div>';
     const tb = readyToBill(), near = tb.map(j => billPlan(j)).filter(p => p && p.days !== null && p.days <= 5).length, nopo = tb.map(j => billPlan(j)).filter(p => p && p.flags.some(f => f.lvl === "stop")).length;
@@ -4140,7 +4139,7 @@ VIEWS.scorecards = {
         scoreRow("Jobs past their return date", overdue, "Equipment readiness", overdue ? "caution" : ""),
         scoreRow("Machines lost or unaccounted for", (S.inv.lost || []).length, "Inventory accuracy", (S.inv.lost || []).length ? "caution" : "")]);
     }
-    h += '<div class="card wide"><p class="sm" style="margin:0">Not measured here: safety (SiteDocs), client satisfaction, team development and anything that needs a conversation. Those stay in the review itself and the HR system.</p></div>';
+    h += '<div class="card wide"><p class="sm" style="margin:0">Not measured here: safety, training, client satisfaction and team development. Those belong to the review and the HR system.</p></div>';
     return shortWarn() + h + '</div>';
   }
 };
