@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1917">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="A&amp;M Command">
+<title>A&amp;M Shop</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="am-logo.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%231a1917'/><text x='50' y='70' font-size='54' font-family='Arial' font-weight='bold' fill='%23329dbb' text-anchor='middle'>A</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brandmark" href="#/" title="A&amp;M Abatement Services">
+      <img src="am-logo.png" alt="A&amp;M Abatement Services" onerror="this.remove()">
+      <span class="wordmark">A&amp;M <span>Shop</span></span>
+    </a>
+    <a class="cc-back" id="ccBack" href="/command.html" hidden title="Back to the command centre"><span aria-hidden="true">&larr;</span> <span class="cc-long">Command centre</span><span class="cc-short">Back</span></a>
+    <nav class="tabs" id="tabs"></nav>
+    <div class="statusbar" id="statusbar"></div>
+  </div>
+</header>
+
+<main id="view">
+  <div class="loading">Opening the A&amp;M app…</div>
+</main>
+
+<div id="scanlayer" hidden></div>
+<div id="modal" hidden></div>
+<div id="toast" hidden></div>
+
+<footer class="foot" id="foot"></footer>
+
+<script src="vendor/html5-qrcode.min.js"></script>
+<script src="vendor/qrcode.min.js"></script>
+<script src="seed.js"></script>
+<script src="sop.js"></script>
+<script src="app.js"></script>
+<script src="crew.js"></script>
+<script src="office.js"></script>
+<script src="tour.js"></script>
+<script>window.AM && AM.boot();</script>
+<script>
+/* A way back to the command centre from anywhere in the shop, including its
+   PIN screen, for anyone signed in to the command centre on this device. The
+   shop's own Command centre button only shows once the shop knows the person
+   is office or owner, which left people who came over from Field, Shop with
+   no way back. Opens the database the same way the app makes it, so looking
+   first never breaks it. */
+(function(){
+  try{
+    const show = () => { const a = document.getElementById("ccBack"); if(a) a.hidden = false; };
+    if(/command\.html/.test(document.referrer || "")) { try{ sessionStorage.setItem("am.fromCommand", "1"); }catch(e){} }
+    try{ if(sessionStorage.getItem("am.fromCommand") === "1") show(); }catch(e){}
+    const rq = indexedDB.open("am-inventory", 1);
+    rq.onupgradeneeded = () => { const d = rq.result;
+      if(!d.objectStoreNames.contains("kv")) d.createObjectStore("kv");
+      if(!d.objectStoreNames.contains("events")) d.createObjectStore("events", { keyPath:"id" });
+      if(!d.objectStoreNames.contains("outbox")) d.createObjectStore("outbox", { keyPath:"id" }); };
+    rq.onsuccess = () => { try{ const g = rq.result.transaction("kv", "readonly").objectStore("kv").get("acctToken"); g.onsuccess = () => { if(g.result) show(); }; }catch(e){} };
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
