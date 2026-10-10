@@ -440,7 +440,7 @@ main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-p
 #cHand{display:block;text-align:center;font-size:12px;padding:0 14px 12px;color:var(--cyan-deep)}
 @media (max-width:640px){#cPanel{right:0;left:0;bottom:0;top:auto;height:82vh;width:auto;border-radius:16px 16px 0 0}#cBub{right:14px;bottom:14px}}
 /* Connections */
-.conn{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr))}
+.conn{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));align-items:start}
 .conn .card h2{display:flex;align-items:center;gap:10px}
 .conn .lamp{width:10px;height:10px;border-radius:50%;background:var(--rule)}
 .conn .lamp.on{background:var(--clear);box-shadow:0 0 0 0 var(--clear);animation:am-lamp 2.4s ease-out infinite}
@@ -478,6 +478,8 @@ button,input,select,textarea,optgroup{font-family:inherit}
 .card.fold .fold-body{display:none}
 .card.fold.open .fold-body{display:block;animation:am-up .28s cubic-bezier(.2,.8,.2,1)}
 .card.fold:not(.open){padding-bottom:14px}
+.card.fold-all:not(.open){padding-bottom:10px}
+.card.fold-all>h2{margin-bottom:0}
 /* crew board */
 .cb-people{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px;max-height:132px;overflow:auto;padding:2px}
 .cb-person{font:inherit;font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--rule);background:var(--panel);color:var(--ink);cursor:grab}
@@ -3248,8 +3250,22 @@ function kpiIco(label){
 var FOLD = {};
 function uxFold(){
   document.querySelectorAll("#main .card").forEach(card => {
-    if(card.dataset.folded || card.closest("[data-nofold]") || card.querySelector("input,select,textarea,form")) return;
+    if(card.dataset.folded || card.closest("[data-nofold]")) return;
     const h2 = card.querySelector(":scope > h2"); if(!h2) return;
+    /* Connection cards on Settings, Connections always fold, showing only
+       their name and whether they are working (Bruce, 2026-10-10). */
+    if(current === "connections" && h2.querySelector(".lamp")){
+      const key = current + ":" + h2.textContent.trim(), open = !!FOLD[key], on = !!h2.querySelector(".lamp.on");
+      card.dataset.folded = "1"; card.classList.add("fold", "fold-all"); if(open) card.classList.add("open");
+      const body = document.createElement("div"); body.className = "fold-body";
+      [...card.childNodes].filter(n => n !== h2).forEach(n => body.appendChild(n));
+      card.appendChild(body);
+      h2.setAttribute("role", "button"); h2.tabIndex = 0; h2.setAttribute("aria-expanded", open ? "true" : "false");
+      h2.insertAdjacentHTML("beforeend", '<span class="tag ' + (on ? "clear" : "caution") + '" style="letter-spacing:.06em">' + (on ? "Working" : "Needs attention") + '</span>' + ico("chevron", "fold-chev"));
+      h2.dataset.foldKey = key;
+      return;
+    }
+    if(card.querySelector("input,select,textarea,form")) return;
     const items = [...card.querySelectorAll("ul.alerts > li, table tbody tr")].filter(r => !/^\s*total\b/i.test((r.firstElementChild || {}).textContent || ""));
     if(items.length < 4) return;
     /* How many there really are, including any the list is not showing yet. */
@@ -3835,7 +3851,7 @@ function suCall(body){
 }
 function setupCard(){
   if(!SU.data && !SU.err){ suCall().then(d => { SU.data = d; render(); }).catch(e => { SU.err = e; render(); }); }
-  let h = '<div class="card"><h2><span class="lamp' + (SU.data && !SU.data.missing && SU.data.billing.loaded ? " on" : "") + '"></span>JobTread set-up</h2>';
+  let h = '<div class="card"><h2><span class="lamp' + (SU.data && !SU.data.missing ? " on" : "") + '"></span>JobTread set-up</h2>';
   if(SU.err) return h + '<div class="state err">' + E(errCopy(SU.err)) + '</div></div>';
   if(!SU.data) return h + wait("JobTread's fields") + '</div>';
   const d = SU.data;
