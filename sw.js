@@ -28,10 +28,13 @@
    app has to be installed to the home screen and why the pending count is on
    every screen. */
 
-const VERSION = "am-inv-v46";
+const VERSION = "am-inv-v56";
 const SHELL = [
   "./",
   "./index.html",
+  "./door.js",
+  "./shop.html",
+  "./command.html",
   "./styles.css",
   "./app.js",
   "./crew.js",
