@@ -17,6 +17,7 @@
 
 import { getStore } from "@netlify/blobs";
 import { accountGate, sees, canEdit } from "./_accounts.mjs";
+import { CUSTOMER_FIELDS, fieldIds } from "./_jtfields.mjs";
 import { qboGet } from "./_qbo.mjs";
 import { readAging, readBalanceSheet, readProfitAndLoss, readPayableDetail, readVendorSpend } from "./_qboreports.mjs";
 import { buildFeed, localDay } from "./_derive.mjs";
@@ -35,9 +36,11 @@ const ACCESS = {
   jobs: u => sees(u, "office", "field", "money"),
   money: u => sees(u, "money"),
   inventory: u => sees(u, "office", "field", "money"),
-  buying: u => sees(u, "money")
+  buying: u => sees(u, "money"),
+  people: u => sees(u, "office", "field"),
+  billing: u => sees(u, "office", "field", "money")
 };
-const TTL = { jobs: 120000, money: 300000, inventory: 60000, buying: 300000 };
+const TTL = { jobs: 120000, money: 300000, inventory: 60000, buying: 300000, people: 3600000, billing: 1800000 };
 
 async function cached(s, part, build, fresh) {
   const key = "cc-cache-" + part;
@@ -82,8 +85,8 @@ async function readJobs(s, startPage) {
     const args = { size: 25 }; if (page) args.page = page;
     const res = await pave({ organization: { $: { id: c.organizationId }, jobs: { $: args, count: {}, nextPage: {}, nodes: {
       id: {}, name: {}, number: {}, createdAt: {}, closedOn: {},
-      location: { address: {}, account: { name: {} } },
-      customFieldValues: { $: { size: 20 }, nodes: { value: {}, customField: { name: {} } } }
+      location: { address: {}, account: { id: {}, name: {} } },
+      customFieldValues: { $: { size: 24 }, nodes: { value: {}, customField: { name: {} } } }
     } } } }, c.grantKey);
     const jb = res && res.organization && res.organization.jobs;
     if (!jb) throw new Error("JobTread did not return a job list.");
@@ -190,6 +193,50 @@ async function readInventory(s) {
    written to JobTread under the app's key. Every value is checked against what
    JobTread allows before it is sent, every change is logged with who made it,
    and JobTread is told not to email anybody about it. */
+/* The people a crew can be made of: JobTread users with a field role (and the
+   shop). Customers, vendors and office-only roles are left out. Read once an
+   hour; the crew board on Dispatch drags these onto jobs. */
+const CREW_ROLES = /site supervisor|site superintendent|site worker|temp worker|foreman|labourer|shop/i;
+async function readPeople(s) {
+  const c = (await s.get("jobtread-key", { type: "json" })) || {};
+  if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
+  const res = await pave({ organization: { $: { id: c.organizationId }, memberships: { $: { size: 100 }, nodes: { role: { name: {} }, user: { id: {}, name: {} } } } } }, c.grantKey);
+  const nodes = (res.organization && res.organization.memberships && res.organization.memberships.nodes) || [];
+  const extra = (process.env.CREW_EXTRA || "Maxim").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+  const people = nodes.filter(m => m.user && (CREW_ROLES.test((m.role && m.role.name) || "") || extra.includes(String(m.user.name).toLowerCase())))
+    .map(m => ({ id: m.user.id, name: m.user.name, role: (m.role && m.role.name) || "", temp: /temp worker|\(aces\)/i.test(((m.role && m.role.name) || "") + " " + m.user.name) }))
+    .sort((a, b) => (a.temp - b.temp) || a.name.localeCompare(b.name));
+  return { people };
+}
+
+/* Billing rules on JobTread customers (see _jtfields.mjs). Only customers that
+   carry at least one rule are sent to the page. */
+async function readBilling(s) {
+  const c = (await s.get("jobtread-key", { type: "json" })) || {};
+  if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
+  const map = await fieldIds(s, c);
+  const names = CUSTOMER_FIELDS.map(f => f.name).filter(n => map[n + "|customer"]);
+  if (!names.length) return { rules: {}, ready: false };
+  const rules = {}; let page = null, guard = 0; const t0 = Date.now();
+  do {
+    const args = { size: 50, where: ["type", "customer"] }; if (page) args.page = page;
+    const res = await pave({ organization: { $: { id: c.organizationId }, accounts: { $: args, nextPage: {}, nodes: { id: {}, name: {},
+      customFieldValues: { $: { size: 20 }, nodes: { value: {}, customField: { name: {} } } } } } } }, c.grantKey);
+    const a = res.organization && res.organization.accounts;
+    if (!a) break;
+    for (const n of a.nodes || []) {
+      const r = {};
+      for (const v of (n.customFieldValues && n.customFieldValues.nodes) || []) {
+        const k = v.customField && v.customField.name;
+        if (names.includes(k) && v.value !== null && v.value !== "" && v.value !== false) r[k] = v.value;
+      }
+      if (Object.keys(r).length) rules[n.id] = { name: n.name, ...r };
+    }
+    page = a.nextPage || null;
+  } while (page && ++guard < 40 && Date.now() - t0 < 8000);
+  return { rules, ready: true, partial: !!page };
+}
+
 const STATUSES = ["New Lead","Uploaded Without Plans","Uploaded With Plans","Estimating","Site Visit Scheduled","Pending Estimate Review",
   "Estimate Review Completed","Estimate Sent","Bid Accepted","Pending","Follow Up Required","Upcoming To Be Scheduled","Scheduling required",
   "Scheduled (Date promised)","Turnover Meeting Required","NOP","Site work","Loose Ends Required","Job Complete by A&M","PM Approvals",
@@ -202,7 +249,12 @@ const EDITABLE = {
   "Estimated Days of Work":         { id: "22PeWmzJYuxK", kind: "number" },
   "Risk Level":                     { id: "22PevE8z3Mek", kind: "option", options: ["Low Risk", "Glovebag", "Moderate Risk", "High Risk"] },
   "NOP Filed Date and Time":        { id: "22Pe8itTZBLX", kind: "datetime" },
-  "NOP Expires":                    { id: "22PeaZdCwFn2", kind: "date" }
+  "NOP Expires":                    { id: "22PeaZdCwFn2", kind: "date" },
+  /* Added 2026-10-10 by Settings, Connections; ids are looked up by name. */
+  "Crew Lead":                      { id: null, kind: "text" },
+  "Crew":                           { id: null, kind: "text" },
+  "Shop Start Time":                { id: null, kind: "time" },
+  "Site Start Time":                { id: null, kind: "time" }
 };
 function checkValue(def, v) {
   if (v === null || v === "") return { ok: true, value: null };
@@ -210,6 +262,8 @@ function checkValue(def, v) {
   if (def.kind === "date") return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? { ok: true, value: String(v) } : { ok: false };
   if (def.kind === "datetime") { const d = new Date(String(v)); return isNaN(d) ? { ok: false } : { ok: true, value: d.toISOString() }; }
   if (def.kind === "number") { const n = Number(v); return (isFinite(n) && n >= 0 && n < 1000) ? { ok: true, value: n } : { ok: false }; }
+  if (def.kind === "text") { const t = String(v).replace(/[\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim(); return t.length <= 400 ? { ok: true, value: t || null } : { ok: false }; }
+  if (def.kind === "time") { const t = String(v).trim().toUpperCase().replace(/\s+/g, " "); return /^(1[0-2]|0?[1-9]):[0-5]\d ?(AM|PM)$|^([01]?\d|2[0-3]):[0-5]\d$/.test(t) ? { ok: true, value: t } : { ok: false }; }
   return { ok: false };
 }
 async function updateJob(s, req) {
@@ -218,8 +272,16 @@ async function updateJob(s, req) {
   if (!/^[A-Za-z0-9_-]{2,40}$/.test(jobId)) return json({ error: "bad_job", message: "That job id does not look right." }, 400);
   const changes = body.changes || {};
   const values = {}, said = [];
+  const c0 = (await s.get("jobtread-key", { type: "json" })) || {};
+  let byName = null;
   for (const [name, v] of Object.entries(changes)) {
-    const def = EDITABLE[name];
+    let def = EDITABLE[name];
+    if (def && def.id === null) {
+      if (!byName) byName = await fieldIds(s, c0);
+      const id = byName[name + "|job"];
+      if (!id) return json({ error: "not_set_up", message: `JobTread has no ${name} field yet. An admin adds it in Settings, Connections, Set up billing and crew fields.` }, 409);
+      def = { ...def, id };
+    }
     if (!def) return json({ error: "not_editable", message: `${name} cannot be changed from the app. Change it in JobTread.` }, 400);
     const ck = checkValue(def, v);
     if (!ck.ok) return json({ error: "bad_value", message: `"${v}" is not an allowed value for ${name}.` }, 400);
@@ -265,6 +327,8 @@ export default async (req) => {
     if (part === "money") return json(await cached(s, "money", () => readMoney(), fresh));
     if (part === "inventory") return json(await cached(s, "inventory", () => readInventory(s), fresh));
     if (part === "buying") return json(await cached(s, "buying", () => readBuying(s), fresh));
+    if (part === "people") return json(await cached(s, "people", () => readPeople(s), fresh));
+    if (part === "billing") return json(await cached(s, "billing", () => readBilling(s), fresh));
   } catch (e) {
     const notConnected = e.code === "NOT_CONNECTED" || e.status === 409;
     return json({ error: notConnected ? "not_connected" : "upstream", message: e.message }, notConnected ? 409 : 502);
