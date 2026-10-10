@@ -861,3 +861,13 @@ textarea.paste { width: 100%; font-family: var(--font); font-variant-numeric: ta
 /* A line whose unit of measure looks wrong, rather than one missing a count. */
 .pack-cell.suspect { background: #fffbf2; }
 .pack-flag { display: inline-block; font-size: 12px; font-weight: bold; color: var(--warn); }
+
+/* Back to the command centre, on every shop screen (2026-10-10) */
+.cc-back { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; padding: 7px 12px; border-radius: 999px;
+  background: rgba(255,255,255,.14); color: #fff; font-size: 13px; font-weight: bold; text-decoration: none; white-space: nowrap; flex: none;
+  transition: background .18s ease, transform .12s ease; }
+.cc-back:hover { background: rgba(255,255,255,.26); }
+.cc-back:active { transform: translateY(1px) scale(.97); }
+.cc-back[hidden] { display: none; }
+.cc-back .cc-short { display: none; }
+@media (max-width: 640px) { .cc-back { margin-left: 8px; padding: 6px 10px; } .cc-back .cc-long { display: none; } .cc-back .cc-short { display: inline; } }
