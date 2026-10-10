@@ -109,7 +109,7 @@ export default async (req) => {
       const made = await changeAccounts(s, doc => {
         if (Object.keys(doc.accounts).length) return null;
         const now = new Date().toISOString();
-        const a = { id: newId(), email, name, title: "Owner", areas: [...PRESETS.company.areas], level: "admin", active: true,
+        const a = { id: newId(), email, name, title: "Owner", areas: [...PRESETS.company.areas], level: "admin", active: true, claude: true,
           pw: pwRec, pwv: now, mustChange: false, createdAt: now, createdBy: shop.user.name + " (first setup, shop PIN)", lastSignIn: now };
         doc.accounts[a.id] = a; return a;
       });
@@ -172,7 +172,7 @@ export default async (req) => {
       const made = await changeAccounts(s, doc => {
         if (byEmail(doc.accounts, email)) return null;
         const now = new Date().toISOString();
-        const a = { id: newId(), email, name, title, areas, level, active: true, pw: pwRec, pwv: now, mustChange: true, createdAt: now, createdBy: me.name, lastSignIn: "" };
+        const a = { id: newId(), email, name, title, areas, level, active: true, claude: !!body.claude, pw: pwRec, pwv: now, mustChange: true, createdAt: now, createdBy: me.name, lastSignIn: "" };
         doc.accounts[a.id] = a; return a;
       });
       if (!made) return bad("Somebody already has an account with that email.", 409, "taken");
@@ -197,6 +197,7 @@ export default async (req) => {
         if (body.areas !== undefined) { const a = cleanAreas(body.areas); if (!a) return { err: bad("Tick at least one of Office, Money or Field.") }; next.areas = a; }
         if (body.level !== undefined) { if (!LEVELS.includes(body.level)) return { err: bad("Choose what they can do.") }; next.level = body.level; }
         if (body.active !== undefined) next.active = !!body.active;
+        if (body.claude !== undefined) next.claude = !!body.claude;
         /* Nobody locks themselves out, and the app never ends up with nobody
            who can let people in. */
         if (id === me.id && next.level !== "admin") return { err: bad("You cannot take admin away from yourself. Ask another admin to do it.", 400, "self") };
@@ -266,6 +267,7 @@ function changeWords(a, b) {
   if (a.areas.join() !== b.areas.join()) out.push("sees " + b.responsibilityLabel + " (" + b.areas.join(", ") + ")");
   if (a.level !== b.level) out.push(levelWord(b.level));
   if (a.active !== b.active) out.push(b.active ? "switched on" : "switched off");
+  if (!!a.claude !== !!b.claude) out.push(b.claude ? "can ask Claude" : "cannot ask Claude");
   return out.length ? "Changed " + out.join("; ") : "No change";
 }
 

@@ -248,7 +248,7 @@ export default async (req) => {
   const fresh = url.searchParams.get("fresh") === "1";
 
   try {
-    if (part === "me") return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, today: localDay() });
+    if (part === "me") return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, claude: !!u.claude, today: localDay() });
     if (part === "jobs") return json(await cached(s, "jobs", () => readJobs(s), fresh));
     if (part === "money") return json(await cached(s, "money", () => readMoney(), fresh));
     if (part === "inventory") return json(await cached(s, "inventory", () => readInventory(s), fresh));

@@ -174,7 +174,6 @@
         <button class="btn big" type="submit" id="go">Create my account</button>
         <p class="msg" id="msg" role="status"></p>
       </form>
-      <p class="small">This only works while there are no accounts, and only for an owner (a name in OWNER_USERS in Netlify). Your account gets the whole company and admin.</p>
       ${shopDoor()}`);
     wireShow();
     $('#f').onsubmit = async ev => {

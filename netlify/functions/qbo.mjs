@@ -95,11 +95,14 @@ export default async (req) => {
         refresh_token: t.refresh_token,
         expires_at: Date.now() + (t.expires_in || 3600) * 1000,
         realmId,
-        connected_at: new Date().toISOString()
+        connected_at: new Date().toISOString(),
+        connected_by: saved.by || ""
       });
+      /* Started from Admin, Connections: straight back there. */
+      if (saved.back === "/command.html#connections") return Response.redirect(url.origin + "/command.html?qbo=connected#connections", 302);
       return new Response(
         "<!doctype html><meta charset=utf-8><body style=\"font-family:Arial;padding:2rem\">" +
-        "<h2>QuickBooks connected</h2><p>Read only. You can close this tab and go back to the inventory app.</p>",
+        "<h2>QuickBooks connected</h2><p>You can close this tab and go back to the A&amp;M app.</p>",
         { status: 200, headers: { "content-type": "text/html" } }
       );
     }

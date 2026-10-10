@@ -138,7 +138,7 @@ export function publicAccount(a) {
     id: a.id, email: a.email, name: a.name, title: a.title || "", areas: a.areas || [], level: a.level,
     responsibility: presetOf(a.areas), responsibilityLabel: presetLabel(a.areas),
     active: a.active !== false, mustChange: !!a.mustChange, createdAt: a.createdAt || "", createdBy: a.createdBy || "",
-    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || ""
+    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || "", claude: !!a.claude
   };
 }
 export const activeAdmins = accounts => Object.values(accounts).filter(a => a.active !== false && a.level === "admin");
@@ -174,7 +174,8 @@ export async function accountGate(req, s = authStore(), opts = {}) {
   req.amUser = {
     kind: "account", id: a.id, name: a.name, email: a.email, title: a.title || "", areas, level: a.level,
     edit: a.level === "edit" || a.level === "admin", admin: a.level === "admin",
-    office: areas.includes("office"), mustChange: !!a.mustChange, idleHours: settings.idleHours
+    office: areas.includes("office"), mustChange: !!a.mustChange, idleHours: settings.idleHours,
+    claude: !!a.claude
   };
   req.amUser.role = areas.includes("office") && areas.includes("field") ? "owner" : areas.includes("office") ? "office" : areas.includes("field") ? "field" : "none";
   return null;

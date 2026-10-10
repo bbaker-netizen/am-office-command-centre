@@ -355,6 +355,100 @@ details.sub summary{cursor:pointer;color:var(--cyan-deep);font-weight:600}
 .btn:hover{background:var(--cyan-deep);border-color:var(--cyan-deep);color:#fff}
 .drawer h3{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin:18px 0 6px}
 @media (max-width:620px){ .tools{flex:1 1 100%} .tools .live{flex:1 1 100%;margin-right:0} .who{border-left:0;padding-left:0} .find{flex-basis:100%;max-width:none;order:5} .big{font-size:28px} .tabhead h1{font-size:21px} }
+/* ---------- feel: every press answers, every wait shows (2026-10-10) ---------- */
+.btn,.refresh,.sec,.tab,.kpi,.go,.chip,[data-list],[data-job],[data-go],[data-tab],[data-sec],button{transition:transform .12s ease,box-shadow .18s ease,background-color .18s ease,filter .12s ease;-webkit-tap-highlight-color:transparent}
+.btn:active,.refresh:active,.sec:active,.tab:active,.kpi:active,.go:active,.chip:active,button:active,[data-list]:active,tr[data-job]:active{transform:translateY(1px) scale(.97);filter:brightness(.94)}
+.kpi:hover{transform:translateY(-2px);box-shadow:0 2px 4px rgba(26,25,23,.06),0 14px 30px -18px rgba(26,25,23,.45)}
+.kpi:active{transform:translateY(1px) scale(.97)}
+button:focus-visible,.btn:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.btn,.refresh,.kpi,.sec,.tab{position:relative;overflow:hidden}
+.ripple{position:absolute;border-radius:50%;pointer-events:none;background:var(--cyan);opacity:.28;transform:scale(0);animation:am-ripple .55s ease-out forwards}
+@keyframes am-ripple{to{transform:scale(1);opacity:0}}
+.is-busy{pointer-events:none;opacity:.85}
+.is-busy::after{content:"";display:inline-block;width:12px;height:12px;margin-left:8px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:am-spin .7s linear infinite}
+@keyframes am-spin{to{transform:rotate(360deg)}}
+#amBar{position:fixed;top:0;left:0;right:0;height:3px;z-index:90;pointer-events:none;opacity:0;transition:opacity .3s}
+#amBar.on{opacity:1}
+#amBar i{position:absolute;top:0;bottom:0;width:40%;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:am-bar 1.1s ease-in-out infinite}
+@keyframes am-bar{from{left:-40%}to{left:100%}}
+#amWork{position:fixed;top:10px;left:50%;transform:translate(-50%,-140%);z-index:91;background:var(--ink);color:var(--panel);font-size:12px;font-weight:700;padding:6px 12px 6px 10px;border-radius:999px;box-shadow:var(--shadow);transition:transform .25s ease;display:flex;align-items:center;gap:8px;pointer-events:none}
+#amWork.on{transform:translate(-50%,0)}
+#amWork::before{content:"";width:10px;height:10px;border:2px solid var(--cyan);border-right-color:transparent;border-radius:50%;animation:am-spin .7s linear infinite}
+.state.loading{position:relative;overflow:hidden}
+.state.loading::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 20%,rgba(50,157,187,.16) 50%,transparent 80%);animation:am-shimmer 1.3s linear infinite}
+@keyframes am-shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.dots::after{content:"";animation:am-dots 1.2s steps(4) infinite}
+@keyframes am-dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+#amToast{position:fixed;left:50%;bottom:22px;z-index:95;display:flex;flex-direction:column;gap:8px;align-items:center;transform:translateX(-50%);pointer-events:none}
+.am-toast{background:var(--ink);color:var(--panel);font-size:13px;font-weight:600;padding:10px 16px;border-radius:6px;box-shadow:0 10px 30px -10px rgba(0,0,0,.5);animation:am-toast-in .28s cubic-bezier(.2,.9,.3,1.2);max-width:min(520px,92vw)}
+.am-toast.ok{border-left:4px solid var(--cyan)}.am-toast.bad{border-left:4px solid var(--stop)}
+.am-toast.out{animation:am-toast-out .3s ease forwards}
+@keyframes am-toast-in{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes am-toast-out{to{opacity:0;transform:translateY(10px)}}
+/* page and card entrances */
+main.enter>*{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both}
+main.enter>*:nth-child(2){animation-delay:.04s}main.enter>*:nth-child(3){animation-delay:.08s}main.enter>*:nth-child(4){animation-delay:.12s}main.enter>*:nth-child(5){animation-delay:.16s}main.enter>*:nth-child(n+6){animation-delay:.2s}
+main.enter .kpi{animation:am-up .4s cubic-bezier(.2,.8,.2,1) both}
+main.enter .kpi:nth-child(2){animation-delay:.05s}main.enter .kpi:nth-child(3){animation-delay:.1s}main.enter .kpi:nth-child(4){animation-delay:.15s}main.enter .kpi:nth-child(n+5){animation-delay:.2s}
+@keyframes am-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.drawer:not([hidden]){animation:am-slide .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes am-slide{from{transform:translateX(40px);opacity:.4}to{transform:none;opacity:1}}
+.scrim:not([hidden]){animation:am-fade .25s ease}
+@keyframes am-fade{from{opacity:0}to{opacity:1}}
+.verdict.stop{animation:am-pulse 2.6s ease-in-out 2}
+@keyframes am-pulse{50%{box-shadow:0 0 0 4px var(--stop-wash)}}
+.badge{animation:am-pop .35s cubic-bezier(.2,.9,.3,1.4)}
+@keyframes am-pop{from{transform:scale(.4)}to{transform:scale(1)}}
+/* dragging the number tiles into your own order */
+.kpis.can-drag .kpi{cursor:grab;touch-action:pan-y}
+.kpi.drag-ghost{position:fixed;z-index:80;pointer-events:none;cursor:grabbing;transform:rotate(-2deg) scale(1.04);box-shadow:0 24px 50px -18px rgba(0,0,0,.55);opacity:.95;transition:none}
+.kpi.drag-hole{opacity:.25;outline:2px dashed var(--cyan);outline-offset:-2px}
+.kpi-hint{font-size:11px;color:var(--ink-3);margin:-8px 0 14px;display:flex;gap:10px;align-items:center}
+.kpi-hint button{font:inherit;font-size:11px;background:none;border:0;color:var(--cyan-deep);cursor:pointer;padding:0;text-decoration:underline}
+/* Ask Claude */
+#cBub{position:fixed;right:22px;bottom:22px;z-index:70;width:58px;height:58px;border-radius:50%;border:0;background:var(--ink);color:var(--panel);box-shadow:0 12px 30px -10px rgba(0,0,0,.55);cursor:grab;display:flex;align-items:center;justify-content:center;touch-action:none;animation:am-bub-in .6s cubic-bezier(.2,.9,.3,1.4) both}
+#cBub svg{width:26px;height:26px}
+#cBub::before{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--cyan);opacity:0;animation:am-ring 3s ease-out 1s 3}
+#cBub.dragging{cursor:grabbing;transform:scale(1.08);transition:none}
+#cBub .lbl{position:absolute;right:66px;white-space:nowrap;background:var(--ink);color:var(--panel);font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;opacity:0;transform:translateX(6px);transition:all .2s;pointer-events:none}
+#cBub:hover .lbl{opacity:1;transform:none}
+@keyframes am-bub-in{from{transform:scale(0) rotate(-90deg)}to{transform:none}}
+@keyframes am-ring{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}
+#cPanel{position:fixed;right:16px;bottom:16px;top:76px;width:min(420px,calc(100vw - 32px));z-index:72;background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:0 30px 70px -24px rgba(0,0,0,.55);display:flex;flex-direction:column;animation:am-panel .32s cubic-bezier(.2,.8,.2,1)}
+#cPanel[hidden]{display:none}
+@keyframes am-panel{from{opacity:0;transform:translateY(18px) scale(.97)}to{opacity:1;transform:none}}
+#cPanel .ch{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--rule);cursor:grab;touch-action:none;user-select:none}
+#cPanel .ch b{font-size:14px}#cPanel .ch .sm{font-size:11px;color:var(--ink-3)}
+#cPanel .ch .grip{width:32px;height:4px;border-radius:2px;background:var(--rule);margin:0 auto 0 0}
+#cPanel .cx{margin-left:auto;background:none;border:0;font-size:20px;cursor:pointer;color:var(--ink-2);padding:0 4px}
+#cMsgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.cm{max-width:88%;padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.45;animation:am-up .25s ease both;white-space:normal;overflow-wrap:anywhere}
+.cm.u{align-self:flex-end;background:var(--ink);color:var(--panel);border-bottom-right-radius:3px}
+.cm.a{align-self:flex-start;background:var(--panel-2);border:1px solid var(--rule);border-bottom-left-radius:3px}
+.cm.a.typing::after{content:"";display:inline-block;width:7px;height:15px;margin-left:2px;vertical-align:-2px;background:var(--cyan);animation:am-caret .8s steps(2) infinite}
+@keyframes am-caret{50%{opacity:0}}
+.cm ul{margin:4px 0 0 18px;padding:0}
+.cthink{display:flex;gap:5px;padding:12px;align-self:flex-start}
+.cthink i{width:8px;height:8px;border-radius:50%;background:var(--cyan);animation:am-think 1s ease-in-out infinite}
+.cthink i:nth-child(2){animation-delay:.15s}.cthink i:nth-child(3){animation-delay:.3s}
+@keyframes am-think{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-6px);opacity:1}}
+#cChips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+#cChips .chip{font:inherit;font-size:12px;border:1px solid var(--rule);background:var(--panel);border-radius:999px;padding:5px 10px;cursor:pointer;color:var(--ink-2)}
+#cChips .chip:hover{border-color:var(--cyan);color:var(--ink)}
+#cForm{display:flex;gap:8px;padding:10px 14px 14px;border-top:1px solid var(--rule)}
+#cForm textarea{flex:1;font:inherit;font-size:14px;resize:none;border:1px solid var(--rule);border-radius:8px;padding:8px 10px;background:var(--panel);color:var(--ink);max-height:120px}
+#cForm textarea:focus{outline:2px solid var(--cyan);border-color:transparent}
+#cForm button{border:0;border-radius:8px;background:var(--cyan);color:#fff;font-weight:700;padding:0 14px;cursor:pointer}
+#cHand{display:block;text-align:center;font-size:12px;padding:0 14px 12px;color:var(--cyan-deep)}
+@media (max-width:640px){#cPanel{right:0;left:0;bottom:0;top:auto;height:82vh;width:auto;border-radius:16px 16px 0 0}#cBub{right:14px;bottom:14px}}
+/* Connections */
+.conn{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr))}
+.conn .card h2{display:flex;align-items:center;gap:10px}
+.conn .lamp{width:10px;height:10px;border-radius:50%;background:var(--rule)}
+.conn .lamp.on{background:var(--clear);box-shadow:0 0 0 0 var(--clear);animation:am-lamp 2.4s ease-out infinite}
+@keyframes am-lamp{0%{box-shadow:0 0 0 0 rgba(46,125,50,.45)}100%{box-shadow:0 0 0 10px rgba(46,125,50,0)}}
+.conn input[type=password],.conn input[type=text]{width:100%;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);color:var(--ink);margin:6px 0 10px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important}}
 </style>
 </head><body><header class="top" id="top">
   <div class="in">
@@ -408,7 +502,8 @@ const TABS = {
   payroll:   { label:"Payroll",      group:"Office" },
   equipment: { label:"Equipment",    group:"Field" },
   drafts:    { label:"To send", group:"Assistants" },
-  people:    { label:"People and access", group:"Admin" }
+  people:    { label:"People and access", group:"Admin" },
+  connections:{ label:"Connections",     group:"Admin" }
 };
 /* Inside the app: whether this person's account can change anything (set by an admin). */
 let CAN_EDIT = true;
@@ -506,7 +601,7 @@ function bars(list, onclick){
     '<li' + (x[2] ? ' class="click" data-list="' + E(x[2]) + '"' : '') + '><span>' + E(x[0]) + '</span><span class="num">' + (x[3] || x[1]) + '</span>' +
     '<span class="track"><span class="fill" style="width:' + Math.max(2, Math.round(x[1]/max*100)) + '%"></span></span></li>').join("") + '</ul>';
 }
-function wait(what){ return '<div class="state">Reading ' + E(what) + '.</div>'; }
+function wait(what){ return '<div class="state loading"><span class="dots">Reading ' + E(what) + '</span></div>'; }
 function errCopy(e){
   const c = e && e.code;
   if(c === "server_not_connected") return "That system is not connected for you yet. Connect it in Claude, then press Refresh.";
@@ -692,6 +787,7 @@ function render(){
   try{ html = v ? v.render() : '<div class="state">Nothing here.</div>'; }
   catch(e){ html = '<div class="state err">This tab hit a fault while drawing: ' + E(e && e.message) + '. Press Refresh. If it keeps happening, tell Bruce.</div>'; }
   $("main").innerHTML = html + footer();
+  try{ afterRender(); }catch(e){}
   const n = S.jobs ? S.jobs.length : 0;
   $("connlabel").textContent = S.jobs ? ("Live · " + n + " jobs" + (S.stamp ? " · " + new Date(S.stamp).toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit"}) : "")) : (S.jobsErr ? "JobTread not answering" : "Reading");
   $("conndot").className = "dot " + (S.jobsErr ? "bad" : (S.jobs ? (S.jobsShort ? "warn" : "ok") : ""));
@@ -709,6 +805,7 @@ function go(tab){
   current = tab; store("tab." + ROLE, tab);
   if(secOf(tab)) store("sec." + ROLE + "." + secOf(tab), tab);
   try{ history.replaceState(null, "", "#" + tab); }catch(e){}
+  if(window.UX) UX.enterNext = true;
   render(); window.scrollTo(0, 0);
 }
 
@@ -1191,12 +1288,15 @@ async function startApp(){
   if(has("office") || has("field")){ tabs.push("postmortem"); TABS.postmortem.group = has("field") ? "Field" : "Office"; }
   if(has("field")) tabs.push("equipment");
   if(has("assistants")) tabs.push("drafts");
-  if(me.admin) tabs.push("people");
+  if(me.admin) tabs.push("people", "connections");
   const first = String(me.name || "").split(" ")[0];
   CFG = { title: (first ? first + "'s" : "Your") + " command centre", who: [me.title, respLabel(me.areas), LEVEL_INFO[me.level] ? LEVEL_INFO[me.level].label : ""].filter(Boolean).join(" · "), tabs, qb: has("money"), gmail:false };
   S.meName = first;
   document.title = CFG.title;
   $("roleTitle").textContent = CFG.title; $("roleWho").textContent = CFG.who; sizeTop();
+  /* Admins: Settings beside Tour opens Admin, Connections, where JobTread and QuickBooks are connected. */
+  if(me.admin){ const set = document.createElement("button"); set.className = "refresh"; set.textContent = "Settings"; set.title = "Connect JobTread and QuickBooks"; set.onclick = () => go("connections"); $("refresh").parentNode.insertBefore(set, $("refresh").parentNode.firstChild); sizeTop(); }
+  if(me.claude) CLAUDE.mount();
   const h = (location.hash || "").replace("#", "");
   current = CFG.tabs.includes(h) ? h : (CFG.tabs.includes(store("tab." + ROLE)) ? store("tab." + ROLE) : "overview");
   render();
@@ -2626,7 +2726,7 @@ function logWords(l){
 /* ---------- the drawer: add or change one person ---------- */
 function acForm(a){
   const isNew = !a, me = a && a.id === ADM.me;
-  a = a || { name:"", email:"", title:"", areas:["field"], level:"edit", active:true };
+  a = a || { name:"", email:"", title:"", areas:["field"], level:"edit", active:true, claude:false };
   const resp = respOf(a.areas);
   let h = '<form id="acForm" data-id="' + E(a.id || "") + '" onsubmit="return false" class="ac-form">' +
     '<label class="fld"><span>Full name</span><input type="text" name="name" value="' + E(a.name) + '" autocomplete="off"></label>' +
@@ -2636,6 +2736,7 @@ function acForm(a){
     '<fieldset class="ac-set"><legend>Sees</legend>' + AREA_KEYS.map(k => '<label class="ac-check"><input type="checkbox" name="area" value="' + k + '"' + (a.areas.includes(k) ? " checked" : "") + '><span><b>' + E(AREA_INFO[k].label) + '</b> ' + E(AREA_INFO[k].what) + '</span></label>').join("") + '</fieldset>' +
     '<fieldset class="ac-set"><legend>Can do</legend>' + ["view", "edit", "admin"].map(k => '<label class="ac-check"><input type="radio" name="level" value="' + k + '"' + (a.level === k ? " checked" : "") + (me && k !== "admin" ? " disabled" : "") + '><span><b>' + E(LEVEL_INFO[k].label) + '</b> ' + E(LEVEL_INFO[k].what) + '</span></label>').join("") +
     (me ? '<p class="sub">You cannot take admin away from yourself. Another admin can.</p>' : '') + '</fieldset>' +
+    '<fieldset class="ac-set"><legend>Claude</legend><label class="ac-check"><input type="checkbox" name="claude"' + (a.claude ? " checked" : "") + '><span><b>Can ask Claude</b> Opens the Ask Claude panel on every page, which answers from what that person can already see. For people with a Claude account, it also hands the question over to their own Claude.</span></label></fieldset>' +
     '<div class="actions"><button type="button" class="btn" data-ac-save>' + (isNew ? "Add and make a temporary password" : "Save the changes") + '</button></div><p class="sub" id="acMsg" role="status"></p></form>';
   if(!isNew && !me){
     h += '<div class="ac-more"><h3>Password</h3><p class="sub">Forgotten it, or a phone went missing? A new temporary password signs them out on every device straight away.</p>' +
@@ -2656,7 +2757,7 @@ function acOpen(id){
 function acRead(){
   const f = $("acForm"); const v = n => (f.querySelector('[name="' + n + '"]') || {}).value || "";
   const lv = f.querySelector('[name="level"]:checked');
-  return { name: v("name").trim(), email: v("email").trim(), title: v("title").trim(), areas: [...f.querySelectorAll('[name="area"]:checked')].map(x => x.value), level: lv ? lv.value : "" };
+  return { name: v("name").trim(), email: v("email").trim(), title: v("title").trim(), areas: [...f.querySelectorAll('[name="area"]:checked')].map(x => x.value), level: lv ? lv.value : "", claude: !!(f.querySelector('[name="claude"]') || {}).checked };
 }
 function acTemp(a, temp, why){
   const first = a.name.split(" ")[0];
@@ -2971,6 +3072,340 @@ document.addEventListener("change", ev => {
   slot[kind + "Id"] = hit ? hit.id : ""; slot[kind + "Name"] = hit ? hit.name : "";
 });
 
+/* ---------- feel, motion and drag (2026-10-10) ----------
+   Every press answers: buttons sink a little and ripple, and a button that
+   starts a read or a save shows a spinner until it is done. A thin cyan bar
+   runs along the top while the app is talking to JobTread or QuickBooks, and
+   a "Working" pill appears if a press takes more than a moment. Results and
+   failures show as a short note at the bottom of the screen. Pages slide in,
+   numbers count up to their value, and the overview tiles can be dragged into
+   each person's own order (kept on this device). All motion stops for people
+   who have asked their device for less motion. */
+var UX = { pending:0, user:0, lastPress:null, enterNext:true, shown:{}, workTimer:null, suppressClick:false };
+function uxEl(id, html){ let e = document.getElementById(id); if(!e){ e = document.createElement("div"); e.id = id; if(html) e.innerHTML = html; document.body.appendChild(e); } return e; }
+function uxBusy(n, user){
+  UX.pending = Math.max(0, UX.pending + n); if(user !== undefined) UX.user = Math.max(0, UX.user + (user ? n : 0));
+  uxEl("amBar", "<i></i>").classList.toggle("on", UX.pending > 0);
+  const w = uxEl("amWork"); if(!w.textContent) w.textContent = "Working";
+  clearTimeout(UX.workTimer);
+  if(UX.user > 0) UX.workTimer = setTimeout(() => w.classList.add("on"), 450); else w.classList.remove("on");
+}
+function toast(msg, kind){
+  const box = uxEl("amToast");
+  const t = document.createElement("div"); t.className = "am-toast " + (kind || "ok"); t.textContent = msg; t.setAttribute("role", "status");
+  box.appendChild(t);
+  setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 320); }, kind === "bad" ? 6000 : 3500);
+}
+document.addEventListener("pointerdown", ev => {
+  const el = ev.target.closest && ev.target.closest("button,.btn,.kpi,.refresh,.sec,.tab,[data-list],[data-job],[data-go]");
+  if(!el) return;
+  UX.lastPress = { el, t: Date.now() };
+  if(el.matches(".btn,.kpi,.refresh,.sec,.tab") && !el.disabled){
+    const r = el.getBoundingClientRect(), size = Math.max(r.width, r.height) * 2.2, s = document.createElement("span");
+    s.className = "ripple"; s.style.width = s.style.height = size + "px";
+    s.style.left = (ev.clientX - r.left - size / 2) + "px"; s.style.top = (ev.clientY - r.top - size / 2) + "px";
+    el.appendChild(s); setTimeout(() => s.remove(), 600);
+  }
+}, true);
+(function(){
+  const inner = window.fetch;
+  window.fetch = function(input, init){
+    const u = typeof input === "string" ? input : (input && input.url) || "";
+    if(!/\/api\//.test(u) || /\/api\/claude/.test(u)) return inner(input, init);
+    const p = UX.lastPress && Date.now() - UX.lastPress.t < 900 ? UX.lastPress.el : null;
+    const btn = p && p.isConnected && p.matches("button,.btn,.refresh") ? p : null;
+    if(btn) btn.classList.add("is-busy");
+    uxBusy(1, !!p);
+    let done = false;
+    const end = () => { if(done) return; done = true; uxBusy(-1, !!p); if(btn) btn.classList.remove("is-busy"); };
+    return inner(input, init).then(r => { end(); return r; }, e => { end(); throw e; });
+  };
+})();
+/* numbers count up to their value, only when they change */
+function uxCount(el, key){
+  const txt = el.textContent.trim(), was = UX.shown[key];
+  UX.shown[key] = txt;
+  if(was === txt) return;
+  const m = txt.match(/^([^0-9-]*)(-?[\d,]*\.?\d+)(.*)$/); if(!m) return;
+  const target = parseFloat(m[2].replace(/,/g, "")); if(!isFinite(target)) return;
+  const pm = was && was.match(/^([^0-9-]*)(-?[\d,]*\.?\d+)(.*)$/);
+  const from = pm && pm[3] === m[3] ? parseFloat(pm[2].replace(/,/g, "")) : 0;
+  const dec = (m[2].split(".")[1] || "").length, commas = m[2].includes(",") || target >= 1000;
+  const fmt = v => (commas ? v.toLocaleString("en-CA", { minimumFractionDigits:dec, maximumFractionDigits:dec }) : v.toFixed(dec));
+  if(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const t0 = performance.now(), dur = 650;
+  const step = now => { if(!el.isConnected) return; const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = m[1] + fmt(from + (target - from) * e) + m[3]; if(k < 1) requestAnimationFrame(step); else el.textContent = txt; };
+  requestAnimationFrame(step);
+}
+const KPI_KEY = () => "kpiorder." + (ME.email || ROLE);
+function uxKpis(){
+  const box = document.querySelector('#main .kpis'); if(!box) return;
+  let order = []; try{ order = JSON.parse(store(KPI_KEY()) || "[]"); }catch(e){}
+  const label = k => (k.querySelector(".k") || {}).textContent || "";
+  if(order.length){
+    const tiles = [...box.children].filter(x => x.classList.contains("kpi"));
+    tiles.sort((a, b) => { const ia = order.indexOf(label(a)), ib = order.indexOf(label(b)); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); }).forEach(t => box.appendChild(t));
+  }
+  box.classList.add("can-drag");
+  if(!box.nextElementSibling || !box.nextElementSibling.classList.contains("kpi-hint")){
+    const h = document.createElement("div"); h.className = "kpi-hint";
+    h.innerHTML = '<span>Drag the tiles into the order that suits you' + (matchMedia("(pointer: coarse)").matches ? " (press and hold first)" : "") + '.</span>' + (order.length ? '<button type="button" data-kpi-reset>Put them back</button>' : '');
+    box.after(h);
+  }
+  box.querySelectorAll(".kpi .v").forEach(v => uxCount(v, current + ":" + label(v.closest(".kpi"))));
+}
+function afterRender(){
+  if(!UX) return;
+  const main = document.getElementById("main");
+  if(UX.enterNext){ UX.enterNext = false; main.classList.remove("enter"); void main.offsetWidth; main.classList.add("enter"); setTimeout(() => main.classList.remove("enter"), 900); }
+  if(current === "overview") uxKpis();
+  const q = new URLSearchParams(location.search);
+  if(q.get("qbo") === "connected"){ toast("QuickBooks is connected.", "ok"); try{ history.replaceState(null, "", location.pathname + location.hash); }catch(e){} }
+}
+document.addEventListener("click", ev => {
+  if(UX.suppressClick){ UX.suppressClick = false; ev.preventDefault(); ev.stopPropagation(); return; }
+  if(ev.target.closest && ev.target.closest("[data-kpi-reset]")){ store(KPI_KEY(), "[]"); UX.shown = {}; render(); toast("Tiles are back in their usual order."); }
+}, true);
+/* dragging a tile: a mouse drags straight away, a finger presses and holds first */
+(function(){
+  let d = null;
+  const label = k => (k.querySelector(".k") || {}).textContent || "";
+  document.addEventListener("pointerdown", ev => {
+    const k = ev.target.closest && ev.target.closest(".kpis.can-drag .kpi"); if(!k || ev.button > 0) return;
+    d = { k, x: ev.clientX, y: ev.clientY, id: ev.pointerId, on:false, touch: ev.pointerType !== "mouse", ready: ev.pointerType === "mouse" };
+    if(d.touch) d.hold = setTimeout(() => { if(d){ d.ready = true; begin(ev.clientX, ev.clientY); try{ navigator.vibrate && navigator.vibrate(12); }catch(e){} } }, 320);
+  });
+  function begin(x, y){
+    const r = d.k.getBoundingClientRect();
+    d.on = true; d.dx = x - r.left; d.dy = y - r.top;
+    d.ghost = d.k.cloneNode(true); d.ghost.classList.add("drag-ghost"); d.ghost.style.width = r.width + "px"; d.ghost.style.height = r.height + "px";
+    document.body.appendChild(d.ghost); d.k.classList.add("drag-hole"); move(x, y);
+  }
+  function move(x, y){
+    d.ghost.style.left = (x - d.dx) + "px"; d.ghost.style.top = (y - d.dy) + "px";
+    const under = document.elementFromPoint(x, y), t = under && under.closest && under.closest(".kpis .kpi");
+    if(t && t !== d.k && !t.classList.contains("drag-ghost")){
+      const r = t.getBoundingClientRect(), after = (x - r.left) > r.width / 2;
+      t.parentNode.insertBefore(d.k, after ? t.nextSibling : t);
+    }
+  }
+  document.addEventListener("pointermove", ev => {
+    if(!d || ev.pointerId !== d.id) return;
+    const far = Math.hypot(ev.clientX - d.x, ev.clientY - d.y) > 8;
+    if(!d.on){ if(far){ if(d.ready) begin(ev.clientX, ev.clientY); else { clearTimeout(d.hold); d = null; } } return; }
+    move(ev.clientX, ev.clientY);
+  });
+  document.addEventListener("touchmove", ev => { if(d && d.on) ev.preventDefault(); }, { passive:false });
+  const end = () => {
+    if(!d) return; clearTimeout(d.hold);
+    if(d.on){
+      d.ghost.remove(); d.k.classList.remove("drag-hole"); UX.suppressClick = true; setTimeout(() => { UX.suppressClick = false; }, 400);
+      const box = d.k.parentNode; store(KPI_KEY(), JSON.stringify([...box.querySelectorAll(".kpi")].map(label)));
+      const hint = box.nextElementSibling; if(hint && hint.classList.contains("kpi-hint") && !hint.querySelector("[data-kpi-reset]")) hint.insertAdjacentHTML("beforeend", '<button type="button" data-kpi-reset>Put them back</button>');
+      toast("Saved your order on this device.");
+    }
+    d = null;
+  };
+  document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);
+})();
+/* the side drawer: drag it to the right to close it */
+(function(){
+  let s = null;
+  document.addEventListener("pointerdown", ev => {
+    const hd = ev.target.closest && ev.target.closest("#drawer > header"); if(!hd || ev.target.closest("button")) return;
+    s = { x: ev.clientX, id: ev.pointerId, el: document.getElementById("drawer") }; s.el.style.transition = "none";
+  });
+  document.addEventListener("pointermove", ev => { if(!s || ev.pointerId !== s.id) return; const dx = Math.max(0, ev.clientX - s.x); s.el.style.transform = "translateX(" + dx + "px)"; s.dx = dx; });
+  const end = () => { if(!s) return; const el = s.el; el.style.transition = "transform .22s ease"; if((s.dx || 0) > 110){ el.style.transform = "translateX(110%)"; setTimeout(() => { closeDrawer(); el.style.transform = ""; el.style.transition = ""; }, 200); } else { el.style.transform = ""; } s = null; };
+  document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);
+})();
+
+/* ---------- Ask Claude ----------
+   For accounts with "Can ask Claude" ticked. A round button sits in the
+   corner; drag it anywhere and it keeps that spot. Claude answers from the
+   page the person has open, as it streams in. For people with their own
+   Claude account, "Continue in my own Claude" opens claude.ai with the same
+   question and what this page shows, so they can carry on with everything
+   their own Claude can reach. */
+var CLAUDE = (function(){
+  const POS = "claude.pos", HIST = 10;
+  let bub = null, panel = null, msgs = [], busy = false, ready = null;
+  const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/></svg>';
+  const CHIPS = {
+    overview:["What needs me first today?", "Explain the top alert in plain words", "Which number should worry me?"],
+    money:["Who should we chase for payment first?", "How far behind are we paying suppliers?", "Explain cash in the bank"],
+    payroll:["What do I fix before payroll closes?", "Who still has hours to approve?", "Explain how the split works"],
+    estimating:["Which quotes need a follow-up?", "What bids are due soon?"],
+    dispatch:["What starts in the next two weeks?", "Which won jobs have no start date?"],
+    projects:["Which jobs look stuck?", "Who has the most on their plate?"],
+    closeout:["What is holding up invoicing?", "Which job has been closing longest?"],
+    connections:["What is not connected yet?", "How do I get a JobTread key?"]
+  };
+  const fmt = t => {
+    let h = E(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    const lines = h.split("\n"), out = []; let inList = false;
+    lines.forEach(l => { const m = l.match(/^\s*[-*•]\s+(.*)$/);
+      if(m){ if(!inList){ out.push("<ul>"); inList = true; } out.push("<li>" + m[1] + "</li>"); }
+      else { if(inList){ out.push("</ul>"); inList = false; } out.push(l + "<br>"); } });
+    if(inList) out.push("</ul>");
+    return out.join("").replace(/(<br>)+$/, "");
+  };
+  function pageText(){
+    const main = document.getElementById("main"); let t = main ? main.innerText : "";
+    const dr = document.getElementById("drawer"); if(dr && !dr.hidden) t = "OPEN AT THE SIDE: " + document.getElementById("dtitle").innerText + "\n" + document.getElementById("dbody").innerText + "\n\n" + t;
+    return t.replace(/\n{3,}/g, "\n\n").slice(0, 16000);
+  }
+  const tabName = () => (TABS[current] && TABS[current].label) || "Overview";
+  function handOver(q){
+    const page = pageText().slice(0, 1800);
+    const prompt = "I am looking at the A&M Abatement Office Command Centre, on the " + tabName() + " page. This is what it shows:\n\n" + page + "\n\n" + (q ? "My question: " + q : "Help me understand this page.");
+    return "https://claude.ai/new?q=" + encodeURIComponent(prompt).slice(0, 7000);
+  }
+  function mount(){
+    if(bub) return;
+    bub = document.createElement("button"); bub.id = "cBub"; bub.type = "button"; bub.setAttribute("aria-label", "Ask Claude about this page"); bub.innerHTML = ICON + '<span class="lbl">Ask Claude</span>';
+    document.body.appendChild(bub);
+    try{ const p = JSON.parse(store(POS) || "null"); if(p){ bub.style.left = p.x + "px"; bub.style.top = p.y + "px"; bub.style.right = "auto"; bub.style.bottom = "auto"; clampBub(); } }catch(e){}
+    dragBubble();
+    document.addEventListener("keydown", ev => { if((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "j"){ ev.preventDefault(); toggle(); } if(ev.key === "Escape" && panel && !panel.hidden) close(); });
+  }
+  function clampBub(){ const r = bub.getBoundingClientRect(), x = Math.min(Math.max(8, r.left), innerWidth - r.width - 8), y = Math.min(Math.max(70, r.top), innerHeight - r.height - 8); bub.style.left = x + "px"; bub.style.top = y + "px"; }
+  function dragBubble(){
+    let s = null;
+    bub.addEventListener("pointerdown", ev => { const r = bub.getBoundingClientRect(); s = { x: ev.clientX, y: ev.clientY, ox: ev.clientX - r.left, oy: ev.clientY - r.top, moved:false }; bub.setPointerCapture(ev.pointerId); });
+    bub.addEventListener("pointermove", ev => {
+      if(!s) return;
+      if(!s.moved && Math.hypot(ev.clientX - s.x, ev.clientY - s.y) < 6) return;
+      s.moved = true; bub.classList.add("dragging"); bub.style.right = "auto"; bub.style.bottom = "auto";
+      bub.style.left = (ev.clientX - s.ox) + "px"; bub.style.top = (ev.clientY - s.oy) + "px";
+    });
+    bub.addEventListener("pointerup", () => {
+      if(!s) return; const moved = s.moved; s = null; bub.classList.remove("dragging");
+      if(!moved) return toggle();
+      /* Snap to the nearest side, the way a phone's floating buttons do. */
+      const r = bub.getBoundingClientRect(), left = r.left + r.width / 2 < innerWidth / 2;
+      const y = Math.min(Math.max(70, r.top), innerHeight - r.height - 8);
+      bub.style.transition = "left .3s cubic-bezier(.2,.9,.3,1.2), top .3s"; bub.style.left = (left ? 14 : innerWidth - r.width - 14) + "px"; bub.style.top = y + "px";
+      setTimeout(() => { bub.style.transition = ""; }, 320);
+      store(POS, JSON.stringify({ x: parseFloat(bub.style.left), y: parseFloat(bub.style.top) }));
+    });
+    addEventListener("resize", () => { if(bub.style.left) clampBub(); });
+  }
+  function build(){
+    panel = document.createElement("section"); panel.id = "cPanel"; panel.hidden = true; panel.setAttribute("aria-label", "Ask Claude");
+    panel.innerHTML = '<div class="ch" id="cHead"><span class="grip"></span><div><b>Ask Claude</b><div class="sm" id="cSub">Reads this page with you</div></div><button class="cx" type="button" aria-label="Close" id="cClose">&times;</button></div>' +
+      '<div id="cMsgs" aria-live="polite"></div><div id="cChips"></div>' +
+      '<form id="cForm" onsubmit="return false"><textarea id="cIn" rows="1" placeholder="Ask about this page…"></textarea><button type="submit" id="cSend">Ask</button></form>' +
+      '<a id="cHand" href="#" target="_blank" rel="noopener">Continue in my own Claude</a>';
+    document.body.appendChild(panel);
+    panel.querySelector("#cClose").onclick = close;
+    panel.querySelector("#cForm").onsubmit = () => { const t = panel.querySelector("#cIn"); ask(t.value); t.value = ""; grow(); return false; };
+    const ta = panel.querySelector("#cIn");
+    ta.addEventListener("keydown", ev => { if(ev.key === "Enter" && !ev.shiftKey){ ev.preventDefault(); panel.querySelector("#cForm").onsubmit(); } });
+    ta.addEventListener("input", () => { grow(); panel.querySelector("#cHand").href = handOver(ta.value); });
+    panel.querySelector("#cHand").addEventListener("click", ev => { ev.currentTarget.href = handOver(ta.value || lastQ()); });
+    panel.addEventListener("click", ev => { const c = ev.target.closest(".chip"); if(c) ask(c.textContent); });
+    dragPanel();
+  }
+  const lastQ = () => { for(let i = msgs.length - 1; i >= 0; i--) if(msgs[i].role === "user") return msgs[i].content; return ""; };
+  function grow(){ const t = panel.querySelector("#cIn"); t.style.height = "auto"; t.style.height = Math.min(120, t.scrollHeight) + "px"; }
+  function dragPanel(){
+    const head = panel.querySelector("#cHead"); let s = null;
+    head.addEventListener("pointerdown", ev => { if(ev.target.closest("button")) return; const r = panel.getBoundingClientRect(); s = { x: ev.clientX, y: ev.clientY, r, phone: innerWidth <= 640 }; head.setPointerCapture(ev.pointerId); panel.style.transition = "none"; });
+    head.addEventListener("pointermove", ev => {
+      if(!s) return;
+      if(s.phone){ const dy = Math.max(0, ev.clientY - s.y); panel.style.transform = "translateY(" + dy + "px)"; s.dy = dy; return; }
+      const x = Math.min(Math.max(8, s.r.left + ev.clientX - s.x), innerWidth - s.r.width - 8), y = Math.min(Math.max(60, s.r.top + ev.clientY - s.y), innerHeight - 160);
+      Object.assign(panel.style, { left: x + "px", top: y + "px", right: "auto", bottom: "auto", height: s.r.height + "px" });
+    });
+    head.addEventListener("pointerup", () => { if(!s) return; panel.style.transition = "transform .22s ease"; if(s.phone){ if((s.dy || 0) > 120) close(); panel.style.transform = ""; } s = null; });
+  }
+  function chips(){
+    const list = CHIPS[current] || ["Summarize this page", "What needs a decision here?"];
+    panel.querySelector("#cChips").innerHTML = msgs.length > 6 ? "" : list.map(c => '<button type="button" class="chip">' + E(c) + '</button>').join("");
+    panel.querySelector("#cSub").textContent = "Reading the " + tabName() + " page with you";
+  }
+  function draw(){
+    const box = panel.querySelector("#cMsgs");
+    if(!msgs.length) box.innerHTML = '<div class="cm a">Hi ' + E(S.meName || "") + '. I can see the ' + E(tabName()) + ' page you have open. Ask me what something means, what to deal with first, or where to go to fix it. I can read, but I cannot change anything.</div>';
+    else box.innerHTML = msgs.map(m => '<div class="cm ' + (m.role === "user" ? "u" : "a") + (m.typing ? " typing" : "") + '">' + (m.role === "user" ? E(m.content) : fmt(m.content)) + '</div>').join("") + (busy && !msgs[msgs.length - 1].content ? '<div class="cthink"><i></i><i></i><i></i></div>' : '');
+    box.scrollTop = box.scrollHeight; chips();
+  }
+  async function ask(q){
+    q = String(q || "").trim(); if(!q || busy) return;
+    msgs.push({ role:"user", content:q }); const a = { role:"assistant", content:"", typing:true }; msgs.push(a); busy = true; draw();
+    panel.querySelector("#cSend").disabled = true;
+    try{
+      const r = await fetch("/api/claude", { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" },
+        body: JSON.stringify({ question:q, page:{ tab: current, title: tabName(), text: pageText() }, history: msgs.slice(0, -2).slice(-HIST).map(m => ({ role:m.role, content:m.content })) }) });
+      if(!r.ok){ const b = await r.json().catch(() => ({})); throw new Error(b.message || ("Claude did not answer (" + r.status + ").")); }
+      const rd = r.body.getReader(), dec = new TextDecoder();
+      for(;;){ const { value, done } = await rd.read(); if(done) break; a.content += dec.decode(value, { stream:true }); draw(); }
+      if(!a.content.trim()) a.content = "I did not get an answer back. Try asking again.";
+    }catch(e){ a.content = e.message || "Claude could not be reached. Check for signal and try again."; a.err = true; }
+    a.typing = false; busy = false; draw(); panel.querySelector("#cSend").disabled = false;
+    panel.querySelector("#cHand").href = handOver(q);
+  }
+  function open(){ if(!panel) build(); panel.hidden = false; bub.style.opacity = "0"; bub.style.pointerEvents = "none"; draw(); panel.querySelector("#cHand").href = handOver(""); setTimeout(() => panel.querySelector("#cIn").focus(), 60); }
+  function close(){ if(!panel) return; panel.hidden = true; panel.style.transform = ""; bub.style.opacity = ""; bub.style.pointerEvents = ""; }
+  function toggle(){ if(panel && !panel.hidden) close(); else open(); }
+  return { mount, open, close, ask, status: () => ready };
+})();
+
+/* ---------- Admin, Connections ---------- */
+const CN = { data:null, err:null, msg:"", mail:null, claude:null };
+function cnCall(body){
+  const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
+  return fetch("/api/connections", opts).then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || ("The app answered " + r.status + ".") }; return b; });
+}
+function loadCN(){
+  cnCall().then(d => { CN.data = d; CN.err = null; render(); }).catch(e => { CN.err = e; render(); });
+  if(ME.areas.includes("assistants")) fetch("/api/mail?action=status", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(m => { CN.mail = m; render(); }).catch(() => {});
+  if(ME.claude) fetch("/api/claude", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(c => { CN.claude = c; render(); }).catch(() => {});
+}
+VIEWS.connections = {
+  hold(){ const a = document.activeElement; return !!(a && a.closest && a.closest("[data-cn-form]") && /INPUT/.test(a.tagName)); },
+  alerts(){ const d = CN.data; if(!d) return []; const out = [];
+    if(!d.jobtread.connected) out.push({ lvl:"stop", text:"JobTread is not connected.", meta:"Nothing in the command centre can read jobs until it is." });
+    if(!d.quickbooks.connected) out.push({ lvl:"caution", text:"QuickBooks is not connected.", meta:"Money, buying and payroll posting need it." });
+    return out; },
+  render(){
+    let h = head("Connections", "Where the app connects to JobTread and QuickBooks. Admins only. Each connection is made once for the whole company, and everyone's pages read through it.");
+    if(CN.err) return h + failBox(CN.err, "Connections");
+    if(!CN.data){ loadCN(); return h + wait("the connections"); }
+    const d = CN.data, j = d.jobtread, q = d.quickbooks;
+    h += verdictHtml(this.alerts(), "Everything is connected.", "JobTread " + (j.organizationName || "") + ", QuickBooks company " + (q.realmId || ""));
+    h += '<div class="conn" style="margin-top:16px">';
+    h += '<div class="card" data-cn-form><h2><span class="lamp' + (j.connected ? " on" : "") + '"></span>JobTread</h2>' +
+      (j.connected ? '<p class="lede">Connected to <b>' + E(j.organizationName || j.organizationId) + '</b>' + (j.grantUser ? ', through ' + E(j.grantUser) + '\'s key' : '') + '. Saved ' + E(showWhen(j.savedAt)) + (j.savedBy ? ' by ' + E(j.savedBy) : '') + '.</p>' : '<p class="lede">Not connected. In JobTread, open Settings, then API, create a key, and paste it here. The app tests it before saving.</p>') +
+      '<label class="fld"><b>' + (j.connected ? "Replace the key" : "JobTread key") + '</b><input type="password" id="cnKey" autocomplete="off" placeholder="Paste the key"></label>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-cn-jt>Test and save</button>' + (j.connected ? '<button class="btn ghost" data-cn-jtforget>Disconnect</button>' : '') + '</div>' +
+      '<p class="sm" style="margin-top:8px">Use a key made under an A&amp;M account, not a person\'s own login, so it keeps working when people change.</p></div>';
+    h += '<div class="card"><h2><span class="lamp' + (q.connected ? " on" : "") + '"></span>QuickBooks</h2>' +
+      (q.missingEnv && q.missingEnv.length ? '<div class="state wait">Netlify still needs: ' + E(q.missingEnv.join(", ")) + '.</div>' :
+       (q.connected ? '<p class="lede">Connected to company ' + E(q.realmId) + ' since ' + E(showWhen(q.connectedAt)) + (q.connectedBy ? ', by ' + E(q.connectedBy) : '') + '. Read only, apart from the payroll journal entry posted from the Payroll page.</p>' : '<p class="lede">Not connected. Press Connect, sign in to Intuit with an admin login for A&amp;M\'s company, and choose A&amp;M Abatement Services. You come straight back here.</p>') +
+       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-cn-qb>' + (q.connected ? "Connect again" : "Connect QuickBooks") + '</button>' + (q.connected ? '<button class="btn ghost" data-cn-qbforget>Disconnect</button>' : '') + '</div>') + '</div>';
+    if(CN.mail) h += '<div class="card"><h2><span class="lamp' + (CN.mail.connected ? " on" : "") + '"></span>Robots\' mailbox</h2><p class="lede">' + (CN.mail.connected ? "Connected to " + E(CN.mail.email || CN.mail.mailbox || "") + "." : "Not connected. The assistants' emails send from it.") + '</p>' + (CN.mail.connected ? '' : '<button class="btn" data-mail-connect>Connect the mailbox</button>') + '</div>';
+    if(ME.claude) h += '<div class="card"><h2><span class="lamp' + (CN.claude && CN.claude.ready ? " on" : "") + '"></span>Ask Claude</h2><p class="lede">' + (CN.claude && CN.claude.ready ? "Ready. People with Can ask Claude ticked see the Claude button in the corner of every page." : "Needs ANTHROPIC_API_KEY in Netlify, from A&amp;M's own account at console.anthropic.com. Until then the button still offers Continue in my own Claude.") + '</p></div>';
+    h += '</div>';
+    return h;
+  }
+};
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-cn-jt],[data-cn-jtforget],[data-cn-qb],[data-cn-qbforget]"); if(!t) return;
+  if(t.dataset.cnJt !== undefined){
+    const k = ($("cnKey") || {}).value || ""; if(!k.trim()){ toast("Paste the JobTread key first.", "bad"); return; }
+    t.classList.add("is-busy");
+    cnCall({ action:"jobtread", grantKey:k }).then(r => { toast("JobTread connected to " + String(r.organizationName || "the company").replace(/\.$/, "") + "."); CN.data = null; render(); appLoad(true); })
+      .catch(e => { t.classList.remove("is-busy"); toast(e.message, "bad"); });
+    return;
+  }
+  if(t.dataset.cnJtforget !== undefined){ if(!confirm("Disconnect JobTread? Every page stops reading jobs until a key is saved again.")) return; cnCall({ action:"jobtread-forget" }).then(() => { toast("JobTread disconnected."); CN.data = null; render(); }).catch(e => toast(e.message, "bad")); return; }
+  if(t.dataset.cnQb !== undefined){ t.classList.add("is-busy"); cnCall({ action:"quickbooks" }).then(r => { location.href = r.url; }).catch(e => { t.classList.remove("is-busy"); toast(e.message, "bad"); }); return; }
+  if(t.dataset.cnQbforget !== undefined){ if(!confirm("Disconnect QuickBooks? Money pages stop reading until it is connected again.")) return; cnCall({ action:"quickbooks-forget" }).then(() => { toast("QuickBooks disconnected."); CN.data = null; render(); }).catch(e => toast(e.message, "bad")); }
+});
+
 /* ---------- the command centre walkthrough ----------
    Built to the same house standard as the shop's walkthrough (public/tour.js):
    - it points at real parts of the screen through data-tour attributes
@@ -2983,9 +3418,10 @@ document.addEventListener("change", ev => {
      and the chapter count adapts (Jen has no Field section, Amir has no Office)
    - it starts on its own once, the first time someone opens the command centre
      on a device, and only after the numbers have loaded
-   One difference from the shop's tour: the shop's voice is recorded clips. This
-   one uses the voice built into the phone or computer, so it needs no files and
-   every word can change without re-recording, but it sounds like that device. */
+   Like the shop's tour, the voice is recorded clips (public/tour/cc), so it
+   sounds the same, and natural, on every device. Change a line's words and its
+   clip needs recording again; until then that line falls back to the device's
+   own voice if its clip is missing. */
 const CCTOUR = (function(){
   const SEEN = "am-command-tour-seen.v1", MUTE = "am-command-tour-muted", RELEASE_MS = 45000;
   const q = s => document.querySelector(s);
@@ -2995,48 +3431,58 @@ const CCTOUR = (function(){
     const name = S.meName ? S.meName + ", this" : "This";
     const fieldOrOffice = has("Field") ? "Field" : "Office";
     return [
-      { id:"welcome", bookend:true, at:"overview",
+      { id:"welcome", bookend:true, at:"overview", clips:["welcome"],
         title:"The whole company on one screen",
         body: name + " is the A&M Office Command Centre. It reads JobTread, QuickBooks and the shop, and puts what needs a decision in one place. I will take you round it in about three minutes. I am talking as we go and the words are on screen too, so turn the sound off if you need to. Press Stop the voice once and I stay quiet." },
       { id:"sections", target:"#secs", at:"overview",
         title:"Sections across the top",
-        body:"These big buttons are the sections of the business." + (has("Office") ? " Office is estimating, dispatch, money, buying and records." : "") + (has("Field") ? " Field is projects, sites, closeout, equipment and the shop." : "") + (has("Assistants") ? " Assistants is the emails the AI assistants have written for you." : "") + (has("Admin") ? " Admin is where you add people and set what they see and can do." : "") + " A red number on a button means something in that section needs a decision. Press " + fieldOrOffice + " now.",
+        clips:["sections"].concat(has("Office") ? ["sections-office"] : [], has("Field") ? ["sections-field"] : [], has("Assistants") ? ["sections-assistants"] : [], has("Admin") ? ["sections-admin"] : [], ["sections-red", has("Field") ? "press-field" : "press-office"]),
+        body:"These big buttons are the sections of the business." + (has("Office") ? " Office is estimating, dispatch, money, payroll, buying and records." : "") + (has("Field") ? " Field is projects, sites, closeout, equipment and the shop." : "") + (has("Assistants") ? " Assistants is the emails the AI assistants have written for you." : "") + (has("Admin") ? " Admin is where you add people and set what they see and can do." : "") + " A red number on a button means something in that section needs a decision. Press " + fieldOrOffice + " now.",
         gate:{ click:"#secs .sec" } },
-      { id:"pages", target:"#tabs",
+      { id:"pages", clips:["pages"], target:"#tabs",
         title:"The pages in that section",
         body:"The row underneath holds the pages of the section you are in. Each page carries its own number when something on it needs you. Each section remembers the page you were last on, so coming back puts you where you left off." },
-      { id:"shop", target:'[data-tour="shop"]', at:"projects",
+      { id:"shop", clips:["shop"], target:'[data-tour="shop"]', at:"projects",
         title:"The shop is part of Field",
         body:"Shop opens the shop screens: gear going out to a job and coming back, transfers between sites, the shelf, ordering and filter certificates. It is the same app, with its own sign-in: your name and four-digit PIN, as always. The Command centre button on those screens brings you straight back here." },
-      { id:"postmortem", target:'[data-tour="page"]', at:"postmortem",
+      { id:"postmortem", clips:["postmortem"], target:'[data-tour="page"]', at:"postmortem",
         title:"Post mortems",
         body:"When a job is finished, Craig, Jen or Amir runs a post mortem here with everyone who worked on it. Four perspectives, financial, operational, client, and employees and subcontractors, each scored 1 to 10. The plan and the actual figures come from JobTread and QuickBooks, and every commitment gets an owner and a date." },
-      { id:"decisions", target:'[data-tour="decisions"]', at:"overview",
+      { id:"decisions", clips:["decisions"], target:'[data-tour="decisions"]', at:"overview",
         title:"What needs a decision",
         body:"This list is the reason the command centre exists. Every line is worked out live from the systems, worst first. Now means today, Soon means this week. Fix the cause in JobTread or QuickBooks and the line clears itself. The button on the right of each line takes you to the page behind it." },
-      { id:"numbers", target:'[data-tour="numbers"]',
+      { id:"numbers", clips:["numbers"], target:'[data-tour="numbers"]',
         title:"The numbers that matter",
         body:"These are the few numbers worth knowing every morning. Press any one of them to go to the page that explains it. All money is Canadian dollars, read from QuickBooks." },
-      { id:"flow", target:'[data-tour="flow"]',
+      { id:"flow", clips:["flow"], target:'[data-tour="flow"]',
         title:"Every job, left to right",
         body:"A job moves through these seven steps, from new lead to closing out. Each number is how many jobs are sitting at that step right now. Press one of the steps to see the jobs behind it.",
         gate:{ click:'[data-tour="flow"] [data-list]' } },
-      { id:"drawer", target:"#drawer", keepDrawer:true,
+      { id:"drawer", clips:["drawer"], target:"#drawer", keepDrawer:true,
         title:"The jobs open at the side",
         body:"The list opens over here. Press any job to see everything on it, what is missing in JobTread, and the button that opens it in JobTread. If your account can make changes, you can change the status, project manager, start date and notice dates right here, and it saves to JobTread under your name." },
-      { id:"find", target:'[data-tour="find"]',
+      { id:"find", clips:["find"], target:'[data-tour="find"]',
         title:"Find any job",
         body:"Type a job number, a client, a name or part of an address and the job comes up as you type. Press it to open it at the side." },
-      { id:"tosend", target:'[data-tour="page"]', at:"drafts",
+      { id:"tosend", clips:["tosend"], target:'[data-tour="page"]', at:"drafts",
         title:"Emails waiting for a person",
         body:"The AI assistants check the inboxes, JobTread and QuickBooks every morning and write the emails that need to go: quote follow-ups, payment reminders, requests for missing paperwork. They never send anything themselves. Open one, read it, then press Send or Discard. A client who replies gets estimating at A&M, not a robot." },
-      { id:"people", target:'[data-tour="people"]', at:"people",
+      { id:"people", clips:["people"], target:'[data-tour="people"]', at:"people",
         title:"People and access",
         body:"You are an admin, so this page is yours. Each person gets an account with their work email, what they are responsible for, the areas they see, and whether they can only look, make changes, or also manage people. Adding someone makes a temporary password that works once; they choose their own the first time they sign in. Switch someone off and they are out at their next click." },
-      { id:"tools", target:'[data-tour="tools"]', at:"overview",
+      { id:"payroll", clips:["payroll"], target:'[data-tour="page"]', at:"payroll",
+        title:"Payroll",
+        body:"Payroll splits each person's hours into the cost of sales buckets the bookkeeper posts to, each service line in Edmonton or Calgary, and keeps shop and office time in general payroll. Download the report for her, or type the pay costs and post the journal entry to QuickBooks once the period is closed." },
+      { id:"connections", clips:["connections"], target:'[data-tour="page"]', at:"connections",
+        title:"Connections",
+        body:"Settings brings you here. This is where JobTread and QuickBooks are connected for the whole company. Paste a JobTread key and the app tests it before it saves. Connect QuickBooks takes you to Intuit to sign in, and brings you straight back." },
+      { id:"claude", clips:["claude"], target:"#cBub",
+        title:"Ask Claude",
+        body:"This round button is Claude. Press it and ask about whatever page you have open: what a number means, what to deal with first, or where to fix it. Drag it anywhere on the screen and it stays there. If you have your own Claude account, Continue in my own Claude carries the question over." },
+      { id:"tools", clips:["tools"], target:'[data-tour="tools"]', at:"overview",
         title:"Live, Refresh, My account and Sign out",
         body:"The dot tells you the numbers are live and when they were last read. They update every few minutes on their own, and Refresh reads them again now. My account shows what you can see and do, and is where you change your password. Sign out signs you out of the command centre on this device. If it sits unused for a while, it asks for your password again." },
-      { id:"done", bookend:true, at:"overview",
+      { id:"done", clips:["done"], bookend:true, at:"overview",
         title:"That is the whole of it",
         body:"That is the command centre. Sections across the top, pages underneath, what needs a decision first. Nothing here sends an email or changes a job unless a person presses the button. You can run this tour again any time with the Tour button at the top." }
     ];
@@ -3045,26 +3491,60 @@ const CCTOUR = (function(){
   let steps = [], i = 0, liveTour = false, muted = false, gateOk = true, gateOff = null, releaseTimer = null;
   const countable = () => steps.filter(s => !s.bookend);
 
-  /* ---------- the voice ---------- */
-  function voice(){
+  /* ---------- the voice ----------
+     Every line is a recorded clip in public/tour/cc, in the same natural voice
+     on every phone and computer (Piper, en-US Lessac, recorded 2026-10-10).
+     The words on screen can say the person's name; the clips do not, so they
+     never need re-recording for a new person. A step whose words depend on the
+     person (which sections they have) plays its clips one after another.
+     If a clip will not load, that step falls back to the device's own voice.
+     Browsers refuse sound until the person has touched the page once; when that
+     happens the step waits and plays at their first click or key. */
+  let queue = [], player = null, waitingForTouch = false;
+  function deviceVoice(){
     try{
       const vs = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
-      return vs.find(v => /en-CA/i.test(v.lang)) || vs.find(v => /natural|google|samantha|aria|jenny/i.test(v.name)) || vs[0] || null;
+      const rank = v => (/natural|neural|premium|enhanced|online/i.test(v.name) ? 0 : /google|siri|samantha|ava|aria|jenny|clara/i.test(v.name) ? 1 : 2) * 10 + (/en-CA/i.test(v.lang) ? 0 : /en-US/i.test(v.lang) ? 1 : 2);
+      return vs.sort((a, b) => rank(a) - rank(b))[0] || null;
     }catch(e){ return null; }
   }
-  function speak(text){
-    hush();
-    if(muted || !text || !window.speechSynthesis) return;
+  function sayWithDevice(text){
+    if(!text || !window.speechSynthesis) return;
     try{
-      const u = new SpeechSynthesisUtterance(text);
-      const v = voice(); if(v) u.voice = v;
-      u.rate = 1; speechSynthesis.speak(u);
+      /* One sentence at a time: some browsers cut off a long line part way. */
+      const v = deviceVoice();
+      String(text).split(/(?<=[.!?])\s+/).forEach(t => { const u = new SpeechSynthesisUtterance(t); if(v) u.voice = v; u.rate = 0.95; speechSynthesis.speak(u); });
     }catch(e){}
   }
-  function hush(){ try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){} }
+  function playNext(fallbackText){
+    if(muted || !queue.length) return;
+    const clip = queue[0];
+    player = new Audio("tour/cc/" + clip + ".mp3");
+    player.onended = () => { queue.shift(); playNext(fallbackText); };
+    player.onerror = () => { queue = []; player = null; sayWithDevice(fallbackText); };
+    const p = player.play();
+    if(p && p.catch) p.catch(err => {
+      if(err && err.name === "NotAllowedError"){
+        if(waitingForTouch) return; waitingForTouch = true;
+        const go = () => { ["pointerdown", "keydown"].forEach(ev => document.removeEventListener(ev, go, true)); waitingForTouch = false; if(!muted && queue.length) playNext(fallbackText); };
+        ["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, go, true));
+      } else { queue = []; sayWithDevice(fallbackText); }
+    });
+  }
+  function speak(step){
+    hush();
+    if(muted || !step) return;
+    if(step.clips && step.clips.length){ queue = step.clips.slice(); playNext(step.body); }
+    else sayWithDevice(step.body);
+  }
+  function hush(){
+    queue = [];
+    if(player){ try{ player.onended = null; player.onerror = null; player.pause(); }catch(e){} player = null; }
+    try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){}
+  }
   function setMuted(v){
     muted = v; try{ localStorage.setItem(MUTE, v ? "1" : "0"); }catch(e){}
-    if(v) hush(); else speak(steps[i] && steps[i].body);
+    if(v) hush(); else speak(steps[i]);
     paint();
   }
 
@@ -3142,7 +3622,7 @@ const CCTOUR = (function(){
       if(el && step.target !== "#drawer" && step.target !== "#secs" && step.target !== "#tabs") el.scrollIntoView({ block:"center" });
       await new Promise(r => setTimeout(r, 200));
     }
-    armGate(step); speak(step.body); paint();
+    armGate(step); speak(step); paint();
   }
 
   /* ---------- start and stop ---------- */
