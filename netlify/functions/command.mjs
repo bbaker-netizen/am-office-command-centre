@@ -39,9 +39,10 @@ const ACCESS = {
   buying: u => sees(u, "money"),
   people: u => sees(u, "office", "field"),
   crew: u => sees(u, "office", "field"),
+  field: u => sees(u, "office", "field", "money"),
   billing: u => sees(u, "office", "field", "money")
 };
-const TTL = { jobs: 120000, money: 300000, inventory: 60000, buying: 300000, people: 3600000, billing: 1800000 };
+const TTL = { jobs: 120000, money: 300000, inventory: 60000, buying: 300000, people: 3600000, billing: 1800000, field: 300000 };
 
 async function cached(s, part, build, fresh) {
   const key = "cc-cache-" + part;
@@ -322,6 +323,36 @@ async function saveCrew(s, req, body) {
   return json({ ok: true, taskId, created: !t });
 }
 
+/* ---------------------------------------------------------- field record
+   The last three weeks of JobTread timesheets and daily logs, read once every
+   five minutes for everyone. Used for the daily log check on Sites, the T&M
+   sheets, the emergency view on Dispatch and the scorecards. Light on purpose:
+   who, which job, when, how long, and the cost item. */
+async function readField(s) {
+  const c = (await s.get("jobtread-key", { type: "json" })) || {};
+  if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
+  const since = new Date(Date.now() - 21 * 86400000).toISOString();
+  const entries = []; let page = null, guard = 0; const t0 = Date.now();
+  do {
+    const args = { size: 100, where: ["startedAt", ">=", since] }; if (page) args.page = page;
+    const res = await pave({ organization: { $: { id: c.organizationId }, timeEntries: { $: args, nextPage: {}, nodes: {
+      minutes: {}, startedAt: {}, endedAt: {}, type: {}, user: { name: {} }, job: { id: {} }, costItem: { name: {} } } } } }, c.grantKey);
+    const te = res.organization && res.organization.timeEntries; if (!te) break;
+    for (const n of te.nodes || []) entries.push({ m: n.minutes || 0, at: n.startedAt, end: n.endedAt, type: n.type || "", who: n.user && n.user.name, job: n.job && n.job.id, item: n.costItem && n.costItem.name });
+    page = te.nextPage || null;
+  } while (page && ++guard < 40 && Date.now() - t0 < 7000);
+  const logs = []; let lp = null; guard = 0;
+  do {
+    const args = { size: 50, sortBy: [{ field: "date", order: "desc" }] }; if (lp) args.page = lp;
+    const res = await pave({ organization: { $: { id: c.organizationId }, dailyLogs: { $: args, nextPage: {}, nodes: { date: {}, user: { name: {} }, job: { id: {} }, notes: {} } } } }, c.grantKey);
+    const dl = res.organization && res.organization.dailyLogs; if (!dl) break;
+    let old = false;
+    for (const n of dl.nodes || []) { if (String(n.date) < since.slice(0, 10)) { old = true; continue; } logs.push({ date: n.date, who: n.user && n.user.name, job: n.job && n.job.id, words: String(n.notes || "").trim().split(/\s+/).filter(Boolean).length }); }
+    lp = old ? null : (dl.nextPage || null);
+  } while (lp && ++guard < 10);
+  return { entries, logs, since: since.slice(0, 10), partial: !!page };
+}
+
 const STATUSES = ["New Lead","Uploaded Without Plans","Uploaded With Plans","Estimating","Site Visit Scheduled","Pending Estimate Review",
   "Estimate Review Completed","Estimate Sent","Bid Accepted","Pending","Follow Up Required","Upcoming To Be Scheduled","Scheduling required",
   "Scheduled (Date promised)","Turnover Meeting Required","NOP","Site work","Loose Ends Required","Job Complete by A&M","PM Approvals",
@@ -415,6 +446,7 @@ export default async (req) => {
     if (part === "buying") return json(await cached(s, "buying", () => readBuying(s), fresh));
     if (part === "people") return json(await cached(s, "people", () => readPeople(s), fresh));
     if (part === "crew") return json(await readCrew(s, url.searchParams.get("ids")));
+    if (part === "field") return json(await cached(s, "field", () => readField(s), fresh));
     if (part === "billing") return json(await cached(s, "billing", () => readBilling(s), fresh));
   } catch (e) {
     const notConnected = e.code === "NOT_CONNECTED" || e.status === 409;
