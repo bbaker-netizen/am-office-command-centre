@@ -38,6 +38,7 @@ const ACCESS = {
   inventory: u => sees(u, "office", "field", "money"),
   buying: u => sees(u, "money"),
   people: u => sees(u, "office", "field"),
+  crew: u => sees(u, "office", "field"),
   billing: u => sees(u, "office", "field", "money")
 };
 const TTL = { jobs: 120000, money: 300000, inventory: 60000, buying: 300000, people: 3600000, billing: 1800000 };
@@ -196,16 +197,16 @@ async function readInventory(s) {
 /* The people a crew can be made of: JobTread users with a field role (and the
    shop). Customers, vendors and office-only roles are left out. Read once an
    hour; the crew board on Dispatch drags these onto jobs. */
-const CREW_ROLES = /site supervisor|site superintendent|site worker|temp worker|foreman|labourer|shop/i;
+const CREW_ROLES = /site supervisor|site superintendent|site worker|temp worker|foreman|labourer|shop|vendor/i;
 async function readPeople(s) {
   const c = (await s.get("jobtread-key", { type: "json" })) || {};
   if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
-  const res = await pave({ organization: { $: { id: c.organizationId }, memberships: { $: { size: 100 }, nodes: { role: { name: {} }, user: { id: {}, name: {} } } } } }, c.grantKey);
+  const res = await pave({ organization: { $: { id: c.organizationId }, memberships: { $: { size: 100 }, nodes: { id: {}, role: { name: {} }, user: { id: {}, name: {} } } } } }, c.grantKey);
   const nodes = (res.organization && res.organization.memberships && res.organization.memberships.nodes) || [];
   const extra = (process.env.CREW_EXTRA || "Maxim").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   const people = nodes.filter(m => m.user && (CREW_ROLES.test((m.role && m.role.name) || "") || extra.includes(String(m.user.name).toLowerCase())))
-    .map(m => ({ id: m.user.id, name: m.user.name, role: (m.role && m.role.name) || "", temp: /temp worker|\(aces\)/i.test(((m.role && m.role.name) || "") + " " + m.user.name) }))
-    .sort((a, b) => (a.temp - b.temp) || a.name.localeCompare(b.name));
+    .map(m => ({ id: m.id, name: m.user.name, role: (m.role && m.role.name) || "", temp: /temp worker|\(aces\)/i.test(((m.role && m.role.name) || "") + " " + m.user.name), sub: /vendor/i.test((m.role && m.role.name) || "") }))
+    .sort((a, b) => (a.sub - b.sub) || (a.temp - b.temp) || a.name.localeCompare(b.name));
   return { people };
 }
 
@@ -237,6 +238,88 @@ async function readBilling(s) {
   return { rules, ready: true, partial: !!page };
 }
 
+/* ---------------------------------------------------------- crew plan
+   JobTread allows 25 custom fields on a job and A&M uses all 25, so the crew
+   plan lives where A&M already schedules site work: the job's "Site Work" task
+   in JobTread's schedule. The crew are the task's assigned people, so it shows
+   on their own JobTread app. The crew lead and the shop and site start times
+   are lines in the task's description ("Crew lead: Carlos", "Shop start:
+   6:30 AM", "Site start: 7:30 AM"); anything else written there is kept. */
+const CREW_TASK = /site\s*work|crew/i;
+const LINE = { lead: "Crew lead", shop: "Shop start", site: "Site start" };
+function parseDesc(d) {
+  const out = { lead: "", shop: "", site: "", rest: [] };
+  String(d || "").split(/\r?\n/).forEach(l => {
+    const m = l.match(/^\s*(crew lead|shop start|site start)\s*:\s*(.*)$/i);
+    if (!m) { if (l.trim()) out.rest.push(l); return; }
+    const k = m[1].toLowerCase().startsWith("crew") ? "lead" : m[1].toLowerCase().startsWith("shop") ? "shop" : "site";
+    out[k] = m[2].trim();
+  });
+  return out;
+}
+function buildDesc(p) {
+  return [p.lead && LINE.lead + ": " + p.lead, p.shop && LINE.shop + ": " + p.shop, p.site && LINE.site + ": " + p.site, ...(p.rest || [])].filter(Boolean).join("\n") || null;
+}
+function pickTask(tasks) {
+  const t = (tasks || []).filter(x => CREW_TASK.test(x.name || ""));
+  return t.sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || "")))[0] || null;
+}
+async function readCrew(s, idsParam) {
+  const c = (await s.get("jobtread-key", { type: "json" })) || {};
+  if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
+  const ids = String(idsParam || "").split(",").filter(x => /^[A-Za-z0-9_-]{2,40}$/.test(x)).slice(0, 40);
+  if (!ids.length) return { crew: {} };
+  const q = {};
+  ids.forEach((id, i) => { q["j" + i] = { _: "job", $: { id }, id: {}, tasks: { $: { size: 25 }, nodes: { id: {}, name: {}, description: {}, startDate: {}, endDate: {},
+    assignedMemberships: { nodes: { id: {}, user: { name: {} } } } } } }; });
+  const res = await pave(q, c.grantKey);
+  const crew = {};
+  ids.forEach((id, i) => {
+    const j = res["j" + i]; if (!j) return;
+    const t = pickTask(j.tasks && j.tasks.nodes);
+    if (!t) { crew[id] = { taskId: null, members: [], lead: "", shop: "", site: "" }; return; }
+    const p = parseDesc(t.description);
+    crew[id] = { taskId: t.id, taskName: t.name, startDate: t.startDate, endDate: t.endDate, lead: p.lead, shop: p.shop, site: p.site,
+      members: ((t.assignedMemberships && t.assignedMemberships.nodes) || []).map(m => ({ id: m.id, name: m.user && m.user.name })) };
+  });
+  return { crew };
+}
+const TIME = /^(1[0-2]|0?[1-9]):[0-5]\d ?(AM|PM)$|^([01]?\d|2[0-3]):[0-5]\d$/;
+async function saveCrew(s, req, body) {
+  const c = (await s.get("jobtread-key", { type: "json" })) || {};
+  if (!c.grantKey) return json({ error: "not_connected", message: "JobTread is not connected yet." }, 409);
+  const b = body.crew || {};
+  const jobId = String(b.jobId || "");
+  if (!/^[A-Za-z0-9_-]{2,40}$/.test(jobId)) return json({ error: "bad_job", message: "That job id does not look right." }, 400);
+  const members = (Array.isArray(b.members) ? b.members : []).map(String).filter(x => /^[A-Za-z0-9_-]{2,40}$/.test(x)).slice(0, 40);
+  const clean = v => String(v || "").replace(/[\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  const lead = clean(b.lead), shop = clean(b.shop).toUpperCase(), site = clean(b.site).toUpperCase();
+  if ((shop && !TIME.test(shop)) || (site && !TIME.test(site))) return json({ error: "bad_value", message: "Write times like 6:30 AM or 14:00." }, 400);
+  /* Read the job's tasks fresh, so nothing typed into JobTread meanwhile is lost. */
+  const cur = await pave({ job: { $: { id: jobId }, id: {}, number: {}, tasks: { $: { size: 25 }, nodes: { id: {}, name: {}, description: {}, startDate: {}, endDate: {} } } } }, c.grantKey);
+  const job = cur && cur.job; if (!job) return json({ error: "bad_job", message: "JobTread does not know that job." }, 404);
+  const t = pickTask(job.tasks && job.tasks.nodes);
+  const desc = buildDesc({ lead, shop, site, rest: t ? parseDesc(t.description).rest : [] });
+  let taskId;
+  if (t) {
+    await pave({ updateTask: { $: { id: t.id, assignedMembershipIds: members, description: desc } } }, c.grantKey);
+    taskId = t.id;
+  } else {
+    const args = { targetId: jobId, targetType: "job", name: "Site Work", assignedMembershipIds: members, description: desc };
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(b.startDate || ""))) { args.startDate = b.startDate; args.endDate = /^\d{4}-\d{2}-\d{2}$/.test(String(b.endDate || "")) ? b.endDate : b.startDate; }
+    const r = await pave({ createTask: { $: args, createdTask: { id: {} } } }, c.grantKey);
+    taskId = r && r.createTask && r.createTask.createdTask && r.createTask.createdTask.id;
+  }
+  try {
+    const logDoc = (await s.get("jobtread-log", { type: "json" })) || { entries: [] };
+    logDoc.entries.unshift({ at: new Date().toISOString(), action: t ? "updateTask crew" : "createTask crew", by: req.amUser.name, jobId,
+      changes: [`crew: ${members.length} people`, lead && `lead ${lead}`, shop && `shop ${shop}`, site && `site ${site}`].filter(Boolean) });
+    logDoc.entries = logDoc.entries.slice(0, 300);
+    await s.setJSON("jobtread-log", logDoc);
+  } catch (e) {}
+  return json({ ok: true, taskId, created: !t });
+}
+
 const STATUSES = ["New Lead","Uploaded Without Plans","Uploaded With Plans","Estimating","Site Visit Scheduled","Pending Estimate Review",
   "Estimate Review Completed","Estimate Sent","Bid Accepted","Pending","Follow Up Required","Upcoming To Be Scheduled","Scheduling required",
   "Scheduled (Date promised)","Turnover Meeting Required","NOP","Site work","Loose Ends Required","Job Complete by A&M","PM Approvals",
@@ -250,11 +333,6 @@ const EDITABLE = {
   "Risk Level":                     { id: "22PevE8z3Mek", kind: "option", options: ["Low Risk", "Glovebag", "Moderate Risk", "High Risk"] },
   "NOP Filed Date and Time":        { id: "22Pe8itTZBLX", kind: "datetime" },
   "NOP Expires":                    { id: "22PeaZdCwFn2", kind: "date" },
-  /* Added 2026-10-10 by Settings, Connections; ids are looked up by name. */
-  "Crew Lead":                      { id: null, kind: "text" },
-  "Crew":                           { id: null, kind: "text" },
-  "Shop Start Time":                { id: null, kind: "time" },
-  "Site Start Time":                { id: null, kind: "time" }
 };
 function checkValue(def, v) {
   if (v === null || v === "") return { ok: true, value: null };
@@ -310,7 +388,11 @@ export default async (req) => {
   const u = req.amUser;
   if (req.method === "POST") {
     if (!canEdit(u) || !sees(u, "office", "field")) return json({ error: "role", message: "Your account can look but not change jobs. Ask an admin if you need to." }, 403);
-    try { return await updateJob(s, req); }
+    try {
+      const body = await req.clone().json().catch(() => ({}));
+      if (body && body.crew) return await saveCrew(s, req, body);
+      return await updateJob(s, req);
+    }
     catch (e) { return json({ error: "upstream", message: e.message }, 502); }
   }
 
@@ -328,6 +410,7 @@ export default async (req) => {
     if (part === "inventory") return json(await cached(s, "inventory", () => readInventory(s), fresh));
     if (part === "buying") return json(await cached(s, "buying", () => readBuying(s), fresh));
     if (part === "people") return json(await cached(s, "people", () => readPeople(s), fresh));
+    if (part === "crew") return json(await readCrew(s, url.searchParams.get("ids")));
     if (part === "billing") return json(await cached(s, "billing", () => readBilling(s), fresh));
   } catch (e) {
     const notConnected = e.code === "NOT_CONNECTED" || e.status === 409;

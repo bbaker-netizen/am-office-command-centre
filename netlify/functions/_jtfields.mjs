@@ -1,9 +1,10 @@
 /* A&M - the JobTread fields the command centre added (2026-10-10).
 
    Eight on each customer hold the billing rules from Craig's sheet "Accounting
-   info for invoicing". Four on each job hold the crew plan Craig used to keep
-   on his Work Order sheet. JobTread owns all twelve; the app only reads them
-   and writes them through the same checked door as every other job change.
+   info for invoicing". JobTread owns them; the app reads them. (The crew plan
+   was going to be four job fields too, but JobTread allows 25 on a job and A&M
+   uses all 25, so it lives on the job's Site Work task instead: see
+   command.mjs.) JOB_FIELDS is kept empty so nothing tries to add them.
 
    Field ids differ per company and do not exist until Settings, Connections,
    "Set up billing and crew fields" creates them, so the app looks them up by
@@ -21,12 +22,7 @@ export const CUSTOMER_FIELDS = [
   { name: "Client Template Required", type: "text" },
   { name: "Billing Notes", type: "text" }
 ];
-export const JOB_FIELDS = [
-  { name: "Crew Lead", type: "text" },
-  { name: "Crew", type: "text" },
-  { name: "Shop Start Time", type: "text" },
-  { name: "Site Start Time", type: "text" }
-];
+export const JOB_FIELDS = [];
 export const ALL_FIELDS = [
   ...CUSTOMER_FIELDS.map(f => ({ ...f, targetType: "customer" })),
   ...JOB_FIELDS.map(f => ({ ...f, targetType: "job" }))

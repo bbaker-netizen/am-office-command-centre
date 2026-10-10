@@ -12,7 +12,8 @@
 
 import { getStore } from "@netlify/blobs";
 import { accountGate, isAdmin } from "./_accounts.mjs";
-import { ALL_FIELDS, CUSTOMER_FIELDS, pave, fieldIds } from "./_jtfields.mjs";
+import { CUSTOMER_FIELDS, pave, fieldIds } from "./_jtfields.mjs";
+const ALL_FIELDS = CUSTOMER_FIELDS.map(f => ({ ...f, targetType: "customer" }));
 import { BILLING_RULES } from "./_billingrules.mjs";
 
 const store = () => getStore({ name: "am-inventory", consistency: "strong" });
