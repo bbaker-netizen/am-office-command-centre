@@ -163,17 +163,12 @@
      walkthrough opens on its own before anybody has touched anything. So the
      first clip is very often refused. That is normal, not an error: say so, put
      a Play button in front of them, and retry the moment they touch anything. */
-  let AMV = null;
-  try { fetch('/api/voice?action=status', { cache: 'no-store' }).then(r => r.json()).then(v => { AMV = v.take || null; }).catch(() => {}); } catch (e) {}
   function speak(clip) {
     stopAudio();
     if (muted || !clip) return;
     try {
-      /* A natural voice recorded on Admin, Connections plays when there is one;
-         if it will not load, the clip that ships with the app plays instead. */
-      const custom = AMV && !speak.noCustom;
-      audio = new Audio(custom ? '/api/voice?clip=shop/' + clip + '&v=' + AMV : 'tour/' + clip + '.mp3');
-      if (custom) audio.onerror = () => { speak.noCustom = true; speak(clip); speak.noCustom = false; };
+      /* Words in tools/Narration-Script-Shop.md, made with tools/generate-narration.py. */
+      audio = new Audio('tour/' + clip + '.mp3');
       audio.play().then(() => {
         if (blocked) { blocked = false; paint(); }
       }).catch(err => {

@@ -1,7 +1,4 @@
 <!doctype html><html lang="en-CA"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>A&M Office Command Centre</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
   --ink:#1a1917; --ink-2:#4a4844; --ink-3:#77746d;
@@ -41,8 +38,8 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--ground);color:var(--ink);
-  font-family:Archivo,Arial,"Helvetica Neue",sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
-.num{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.num{font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:0}
 a{color:var(--cyan-deep)}
 button{font:inherit;color:inherit}
 
@@ -165,7 +162,7 @@ tr[data-ac-edit]:hover td{background:var(--panel-2)}
 .ac-sub{font-size:12px;font-weight:700;color:var(--ink-2);margin:14px 0 4px}
 .ac-temp{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;background:var(--panel-2);border:1px solid var(--rule);border-left:4px solid var(--cyan);border-radius:3px;margin-bottom:12px}
 .ac-temp .k{flex:1 1 100%;font-size:12px;color:var(--ink-3)}
-.ac-temp code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:22px;font-weight:700;letter-spacing:.06em;color:var(--ink);user-select:all}
+.ac-temp code{font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;font-size:22px;font-weight:700;letter-spacing:.06em;color:var(--ink);user-select:all}
 
 .pm-clist{list-style:none;margin:0;padding:0}
 .pm-clist li{display:flex;flex-direction:column;gap:3px;padding:8px 0;border-bottom:1px solid var(--rule-soft);font-size:13.5px}
@@ -218,7 +215,7 @@ tr[data-ac-edit]:hover td{background:var(--panel-2)}
 .tab:hover{color:var(--ink)}
 a.tab{text-decoration:none}
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--cyan)}
-.badge{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;min-width:20px;padding:1px 6px;border-radius:10px;
+.badge{font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;font-variant-numeric:tabular-nums;font-size:11px;font-weight:600;min-width:20px;padding:1px 6px;border-radius:10px;
   text-align:center;background:var(--rule-soft);color:var(--ink-3)}
 .badge.stop{background:var(--stop);color:#fff}
 .badge.caution{background:var(--caution-wash);color:var(--caution)}
@@ -243,17 +240,20 @@ main{max-width:1240px;margin:0 auto;padding-block:22px 72px;padding-left:20px;pa
 .sub:last-child{margin-bottom:0}
 
 /* kpis */
-.kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));margin-bottom:16px}
-.kpi{background:var(--panel);border:1px solid var(--rule);border-radius:3px;padding:14px 16px;min-width:0;text-align:left;cursor:pointer;box-shadow:var(--shadow)}
+.kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));grid-auto-rows:1fr;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--rule);border-radius:3px;padding:14px 16px;min-width:0;text-align:left;cursor:pointer;box-shadow:var(--shadow);
+  /* Every tile lines up: label, number and note start at the same height on every tile in the row,
+     whether the label takes one line or two. A button centres its content unless told otherwise. */
+  display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;height:100%;font:inherit;color:inherit}
 .kpi:hover{border-color:var(--cyan)}
-.kpi .k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.kpi .k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);line-height:1.35;min-height:2.7em}
 .kpi .v{font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1.15;margin-top:6px}
 .kpi .v.stop{color:var(--stop)}.kpi .v.caution{color:var(--caution)}.kpi .v.clear{color:var(--clear)}
 .kpi .s{font-size:12px;color:var(--ink-3);margin-top:3px}
 
 /* flow strip */
 .flow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;margin-bottom:16px;background:var(--panel);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow);overflow:hidden}
-.flow button{background:none;border:0;border-left:1px solid var(--rule-soft);padding:14px 12px;text-align:left;cursor:pointer;min-width:0}
+.flow button{background:none;border:0;border-left:1px solid var(--rule-soft);padding:14px 12px;text-align:left;cursor:pointer;min-width:0;display:flex;flex-direction:column;justify-content:flex-start;font:inherit;color:inherit}
 .flow button:first-child{border-left:0}
 .flow button:hover{background:var(--cyan-wash)}
 .flow .n{font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
@@ -447,6 +447,7 @@ main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-p
 @keyframes am-lamp{0%{box-shadow:0 0 0 0 rgba(46,125,50,.45)}100%{box-shadow:0 0 0 10px rgba(46,125,50,0)}}
 .conn input[type=password],.conn input[type=text]{width:100%;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);color:var(--ink);margin:6px 0 10px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important}}
+button,input,select,textarea,optgroup{font-family:inherit}
 </style>
 </head><body><header class="top" id="top">
   <div class="in">
@@ -1097,7 +1098,7 @@ function runwayChart(r){
   const ticks = [hi, (hi + lo) / 2, lo];
   return '<div class="scroll"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="min-width:420px;max-width:720px;display:block" role="img" aria-label="Bank balance over 13 weeks">' +
     ticks.map(t => '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y(t).toFixed(1) + '" y2="' + y(t).toFixed(1) + '" stroke="var(--rule-soft)"/>' +
-      '<text x="' + (pl - 6) + '" y="' + (y(t) + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="var(--ink-3)" font-family="IBM Plex Mono,monospace">' + E(MK(t)) + '</text>').join("") +
+      '<text x="' + (pl - 6) + '" y="' + (y(t) + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="var(--ink-3)" font-family="Arial,Helvetica,sans-serif">' + E(MK(t)) + '</text>').join("") +
     '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y(0).toFixed(1) + '" y2="' + y(0).toFixed(1) + '" stroke="var(--ink-3)" stroke-dasharray="3 3"/>' +
     '<polyline points="' + pts + '" fill="none" stroke="var(--cyan)" stroke-width="2.5"/>' +
     vals.map((v, i) => '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(v).toFixed(1) + '" r="3" fill="' + (v < 0 ? "var(--stop)" : "var(--cyan)") + '"/>').join("") +
@@ -1312,7 +1313,6 @@ async function startApp(){
   /* Admins: Settings beside Tour opens Admin, Connections, where JobTread and QuickBooks are connected. */
   if(me.admin){ const set = document.createElement("button"); set.className = "refresh"; set.textContent = "Settings"; set.title = "Connect JobTread and QuickBooks"; set.onclick = () => go("connections"); $("refresh").parentNode.insertBefore(set, $("refresh").parentNode.firstChild); sizeTop(); }
   if(me.claude) CLAUDE.mount();
-  fetch("/api/voice?action=status", { cache:"no-store" }).then(r => r.json()).then(v => { window.AMVOICE = v.take || null; CN.voice = v; }).catch(() => {});
   const h = (location.hash || "").replace("#", "");
   current = CFG.tabs.includes(h) ? h : (CFG.tabs.includes(store("tab." + ROLE)) ? store("tab." + ROLE) : "overview");
   render();
@@ -3414,45 +3414,10 @@ VIEWS.connections = {
        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-cn-qb>' + (q.connected ? "Connect again" : "Connect QuickBooks") + '</button>' + (q.connected ? '<button class="btn ghost" data-cn-qbforget>Disconnect</button>' : '') + '</div>') + '</div>';
     if(CN.mail) h += '<div class="card"><h2><span class="lamp' + (CN.mail.connected ? " on" : "") + '"></span>Robots\' mailbox</h2><p class="lede">' + (CN.mail.connected ? "Connected to " + E(CN.mail.email || CN.mail.mailbox || "") + "." : "Not connected. The assistants' emails send from it.") + '</p>' + (CN.mail.connected ? '' : '<button class="btn" data-mail-connect>Connect the mailbox</button>') + '</div>';
     if(ME.claude) h += '<div class="card"><h2><span class="lamp' + (CN.claude && CN.claude.ready ? " on" : "") + '"></span>Ask Claude</h2><p class="lede">' + (CN.claude && CN.claude.ready ? "Ready. People with Can ask Claude ticked see the Claude button in the corner of every page." : "Needs ANTHROPIC_API_KEY in Netlify, from A&amp;M's own account at console.anthropic.com. Until then the button still offers Continue in my own Claude.") + '</p></div>';
-    const v = CN.voice;
-    if(v) h += '<div class="card" data-cn-form><h2><span class="lamp' + (v.take ? " on" : "") + '"></span>Tour voice</h2>' +
-      (v.take ? '<p class="lede">The walkthroughs use the <b>' + E(v.voice) + '</b> voice, recorded ' + E(showWhen(v.recordedAt)) + (v.recordedBy ? ' by ' + E(v.recordedBy) : '') + '.</p>' : '<p class="lede">The walkthroughs use the built-in voice. Record them once in a natural, welcoming voice and every phone and computer plays that instead.</p>') +
-      (v.ready ? '<label class="fld"><b>Voice</b><select id="cnVoice">' + v.voices.map(x => '<option' + (x === (v.voice || "coral") ? " selected" : "") + '>' + E(x) + '</option>').join("") + '</select></label>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" data-cn-vsample>Hear a sample</button><button class="btn" data-cn-vrec>Record both tours</button>' + (v.take ? '<button class="btn ghost" data-cn-vbuiltin>Use the built-in voice</button>' : '') + '</div>' +
-        '<div id="cnVprog" class="sm" style="margin-top:8px"></div>'
-      : '<div class="state wait">Needs OPENAI_API_KEY in Netlify, from an OpenAI account at platform.openai.com. Recording both tours once costs well under a dollar.</div>') + '</div>';
     h += '</div>';
     return h;
   }
 };
-document.addEventListener("click", ev => {
-  const t = ev.target.closest && ev.target.closest("[data-cn-vsample],[data-cn-vrec],[data-cn-vbuiltin]"); if(!t) return;
-  const vcall = body => fetch("/api/voice", { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) });
-  const voice = ($("cnVoice") || {}).value || "coral", prog = $("cnVprog");
-  if(t.dataset.cnVsample !== undefined){
-    t.classList.add("is-busy");
-    vcall({ action:"sample", voice }).then(async r => { t.classList.remove("is-busy"); if(!r.ok){ const b = await r.json().catch(() => ({})); throw new Error(b.message || "No sample came back."); } const a = new Audio(URL.createObjectURL(await r.blob())); a.play(); })
-      .catch(e => { t.classList.remove("is-busy"); toast(e.message, "bad"); });
-    return;
-  }
-  if(t.dataset.cnVbuiltin !== undefined){ vcall({ action:"builtin" }).then(() => { window.AMVOICE = null; CN.voice.take = null; toast("The tours are back on the built-in voice."); render(); }); return; }
-  if(t.dataset.cnVrec !== undefined){
-    t.disabled = true; t.classList.add("is-busy");
-    (async () => {
-      try{
-        const b = await (await vcall({ action:"begin", voice })).json(); if(!b.clips) throw new Error(b.message || "Could not start.");
-        for(let k = 0; k < b.clips.length; k++){
-          if(prog) prog.innerHTML = '<div class="track" style="height:6px;background:var(--rule-soft);border-radius:3px;overflow:hidden;margin-bottom:4px"><span class="fill" style="display:block;height:100%;background:var(--cyan);width:' + Math.round(k / b.clips.length * 100) + '%;transition:width .3s"></span></div>Recording line ' + (k + 1) + ' of ' + b.clips.length + '…';
-          let ok = false;
-          for(let tries = 0; tries < 3 && !ok; tries++){ const r = await vcall({ action:"record", take:b.take, clip:b.clips[k] }); if(r.ok) ok = true; else if(tries === 2){ const e = await r.json().catch(() => ({})); throw new Error(e.message || "A line did not record."); } }
-        }
-        const p = await vcall({ action:"publish", take:b.take }); if(!p.ok){ const e = await p.json().catch(() => ({})); throw new Error(e.message || "Could not switch over."); }
-        window.AMVOICE = b.take; CN.voice = Object.assign({}, CN.voice, { take:b.take, voice, recordedAt:new Date().toISOString(), recordedBy:ME.name });
-        toast("Both tours now use the " + voice + " voice. Press Tour to hear it."); render();
-      }catch(e){ toast(e.message, "bad"); t.disabled = false; t.classList.remove("is-busy"); if(prog) prog.textContent = ""; }
-    })();
-  }
-});
 document.addEventListener("click", ev => {
   const t = ev.target.closest && ev.target.closest("[data-cn-jt],[data-cn-jtforget],[data-cn-qb],[data-cn-qbforget]"); if(!t) return;
   if(t.dataset.cnJt !== undefined){
@@ -3554,7 +3519,10 @@ const CCTOUR = (function(){
 
   /* ---------- the voice ----------
      Every line is a recorded clip in public/tour/cc, in the same natural voice
-     on every phone and computer (Piper, en-US Lessac, recorded 2026-10-10).
+     on every phone and computer. The words are in tools/Narration-Script-
+     Command-Centre.md; tools/generate-narration.py turns them into the clips
+     (Bruce's walkthrough kit, edge-tts, Andrew). A real recording can replace
+     any clip by saving over the file of the same name.
      The words on screen can say the person's name; the clips do not, so they
      never need re-recording for a new person. A step whose words depend on the
      person (which sections they have) plays its clips one after another.
@@ -3580,11 +3548,9 @@ const CCTOUR = (function(){
   function playNext(fallbackText){
     if(muted || !queue.length) return;
     const clip = queue[0];
-    const custom = window.AMVOICE && !playNext.noCustom;
-    player = new Audio(custom ? "/api/voice?clip=cc/" + clip + "&v=" + window.AMVOICE : "tour/cc/" + clip + ".mp3");
+    player = new Audio("tour/cc/" + clip + ".mp3");
     player.onended = () => { queue.shift(); playNext(fallbackText); };
-    /* A recorded clip that will not load falls back to the built-in clip, then to the device's voice. */
-    player.onerror = () => { if(custom){ playNext.noCustom = true; playNext(fallbackText); playNext.noCustom = false; return; } queue = []; player = null; sayWithDevice(fallbackText); };
+    player.onerror = () => { queue = []; player = null; sayWithDevice(fallbackText); };
     const p = player.play();
     if(p && p.catch) p.catch(err => {
       if(err && err.name === "NotAllowedError"){

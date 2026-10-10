@@ -279,7 +279,7 @@ main { min-height: 60vh; }
 }
 .line.unscanned { border-left: 3px solid var(--accent); }
 .line-main strong { display: block; }
-.line-id { font-size: 12px; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+.line-id { font-size: 12px; color: var(--muted); font-family: var(--font); font-variant-numeric: tabular-nums; }
 .line-qty { font-size: 20px; font-weight: bold; white-space: nowrap; }
 .line-flag { font-size: 11px; color: var(--accent); }
 .ret-row { flex-wrap: wrap; }
@@ -545,15 +545,15 @@ code { background: var(--line-2); padding: 1px 5px; border-radius: 4px; font-siz
 .lbl.card { padding: 12px; }
 .lbl-qr svg { display: block; }
 .lbl-txt { min-width: 0; }
-.lbl-tag { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: bold; font-size: 15px; }
+.lbl-tag { font-family: var(--font); font-variant-numeric: tabular-nums; font-weight: bold; font-size: 15px; }
 .lbl-nm { font-size: 11px; line-height: 1.2; }
 .lbl-nm.big { font-size: 17px; font-weight: bold; line-height: 1.2; }
-.lbl-ser { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; }
+.lbl-ser { font-family: var(--font); font-variant-numeric: tabular-nums; font-size: 10px; }
 .lbl-own { font-size: 8px; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
 .bk { text-align: center; break-inside: avoid; padding: 10px; }
 .bk-qr svg { display: block; margin: 0 auto; }
 .bk-nm { font-size: 12px; margin-top: 6px; line-height: 1.2; }
-.bk-tag { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: bold; font-size: 13px; }
+.bk-tag { font-family: var(--font); font-variant-numeric: tabular-nums; font-weight: bold; font-size: 13px; }
 
 @media print {
   header.topbar, .foot, .no-print, #toast { display: none !important; }
@@ -691,14 +691,14 @@ nav.tabs .tab-set[aria-current="true"] { background: #fff; color: var(--brand); 
 .lb.xs .lb-qr svg { max-height: 0.4in; }
 .lb.lg .lb-qr svg { max-height: 1.7in; }
 .lb-t { min-width: 0; overflow: hidden; }
-.lb-tag { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: bold; font-size: 12pt; line-height: 1.05; }
+.lb-tag { font-family: var(--font); font-variant-numeric: tabular-nums; font-weight: bold; font-size: 12pt; line-height: 1.05; }
 .lb.xs .lb-tag { font-size: 9pt; }
 .lb.lg .lb-tag { font-size: 16pt; }
 .lb-nm { font-size: 7.5pt; line-height: 1.15; }
 .lb-nm.big { font-size: 13pt; font-weight: bold; line-height: 1.1; }
-.lb-ser { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 6.5pt; }
+.lb-ser { font-family: var(--font); font-variant-numeric: tabular-nums; font-size: 6.5pt; }
 .lb-own { font-size: 5pt; text-transform: uppercase; letter-spacing: .04em; margin-top: 1px; }
-textarea.paste { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;
+textarea.paste { width: 100%; font-family: var(--font); font-variant-numeric: tabular-nums; font-size: 13px;
   padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
 
 @page { size: letter; margin: 0; }
