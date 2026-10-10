@@ -8,14 +8,15 @@
    JobTread, QuickBooks or the shop. Answers are kept for a minute or two so ten
    people opening the page at 7 am is one read of JobTread, not ten.
 
-   Who sees what is decided here, not in the page:
-     owner   every part
-     office  jobs, money, inventory
-     field   jobs, inventory
-     crew    none of it */
+   Who sees what is decided here, not in the page, from the person's account
+   (set by an admin on People and access):
+     jobs, inventory   anyone who sees Office, Field or Money
+     money, buying     anyone who sees Money
+   Changing a job needs an account that can make changes. The shop's PINs do
+   not open any of this; see _accounts.mjs. */
 
 import { getStore } from "@netlify/blobs";
-import { authGate } from "./_auth.mjs";
+import { accountGate, sees, canEdit } from "./_accounts.mjs";
 import { qboGet } from "./_qbo.mjs";
 import { readAging, readBalanceSheet, readProfitAndLoss, readPayableDetail, readVendorSpend } from "./_qboreports.mjs";
 import { buildFeed, localDay } from "./_derive.mjs";
@@ -30,11 +31,11 @@ function json(body, status = 200) {
 }
 
 const ACCESS = {
-  me: ["owner", "office", "field", "crew"],
-  jobs: ["owner", "office", "field"],
-  money: ["owner", "office"],
-  inventory: ["owner", "office", "field"],
-  buying: ["owner", "office"]
+  me: u => true,
+  jobs: u => sees(u, "office", "field", "money"),
+  money: u => sees(u, "money"),
+  inventory: u => sees(u, "office", "field", "money"),
+  buying: u => sees(u, "money")
 };
 const TTL = { jobs: 120000, money: 300000, inventory: 60000, buying: 300000 };
 
@@ -231,27 +232,23 @@ async function updateJob(s, req) {
 export default async (req) => {
   if (req.method !== "GET" && req.method !== "POST") return json({ error: "Use GET." }, 405);
   const s = store();
-  const denied = await authGate(req, s);
+  const denied = await accountGate(req, s);
   if (denied) return denied;
-  if (!req.amUser) return json({ error: "auth", message: "Sign in to the app first." }, 401);
+  const u = req.amUser;
   if (req.method === "POST") {
-    const role = req.amUser.role || "crew";
-    if (!["owner", "office", "field"].includes(role)) return json({ error: "role", message: "Changing jobs is for the office and the field leads." }, 403);
+    if (!canEdit(u) || !sees(u, "office", "field")) return json({ error: "role", message: "Your account can look but not change jobs. Ask an admin if you need to." }, 403);
     try { return await updateJob(s, req); }
     catch (e) { return json({ error: "upstream", message: e.message }, 502); }
   }
 
   const url = new URL(req.url);
   const part = url.searchParams.get("part") || "me";
-  const role = req.amUser.role || "crew";
   if (!ACCESS[part]) return json({ error: "Unknown part." }, 400);
-  if (!ACCESS[part].includes(role)) {
-    return json({ error: "role", message: role === "crew" ? "The command centre is for the office and the field leads. Ask Jen if you need it." : "That part is not in your section." }, 403);
-  }
+  if (!ACCESS[part](u)) return json({ error: "role", message: "That part is not in your section. Ask an admin if you need it." }, 403);
   const fresh = url.searchParams.get("fresh") === "1";
 
   try {
-    if (part === "me") return json({ name: req.amUser.name, role, today: localDay() });
+    if (part === "me") return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, today: localDay() });
     if (part === "jobs") return json(await cached(s, "jobs", () => readJobs(s), fresh));
     if (part === "money") return json(await cached(s, "money", () => readMoney(), fresh));
     if (part === "inventory") return json(await cached(s, "inventory", () => readInventory(s), fresh));

@@ -1936,18 +1936,15 @@ async function touchSession() {
 }
 AM.touchSession = touchSession;
 
-/* THE FRONT DOOR
-   This is one app. The owner, the office and the field leads land on the
-   command centre, where Equipment is one section among the rest. Crew land on
-   the shop screens, which is all they use. "Shop and settings" in the command
-   centre comes back here with #/ on the address, so it does not bounce. */
+/* THE SHOP AND THE COMMAND CENTRE
+   One app, two doors. The command centre (/command.html) is signed in to with
+   an email and password at the front door (/). The shop (this page) is signed
+   in to with a name and PIN, here. */
 function goCommand(justSignedIn) {
-  if (!S.role || S.role === 'crew') return false;
-  if (location.hash && location.hash !== '#') return false;
-  if (/[?&]shop\b/.test(location.search)) return false;
-  if (!justSignedIn && /[?&]signin\b/.test(location.search)) return false;
-  location.replace('/command.html');
-  return true;
+  /* From v53 the shop never sends anybody on to the command centre by itself.
+     The command centre has its own email and password sign-in; the Command
+     centre button on the shop's top bar is the way across. */
+  return false;
 }
 AM.goCommand = goCommand;
 
@@ -2028,22 +2025,12 @@ async function bioUnlock() {
    closing the app does not clear it. */
 async function failState() { return (await kvGet('pinFail')) || { n: 0, until: 0 }; }
 
-/* ONE SIGN-IN FOR THE WHOLE APP
-   The shop screens no longer draw their own sign-in. Anybody who needs to sign
-   in, because they have never signed in on this device, the hour idle ran out,
-   or the office switched them off, is sent to the app's front door (/), which
-   signs them in the same way, with the same names, PINs and fingerprint, and
-   sends them straight back to the shop screen they were on. The front door is
-   stored on the device too, so this works with no signal. The session is
-   cleared first, so the front door never sends them straight back here. */
+/* THE SHOP SIGNS ITS OWN PEOPLE IN
+   Name and four digits, on this screen, as it always has. v52 sent people to
+   the app's front door for this; from v53 the front door is the command
+   centre's email and password sign-in, and the shop keeps its PINs, so a crew
+   member with gloves on in a basement signs in exactly as before. */
 async function renderLock() {
-  try { await kvSet('session', null); } catch (e) {}
-  const h = location.hash && location.hash !== '#' && location.hash !== '#/' ? location.hash : '';
-  location.replace('/?next=shop' + (h ? '&h=' + encodeURIComponent(h) : ''));
-}
-
-/* The shop's own sign-in screen, kept only for reference. Nothing calls it. */
-async function renderLockInShop() {
   document.body.classList.add('locked');
   const tabs = $('#tabs'); if (tabs) tabs.innerHTML = '';
   const sb = $('#statusbar');
@@ -2076,7 +2063,7 @@ async function renderLockInShop() {
       <div class="lock">
         <div class="lock-card">
           <h2>Sign in</h2>
-          <p class="muted">The A&amp;M Office Command Centre. Tap your name and type your four digits. This device remembers you until it has sat idle for an hour.</p>
+          <p class="muted">The A&amp;M shop. Tap your name and type your four digits. This device remembers you until it has sat idle for an hour.</p>
           ${hasBio ? `<button class="btn big" id="bioGo">Unlock as ${esc(bio.name)}</button>
             <button class="btn-ghost" id="bioAlt">Somebody else, or use a PIN</button>` : ''}
           <div class="who-list ${hasBio ? 'tucked' : ''}" id="whoList">

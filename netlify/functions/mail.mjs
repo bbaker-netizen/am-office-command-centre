@@ -18,10 +18,11 @@
    Set in Netlify: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
    (https://<site>/api/mail?action=callback), and MAILBOX if it is not
    automation@amabatement.com. The connection refuses any other mailbox, so a
-   person cannot accidentally connect their own inbox. */
+   person cannot accidentally connect their own inbox. Every email sent from here
+   carries Reply-To: estimating@amabatement.com (REPLY_TO to change it). */
 
 import { getStore } from "@netlify/blobs";
-import { authGate } from "./_auth.mjs";
+import { accountGate, sees, canEdit, isAdmin } from "./_accounts.mjs";
 import { withLock } from "./_lock.mjs";
 
 const store = () => getStore({ name: "am-inventory", consistency: "strong" });
@@ -75,6 +76,32 @@ function plainText(part) {
   if (part.mimeType === "text/html" && part.body && part.body.data) return b64(part.body.data).replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ");
   return "";
 }
+/* Gmail's "reply-to" setting only applies to mail typed in Gmail itself. Mail
+   sent through the Gmail API ignores it, so a client's reply came back to the
+   robots' mailbox. Before sending, the app writes the Reply-To line into the
+   draft itself. A draft that already names its own Reply-To is left alone.
+   REPLY_TO in Netlify changes the address; REPLY_TO=none turns this off. */
+const replyTo = () => String(process.env.REPLY_TO || "estimating@amabatement.com").trim();
+function toB64url(str) { return Buffer.from(str, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function fromB64url(str) { return Buffer.from(String(str || "").replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"); }
+export function withReplyTo(raw, addr) {
+  if (!addr || addr.toLowerCase() === "none") return null;
+  const m = raw.match(/\r?\n\r?\n/);
+  const head = m ? raw.slice(0, m.index) : raw;
+  if (/^reply-to\s*:/im.test(head)) return null;
+  const nl = raw.includes("\r\n") ? "\r\n" : "\n";
+  return "Reply-To: " + addr + nl + raw;
+}
+async function setReplyTo(s, id) {
+  const d = await gmail(s, `/drafts/${id}?format=raw`);
+  if (!d.message || !d.message.raw) return;
+  const next = withReplyTo(fromB64url(d.message.raw), replyTo());
+  if (!next) return;
+  const message = { raw: toB64url(next) };
+  if (d.message.threadId) message.threadId = d.message.threadId;
+  await gmail(s, `/drafts/${id}`, { method: "PUT", body: JSON.stringify({ id, message }) });
+}
+
 async function log(s, entry) {
   try {
     const d = (await s.get(LOG, { type: "json" })) || { entries: [] };
@@ -92,7 +119,7 @@ export default async (req) => {
   if (req.method === "POST") { try { body = await req.json(); } catch { return json({ error: "Body was not valid JSON." }, 400); } action = body.action || action; }
 
   /* The callback comes back from Google and cannot carry a sign-in. It is held
-     to a one-time state that only a signed-in office person can have started. */
+     to a one-time state that only a signed-in admin can have started. */
   if (action === "callback") {
     const saved = await s.get(STATE, { type: "json" });
     const state = url.searchParams.get("state");
@@ -107,10 +134,14 @@ export default async (req) => {
     return new Response(`<!doctype html><meta charset=utf-8><body style="font-family:Arial;padding:2rem"><h2>${mailbox()} connected</h2><p>Close this tab and go back to the A&amp;M app.</p>`, { status: 200, headers: { "content-type": "text/html" } });
   }
 
-  const denied = await authGate(req, s);
+  const denied = await accountGate(req, s);
   if (denied) return denied;
-  if (!req.amUser) return json({ error: "auth", message: "Sign in to the app first." }, 401);
-  if (!["owner", "office"].includes(req.amUser.role)) return json({ error: "role", message: "Sending the robots' emails is for the office." }, 403);
+  /* Reading the drafts needs the Assistants area; sending or throwing one away
+     also needs an account that can make changes; connecting or disconnecting
+     the mailbox is for an admin. */
+  if (!sees(req.amUser, "assistants")) return json({ error: "role", message: "The assistants' emails are not in your section. Ask an admin if you need them." }, 403);
+  if ((action === "send" || action === "discard") && !canEdit(req.amUser)) return json({ error: "role", message: "Your account can read these but not send them." }, 403);
+  if ((action === "connect" || action === "disconnect") && !isAdmin(req.amUser)) return json({ error: "role", message: "Connecting the mailbox is for an admin." }, 403);
 
   try {
     if (action === "status") {
@@ -150,7 +181,10 @@ export default async (req) => {
       const id = String(body.id || "");
       if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) return json({ error: "bad_id" }, 400);
       const meta = await gmail(s, `/drafts/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=To`).catch(() => null);
-      if (action === "send") await gmail(s, "/drafts/send", { method: "POST", body: JSON.stringify({ id }) });
+      if (action === "send") {
+        await setReplyTo(s, id);
+        await gmail(s, "/drafts/send", { method: "POST", body: JSON.stringify({ id }) });
+      }
       else await gmail(s, `/drafts/${id}`, { method: "DELETE" });
       await log(s, { action, by: req.amUser.name, id, subject: meta ? header(meta.message, "Subject") : "", to: meta ? header(meta.message, "To") : "" });
       return json({ ok: true });

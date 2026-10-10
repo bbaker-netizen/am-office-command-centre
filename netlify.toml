@@ -20,3 +20,13 @@
   for = "/command.html"
   [headers.values]
     Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/shop.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache"

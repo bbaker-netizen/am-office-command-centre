@@ -134,6 +134,39 @@ button{font:inherit;color:inherit}
 .pm-miss{margin:10px 0 0;font-size:13px}
 .pm-any{display:flex;gap:8px;align-items:flex-end;margin-top:14px;flex-wrap:wrap}
 .pm-any .fld{flex:1 1 260px}
+/* read-only post mortem */
+.pm-ro{border:0;margin:0;padding:0;min-width:0}
+/* Admin: People and access */
+.ac-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ac-head h2{margin:0}
+.ac-chips .tag{margin:0 3px 3px 0}
+tr.ac-off td{opacity:.55}
+tr[data-ac-edit]:hover td{background:var(--panel-2)}
+.ac-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.ac-row .fld{flex:1 1 220px}
+.ac-form .fld{margin-bottom:12px}
+.ac-form .fld input[type=text],.ac-form .fld input[type=email],.ac-form .fld input[type=password]{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);color:var(--ink);width:100%;min-width:0}
+.ac-form .fld input:focus{outline:2px solid var(--cyan);outline-offset:0;border-color:var(--cyan)}
+.ac-set{border:0;margin:0 0 14px;padding:0;min-width:0}
+.ac-set legend{font-size:12px;color:var(--ink-2);padding:0;margin-bottom:6px}
+.ac-seg{display:flex;flex-wrap:wrap;gap:6px}
+.ac-seg label{position:relative;cursor:pointer}
+.ac-seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.ac-seg span{display:inline-block;font-size:13px;font-weight:700;padding:7px 12px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);color:var(--ink-2)}
+.ac-seg input:checked+span{background:var(--ink);border-color:var(--ink);color:var(--panel)}
+.ac-seg input:focus-visible+span{outline:2px solid var(--cyan);outline-offset:1px}
+.ac-check{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--rule-soft);font-size:13px;line-height:1.4;color:var(--ink-2);cursor:pointer}
+.ac-check input{margin:2px 0 0;flex:none;width:16px;height:16px;accent-color:var(--cyan-deep)}
+.ac-check b{color:var(--ink);margin-right:4px}
+.ac-check input:disabled+span{opacity:.5}
+.ac-more{margin-top:8px;padding-top:4px;border-top:1px solid var(--rule)}
+.ac-more h3{margin:14px 0 4px}
+.ac-facts{margin-top:18px}
+.ac-sub{font-size:12px;font-weight:700;color:var(--ink-2);margin:14px 0 4px}
+.ac-temp{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;background:var(--panel-2);border:1px solid var(--rule);border-left:4px solid var(--cyan);border-radius:3px;margin-bottom:12px}
+.ac-temp .k{flex:1 1 100%;font-size:12px;color:var(--ink-3)}
+.ac-temp code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:22px;font-weight:700;letter-spacing:.06em;color:var(--ink);user-select:all}
+
 .pm-clist{list-style:none;margin:0;padding:0}
 .pm-clist li{display:flex;flex-direction:column;gap:3px;padding:8px 0;border-bottom:1px solid var(--rule-soft);font-size:13.5px}
 .pm-clist .sm{font-size:12px;color:var(--ink-3);padding-left:22px}
@@ -176,7 +209,7 @@ button{font:inherit;color:inherit}
   color:var(--ink-2);font:inherit;font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap;text-decoration:none}
 .sec:hover{border-color:var(--ink-3);color:var(--ink)}
 .sec[aria-current="true"]{background:var(--ink);border-color:var(--ink);color:var(--panel)}
-@media (max-width:480px){.secs{gap:5px;padding:8px 12px}.sec{padding:6px 10px;font-size:13.5px;gap:5px}.sec .badge{min-width:16px;padding:0 4px;font-size:10px}}
+@media (max-width:480px){.secs{gap:5px;padding:8px 12px;flex-wrap:wrap;overflow-x:visible}.sec{padding:6px 10px;font-size:13.5px;gap:5px}.sec .badge{min-width:16px;padding:0 4px;font-size:10px}}
 .sec[aria-current="true"] .badge:not(.stop):not(.caution){background:var(--ink-2);color:var(--panel)}
 .tabs{max-width:none;margin:0;padding-left:max(20px, calc((100% - 1200px) / 2));padding-right:20px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:thin;
   background:var(--panel-2);border-top:1px solid var(--rule-soft)}
@@ -373,8 +406,11 @@ const TABS = {
   closeout:  { label:"Closeout",     group:"Field" },
   postmortem:{ label:"Post mortem",  group:"Field" },
   equipment: { label:"Equipment",    group:"Field" },
-  drafts:    { label:"To send", group:"Assistants" }
+  drafts:    { label:"To send", group:"Assistants" },
+  people:    { label:"People and access", group:"Admin" }
 };
+/* Inside the app: whether this person's account can change anything (set by an admin). */
+let CAN_EDIT = true;
 let CFG = ROLES[ROLE] || ROLES.craig;
 
 /* JobTread status list, read from JobTread on 2026-10-06. Twenty five values.
@@ -610,7 +646,8 @@ const SECTIONS = [
   { key:"",           label:"Overview" },
   { key:"Office",     label:"Office" },
   { key:"Field",      label:"Field" },
-  { key:"Assistants", label:"Assistants" }
+  { key:"Assistants", label:"Assistants" },
+  { key:"Admin",      label:"Admin" }
 ];
 const secOf = t => (TABS[t] && TABS[t].group) || "";
 function badgeFor(list){
@@ -715,7 +752,7 @@ function openJob(id){
     '<div class="actions"><a class="btn" href="' + jtUrl(j._id) + '" target="_blank" rel="noopener">Open in JobTread</a>' +
     (drawerStateBack ? '<button class="btn ghost" data-back="1">Back to the list</button>' : '') + '</div>' +
     (gaps.length ? '<div class="state wait" style="margin-bottom:14px">Missing in JobTread: ' + E(gaps.join(", ")) + '. ' + (PLATFORM === "app" ? "Fill them in below and save." : "Fill these in JobTread and press Refresh here.") + '</div>' : '') +
-    (PLATFORM === "app" && ROLE !== "crew" && typeof editForm === "function" ? editForm(j) : '') +
+    (PLATFORM === "app" && CAN_EDIT && typeof editForm === "function" ? editForm(j) : '') +
     '<dl class="facts">' + facts + '</dl><h3>Quotes</h3>' + qhtml);
 }
 let drawerStateBack = null;
@@ -1021,13 +1058,15 @@ document.addEventListener("input", ev => {
 });
 
 /* ---------- inside the A&M app: data comes from the app's own server ----------
-   Everybody signs in once, at the app's front door (/). The token and session it
-   saves on this device are read straight from its storage. What each person can
-   see is decided on the server by their role; this page only draws it. Like the
-   shop screens, this page locks after an hour idle and sends people back to the
-   front door, which brings them straight back here. */
+   The command centre is signed in to at the app's front door (/) with a work
+   email and password. The account's key and session are read from this
+   device's storage (acctToken, acctSession). What each person sees and can do
+   is set by an admin on Admin, People and access, and checked on the server on
+   every request; this page only draws it. After the hours without use an admin
+   chose (8 by default), it sends people back to the front door to sign in again.
+   The shop keeps its own PIN sign-in; its keys on this device are not touched. */
 let TOKEN = "";
-function idbToken(){ return idbGet("token").then(v => v || ""); }
+function idbToken(){ return idbGet("acctToken").then(v => v || ""); }
 function idbOpen(){
   return new Promise((res, rej) => {
     const rq = indexedDB.open("am-inventory", 1);
@@ -1053,25 +1092,24 @@ function idbSet(k, v){
 }
 /* Back to the front door: signing in again, or signing out. */
 async function toDoor(out){
-  await idbSet("session", null);
-  if(out) return location.replace("/?out=1");
+  if(out){ await idbSet("acctToken", null); await idbSet("acctSession", null); return location.replace("/?out=1"); }
   const sec = current || (location.hash || "").replace("#", "");
   const h = sec && sec !== "overview" && /^[a-z]+$/.test(sec) ? "&h=" + encodeURIComponent("#" + sec) : "";
   location.replace("/?next=command" + h);
 }
-let LOCK_MIN = 60, touchedAt = 0;
+let LOCK_MIN = 480, touchedAt = 0;
 const idleMinutes = s => s ? (Date.now() - new Date(s.lastSeen || s.at).getTime()) / 60000 : Infinity;
 /* Using the page keeps the session awake, exactly as using the shop screens does. */
 function touch(){
   const now = Date.now(); if(now - touchedAt < 20000) return; touchedAt = now;
-  idbGet("session").then(s => { if(s){ s.lastSeen = new Date().toISOString(); return idbSet("session", s); } });
+  idbGet("acctSession").then(s => { if(s){ s.lastSeen = new Date().toISOString(); return idbSet("acctSession", s); } });
 }
 /* A token the office has switched off or that has run out sends people to sign in again, from any screen. */
 const _cfetch = window.fetch.bind(window);
 window.fetch = function(input, init){
   return _cfetch(input, init).then(r => {
     const u = typeof input === "string" ? input : (input && input.url) || "";
-    if(r.status === 401 && /\/api\//.test(u) && TOKEN) { TOKEN = ""; idbSet("token", null); toDoor(); }
+    if(r.status === 401 && /\/api\//.test(u) && TOKEN) { TOKEN = ""; idbSet("acctToken", null).then(() => toDoor()); }
     return r;
   });
 };
@@ -1094,60 +1132,67 @@ function appLoad(fresh){
     S.M.bs = d.bs; S.M.ar = d.ar; S.M.ap = d.ap; S.M.pl = d.pl;
     S.bsErr = S.arErr = S.apErr = S.plErr = null; render();
   }).catch(e => { S.bsErr = S.arErr = S.apErr = S.plErr = e; render(); }));
-  waits.push(api("inventory", fresh).then(d => { S.inv = d; S.invErr = null; render(); })
+  if(ME.areas.some(a => ["office","field","money"].includes(a))) waits.push(api("inventory", fresh).then(d => { S.inv = d; S.invErr = null; render(); })
     .catch(e => { S.invErr = e; render(); }));
   if(CFG.tabs.includes("drafts")) waits.push(loadMail());
   if(CFG.tabs.includes("postmortem")) waits.push(loadPM());
+  if(CFG.tabs.includes("people")) waits.push(loadAccounts());
   if(CFG.tabs.includes("buying")) waits.push(api("buying", fresh).then(d => { S.buy = d; render(); })
     .catch(e => { S.buy = { errors:{ jobtread: errCopy(e), quickbooks: errCopy(e) } }; render(); }));
   return Promise.all(waits);
 }
 function appStop(title, text){
   $("main").innerHTML = '<div class="tabhead"><h1>' + E(title) + '</h1></div><div class="verdict caution"><p>' + E(text) + '</p>' +
-    '<div class="meta"><a href="/?next=command">Sign in to the A&amp;M app</a>. You come straight back here.</div></div>';
+    '<div class="meta"><a href="/?next=command">Sign in to the command centre</a>. You come straight back here.</div></div>';
   $("conndot").className = "dot warn"; $("connlabel").textContent = "Not signed in";
 }
 async function startApp(){
   sizeTop();
-  /* Settings is its own small button beside Refresh. The shop is a page in Field. */
-  const set = document.createElement("a");
-  set.className = "refresh"; set.href = "/shop.html#/setup"; set.textContent = "Settings"; set.style.textDecoration = "none";
-  $("refresh").parentNode.insertBefore(set, $("refresh"));
-  const out = document.createElement("button");
-  out.className = "refresh"; out.textContent = "Sign out"; out.title = "Sign out of the whole app on this device"; out.onclick = () => toDoor(true);
-  $("refresh").parentNode.appendChild(out);
-  /* The walkthrough. Starts on its own the first time; this button replays it. */
+  /* Beside Refresh: the walkthrough, the person's own account, and signing out.
+     The shop's Settings are on Admin, People and access, and in the shop. */
   const tour = document.createElement("button");
   tour.className = "refresh"; tour.textContent = "Tour"; tour.onclick = () => CCTOUR.replay();
-  $("refresh").parentNode.insertBefore(tour, set);
+  $("refresh").parentNode.insertBefore(tour, $("refresh"));
+  const mine = document.createElement("button");
+  mine.className = "refresh"; mine.textContent = "My account"; mine.dataset.meOpen = ""; mine.title = "Who you are signed in as, and changing your password";
+  $("refresh").parentNode.appendChild(mine);
+  const out = document.createElement("button");
+  out.className = "refresh"; out.textContent = "Sign out"; out.title = "Sign out of the command centre on this device"; out.onclick = () => toDoor(true);
+  $("refresh").parentNode.appendChild(out);
   TOKEN = await idbToken();
-  const sess = await idbGet("session"), cat = await idbGet("catalog");
-  LOCK_MIN = (cat && cat.settings && cat.settings.lockMinutes) || 60;
-  /* Not signed in on this device, or idle for over an hour: the front door. */
+  const sess = await idbGet("acctSession");
+  LOCK_MIN = (Number(await idbGet("acctIdle")) || 8) * 60;
+  /* Not signed in on this device, or left too long without use: the front door. */
   if(!TOKEN || !sess || idleMinutes(sess) > LOCK_MIN) return toDoor();
   let me;
   try{ me = await api("me"); }
   catch(e){
     if(e.status === 401) return toDoor();
+    /* Still on a temporary password: the front door asks for a new one. */
+    if(e.code === "must_change"){ await idbSet("acctToken", null); return toDoor(); }
     return appStop("Cannot reach the app", e.message || "The app did not answer. Check for signal and reload.");
   }
-  /* Crew sign in to the same app; their part of it is the shop screens. */
-  if(me.role === "crew") return location.replace("/shop.html#/");
+  ME = { ...ME, ...me };
+  if(me.idleHours){ LOCK_MIN = me.idleHours * 60; idbSet("acctIdle", me.idleHours); }
   touch();
   ["click", "keydown", "touchstart"].forEach(ev => document.addEventListener(ev, touch, { passive:true, capture:true }));
-  setInterval(() => { idbGet("session").then(s => { if(!s || idleMinutes(s) > LOCK_MIN) toDoor(); }); }, 60000);
-  ROLE = me.role === "owner" ? "craig" : me.role;
-  /* The assistants' emails are sent from the app by the owner and the office. */
-  let tabs = ROLES[ROLE].tabs.filter(t => t !== "drafts").concat(["owner", "office"].includes(me.role) ? ["drafts"] : []);
-  /* Post mortems: in Field beside Closeout, or in Office for the office, who have no Field section. */
-  if(["owner", "office", "field"].includes(me.role)){
-    const at = tabs.indexOf("closeout") >= 0 ? tabs.indexOf("closeout") + 1 : (tabs.indexOf("records") >= 0 ? tabs.indexOf("records") + 1 : tabs.length);
-    tabs.splice(at, 0, "postmortem");
-    if(tabs.indexOf("closeout") < 0) TABS.postmortem.group = "Office";
-  }
-  CFG = { ...ROLES[ROLE], tabs, gmail:false };
+  setInterval(() => { idbGet("acctSession").then(s => { if(!s || idleMinutes(s) > LOCK_MIN) toDoor(); }); }, 60000);
+  /* What this person sees comes from their account: the areas an admin ticked. */
+  const has = a => (me.areas || []).includes(a);
+  ROLE = has("office") && has("field") && has("money") ? "craig" : has("office") ? "office" : has("field") ? "field" : "office";
+  CAN_EDIT = !!me.edit;
+  const tabs = ["overview"];
+  if(has("office")) tabs.push("estimating", "dispatch");
+  if(has("money")) tabs.push("money", "buying");
+  if(has("office")) tabs.push("records");
+  if(has("field")) tabs.push("projects", "sites", "closeout");
+  /* Post mortems: in Field beside Closeout, or in Office for people with no Field section. */
+  if(has("office") || has("field")){ tabs.push("postmortem"); TABS.postmortem.group = has("field") ? "Field" : "Office"; }
+  if(has("field")) tabs.push("equipment");
+  if(has("assistants")) tabs.push("drafts");
+  if(me.admin) tabs.push("people");
   const first = String(me.name || "").split(" ")[0];
-  if(me.role === "owner") CFG.title = (first ? first + "'s" : "Owner's") + " command centre";
+  CFG = { title: (first ? first + "'s" : "Your") + " command centre", who: [me.title, respLabel(me.areas), LEVEL_INFO[me.level] ? LEVEL_INFO[me.level].label : ""].filter(Boolean).join(" · "), tabs, qb: has("money"), gmail:false };
   S.meName = first;
   document.title = CFG.title;
   $("roleTitle").textContent = CFG.title; $("roleWho").textContent = CFG.who; sizeTop();
@@ -1250,9 +1295,10 @@ function openMail(id){
     $("dbody").innerHTML =
       '<dl class="facts"><dt>From</dt><dd>' + E((S.mailStatus && S.mailStatus.mailbox) || "") + '</dd><dt>To</dt><dd>' + E(full.to || "Nobody yet") + '</dd>' + (full.cc ? '<dt>Copy to</dt><dd>' + E(full.cc) + '</dd>' : '') + '</dl>' +
       '<div style="white-space:pre-wrap;font-size:14px;line-height:1.55;background:var(--panel-2);border:1px solid var(--rule);border-radius:3px;padding:14px 16px;margin-bottom:14px">' + E(full.text || d.snippet || "") + '</div>' +
-      (full.to ? '<div class="actions"><button class="btn" data-mail-send="' + E(id) + '">Send it now</button><button class="btn ghost" data-mail-discard="' + E(id) + '">Discard</button>' +
+      (full.to && !CAN_EDIT ? '<div class="state">Your account can read the assistants\' emails but not send them. Ask an admin if you need to.</div>' : '') +
+      (full.to && CAN_EDIT ? '<div class="actions"><button class="btn" data-mail-send="' + E(id) + '">Send it now</button><button class="btn ghost" data-mail-discard="' + E(id) + '">Discard</button>' +
         '<a class="btn ghost" target="_blank" rel="noopener" href="https://mail.google.com/mail/u/' + encodeURIComponent((S.mailStatus && S.mailStatus.mailbox) || "") + '/#drafts?compose=' + E(d.messageId) + '">Change it in Gmail first</a></div>'
-        : '<div class="state wait">This draft has nobody to send it to. Open it in Gmail and add an address.</div>') +
+        : full.to ? '' : '<div class="state wait">This draft has nobody to send it to. Open it in Gmail and add an address.</div>') +
       '<p class="sub" id="mailMsg"></p>';
   }).catch(e => { $("dbody").innerHTML = '<div class="state err">' + E(errCopy(e)) + '</div>'; });
 }
@@ -1333,9 +1379,9 @@ function kpis(){
   const list = [];
   const has = t => CFG.tabs.includes(t);
   if(ROLE !== "field"){
-    if(ROLE === "craig") list.push(kpi("Cash in the bank", n.cash !== undefined && n.cash !== null ? MK(n.cash) : (S.bsErr ? "n/a" : dots), "All bank accounts, per QuickBooks", "money", n.cash < 0 ? "stop" : ""));
-    list.push(kpi("Owed to A&M", n.ar ? MK(n.ar.tot.Total) : (S.arErr ? "n/a" : dots), n.ar ? MK(n.ar.tot.Late) + " of it is late" : "Customers, including holdbacks", "money"));
-    if(ROLE === "craig") list.push(kpi("A&M owes", n.ap ? MK(n.ap.tot.Total) : (S.apErr ? "n/a" : dots), n.ap ? MK(n.ap.tot.Late) + " of it is late" : "Suppliers and subtrades", "money"));
+    if(ROLE === "craig" && has("money")) list.push(kpi("Cash in the bank", n.cash !== undefined && n.cash !== null ? MK(n.cash) : (S.bsErr ? "n/a" : dots), "All bank accounts, per QuickBooks", "money", n.cash < 0 ? "stop" : ""));
+    if(has("money")) list.push(kpi("Owed to A&M", n.ar ? MK(n.ar.tot.Total) : (S.arErr ? "n/a" : dots), n.ar ? MK(n.ar.tot.Late) + " of it is late" : "Customers, including holdbacks", "money"));
+    if(ROLE === "craig" && has("money")) list.push(kpi("A&M owes", n.ap ? MK(n.ap.tot.Total) : (S.apErr ? "n/a" : dots), n.ap ? MK(n.ap.tot.Late) + " of it is late" : "Suppliers and subtrades", "money"));
     list.push(kpi("Quotes out", q ? MK(q.value) : (S.ordersErr ? "n/a" : dots), q ? plural(q.list.length, "quote") + " waiting on an answer" : "Built in JobTread", "estimating"));
   }
   if(J){
@@ -1359,7 +1405,7 @@ function kpis(){
       list.push(kpi("Done, not billed", String(tb), "Finished work not yet invoiced", has("closeout") ? "closeout" : "money", tb ? "caution" : "clear"));
     }
   }
-  if(ROLE === "craig" && S.M.pl) list.push(kpi("Sales since 1 April", MK(S.M.pl.income), "Invoiced this fiscal year", "money"));
+  if(ROLE === "craig" && has("money") && S.M.pl) list.push(kpi("Sales since 1 April", MK(S.M.pl.income), "Invoiced this fiscal year", "money"));
   return '<div class="kpis" data-tour="numbers">' + list.join("") + '</div>';
 }
 function flowStrip(){
@@ -2239,7 +2285,8 @@ function pmForm(){
   if(errs.jobtread) h += '<div class="state err" style="margin-bottom:10px">JobTread: ' + E(errs.jobtread) + ' The scores still save; the figures can be typed in.</div>';
   if(errs.quickbooks) h += '<div class="state wait" style="margin-bottom:10px">QuickBooks: ' + E(errs.quickbooks) + ' Type what was invoiced in the Price line instead.</div>';
 
-  h += '<form id="pmForm" onsubmit="return false">';
+  if(!CAN_EDIT) h += '<div class="state wait" style="margin-bottom:14px">Your account can read post mortems but not change them. Ask an admin if you run them.</div>';
+  h += '<form id="pmForm" onsubmit="return false">' + (CAN_EDIT ? '' : '<fieldset disabled class="pm-ro">');
   /* who, when */
   h += '<div class="card pm-meta"><div class="pm-grid3">' +
     '<label class="fld"><span>Run by</span><select data-meta="facilitator">' + ["Craig", "Jen", "Amir"].concat(S.meName && !["Craig","Jen","Amir"].includes(S.meName) ? [S.meName] : []).map(x => '<option' + (rec.facilitator === x ? " selected" : "") + '>' + E(x) + '</option>').join("") + '</select></label>' +
@@ -2320,7 +2367,7 @@ function pmForm(){
     (rec.notePostedAt ? '' : '<label class="pm-done"><input type="checkbox" id="pmNote" checked> Post the summary to the job in JobTread, as a pinned note only A&amp;M staff can see</label>') +
     (canClose ? '<label class="pm-done"><input type="checkbox" id="pmCloseJob" checked> Move the job from Job Post Mortem to Closed Won in JobTread</label>' : '') +
     '<div class="actions"><button type="button" class="btn" data-pm-finish>' + (rec.status === "finished" ? "Save the changes" : "Finish and save") + '</button><span class="sub" id="pmMsg" style="align-self:center;margin:0">' + E(PM.msg || (PM.savedAt ? "Saved " + new Date(PM.savedAt).toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" }) : "")) + '</span></div></div>';
-  h += '</form>';
+  h += (CAN_EDIT ? '' : '</fieldset>') + '</form>';
   return h;
 }
 
@@ -2347,9 +2394,9 @@ VIEWS.postmortem = {
     h += '<div class="card wide"><h2>Ready for a post mortem</h2><p class="lede">Jobs at Job Post Mortem in JobTread, and jobs closed in the last 30 days that never had one. Press Start to open it in the meeting.</p>' +
       tbl('<th>Job</th><th>Status</th><th>PM</th><th></th>', ready.concat([]).map(j => {
         const d = drafts.find(r => r.jobId === j._id);
-        return '<tr><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td class="r"><button class="btn" data-pm-open="' + E(j._id) + '">' + (d ? "Continue" : "Start") + '</button></td></tr>';
+        return '<tr><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td class="r">' + (CAN_EDIT ? '<button class="btn" data-pm-open="' + E(j._id) + '">' + (d ? "Continue" : "Start") + '</button>' : d ? '<button class="btn ghost" data-pm-open="' + E(j._id) + '">Read</button>' : '') + '</td></tr>';
       }), "No finished job is waiting.", 20) +
-      '<div class="pm-any"><label class="fld"><span>Any other job</span><input type="text" id="pmAny" placeholder="Type the job number, for example 26-20035" list="pmJobs"></label><button class="btn ghost" data-pm-any>Start</button></div>' +
+      (CAN_EDIT ? '<div class="pm-any"><label class="fld"><span>Any other job</span><input type="text" id="pmAny" placeholder="Type the job number, for example 26-20035" list="pmJobs"></label><button class="btn ghost" data-pm-any>Start</button></div>' : '') +
       '<datalist id="pmJobs">' + (S.jobs || []).filter(j => !isSpecial(j)).slice(0, 400).map(j => '<option value="' + E(j._number) + '">' + E(j._name) + '</option>').join("") + '</datalist></div>';
     if(drafts.length) h += '<div class="card wide"><h2>Started, not finished</h2>' + tbl('<th>Job</th><th>Run by</th><th>Last saved</th><th></th>', drafts.map(r =>
       '<tr><td><span class="nm">' + E(r.number + " " + r.name) + '</span><span class="sm">' + E(r.client) + '</span></td><td>' + E(r.facilitator) + '</td><td>' + E(showDate(r.updatedAt)) + ' by ' + E(r.updatedBy) + '</td><td class="r"><button class="btn ghost" data-pm-open="' + E(r.jobId) + '">Continue</button></td></tr>'), "", 20) + '</div>';
@@ -2366,7 +2413,7 @@ VIEWS.postmortem = {
     h += '<div class="card"><h2>Open commitments</h2><p class="lede">What each post mortem promised to change. Tick one off when it is done.</p>' +
       (open.length ? '<ul class="pm-clist">' + open.slice(0, 30).map(x => {
         const d = x.c.due ? daysTo(x.c.due) : null;
-        return '<li><label><input type="checkbox" data-pm-tick="' + E(x.r.jobId) + ':' + x.i + '"> <b>' + E(x.c.kind === "start" ? "Start" : x.c.kind === "stop" ? "Stop" : "Change") + ':</b> ' + E(x.c.what) + '</label><span class="sm">' + E(x.c.owner || "No owner") + ' · ' + (x.c.due ? '<span class="tag ' + (d < 0 ? "stop" : d <= 7 ? "caution" : "mute") + '">' + E(x.c.due) + '</span>' : "no date") + ' · ' + E(x.r.number) + '</span></li>';
+        return '<li><label><input type="checkbox" data-pm-tick="' + E(x.r.jobId) + ':' + x.i + '"' + (CAN_EDIT ? '' : ' disabled') + '> <b>' + E(x.c.kind === "start" ? "Start" : x.c.kind === "stop" ? "Stop" : "Change") + ':</b> ' + E(x.c.what) + '</label><span class="sm">' + E(x.c.owner || "No owner") + ' · ' + (x.c.due ? '<span class="tag ' + (d < 0 ? "stop" : d <= 7 ? "caution" : "mute") + '">' + E(x.c.due) + '</span>' : "no date") + ' · ' + E(x.r.number) + '</span></li>';
       }).join("") + '</ul>' : '<div class="state ok">Nothing open.</div>') + '</div>';
     if(fin.length) h += '<div class="card wide"><h2>Finished post mortems</h2>' + tbl('<th>Job</th><th>Date</th><th class="r">Financial</th><th class="r">Operational</th><th class="r">Client</th><th class="r">Employees</th><th class="r">Total</th><th>Grade</th><th class="r">Margin</th>',
       fin.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(r => '<tr data-pm-open="' + E(r.jobId) + '" tabindex="0" style="cursor:pointer"><td><span class="nm">' + E(r.number + " " + r.name) + '</span><span class="sm">' + E(r.client) + ' · run by ' + E(r.facilitator) + '</span></td><td>' + E(r.date) + '</td>' +
@@ -2399,7 +2446,7 @@ function pmSnapshot(){
     labourHours: n.hrs.v, planHours: n.p.labourHours || null, days: n.days.v, planDays: n.p.days || null };
 }
 function pmSave(finish){
-  if(!PM.rec) return Promise.resolve();
+  if(!PM.rec || !CAN_EDIT) return Promise.resolve();
   clearTimeout(PM.timer); PM.timer = null;
   const rec = Object.assign({}, PM.rec, { snapshot: pmSnapshot() });
   if(finish) rec.status = "finished";
@@ -2476,6 +2523,257 @@ document.addEventListener("change", ev => {
 });
 document.addEventListener("keydown", ev => { if(ev.key === "Enter" && ev.target.closest && ev.target.closest("tr[data-pm-open]")) ev.target.closest("tr[data-pm-open]").click(); });
 
+/* ================= ADMIN: PEOPLE AND ACCESS (inside the A&M app only) =================
+   Who can sign in to the command centre with an email and password, what each
+   person is responsible for (the areas they see) and what they can do (view,
+   make changes, or admin). Only admins see this page; the server checks again
+   on every request. The shop's names and PINs are separate and unchanged. */
+const AREA_INFO = {
+  office:     { label:"Office",     what:"Estimating, dispatch and records" },
+  money:      { label:"Money",      what:"Money and buying, read from QuickBooks" },
+  field:      { label:"Field",      what:"Projects, sites, closeout, post mortems and equipment" },
+  assistants: { label:"Assistants", what:"The robots' emails waiting to be sent" }
+};
+const AREA_KEYS = ["office", "money", "field", "assistants"];
+const LEVEL_INFO = {
+  view:  { label:"View only",    what:"Reads everything in their areas. Changes nothing." },
+  edit:  { label:"Make changes", what:"Also saves job details to JobTread, runs post mortems and sends the assistants' emails." },
+  admin: { label:"Admin",        what:"Also adds people, sets their access, gives new passwords and connects the robots' mailbox." }
+};
+const RESP = [["company", "Whole company"], ["office", "Office"], ["estimating", "Estimating"], ["field", "Field"], ["custom", "Custom"]];
+const RESP_AREAS = { company:["office","money","field","assistants"], office:["office","money","assistants"], estimating:["office","assistants"], field:["field"] };
+const ADM = { list:null, err:null, settings:{ idleHours:8 }, log:[], me:"", idleChoices:[1,4,8,12], loading:false };
+let ME = { id:"", name:"", email:"", title:"", areas:[], level:"view", admin:false, edit:false, idleHours:8 };
+
+function acctCall(params, body){
+  const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) }
+                    : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
+  return fetch("/api/account" + (params ? "?" + params : ""), opts).then(async r => {
+    const b = await r.json().catch(() => ({}));
+    if(!r.ok) throw { code: b.error || ("http_" + r.status), message: b.message || ("The app answered " + r.status + "."), status: r.status };
+    return b;
+  });
+}
+function loadAccounts(){
+  ADM.loading = true;
+  return acctCall("action=list").then(d => {
+    ADM.list = d.accounts; ADM.settings = d.settings || ADM.settings; ADM.log = d.log || []; ADM.me = d.me; ADM.idleChoices = d.idleChoices || ADM.idleChoices; ADM.err = null; ADM.loading = false; render();
+  }).catch(e => { ADM.err = e; ADM.loading = false; render(); });
+}
+const respOf = areas => { const a = (areas || []).slice().sort().join(); for(const k in RESP_AREAS) if(RESP_AREAS[k].slice().sort().join() === a) return k; return "custom"; };
+const respLabel = areas => (RESP.find(r => r[0] === respOf(areas)) || [0, "Custom"])[1];
+const areaChips = areas => AREA_KEYS.filter(k => (areas || []).includes(k)).map(k => '<span class="tag mute">' + E(AREA_INFO[k].label) + '</span>').join(" ");
+function whenSeen(iso){
+  if(!iso) return "Never";
+  const d = daysSince(iso);
+  if(d === 0) return "Today " + new Date(iso).toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" });
+  if(d === 1) return "Yesterday";
+  return showDate(iso);
+}
+
+VIEWS.people = {
+  alerts(){
+    const out = [];
+    if(!ADM.list) return out;
+    const waiting = ADM.list.filter(a => a.active && a.mustChange && !a.lastSignIn);
+    if(waiting.length) out.push({ lvl:"info", text: plural(waiting.length, "person has", "people have") + " not signed in yet.", meta: waiting.map(a => a.name).join(", ") + ". Give them their temporary password." });
+    return out;
+  },
+  render(){
+    let h = head("People and access", "Who can sign in to the command centre, what each person is responsible for, and what they can do. Only admins see this page. The shop's names and PINs are separate and stay in the shop's Settings.");
+    if(ADM.err) return h + failBox(ADM.err, "People and access");
+    if(!ADM.list) return h + wait("the accounts");
+    const on = ADM.list.filter(a => a.active), off = ADM.list.filter(a => !a.active);
+    const admins = on.filter(a => a.level === "admin").length;
+    h += '<div class="verdict ' + (admins < 2 ? "caution" : "clear") + '"><p>' + E(plural(on.length, "person", "people") + " can sign in. " + plural(admins, "of them is an admin.", "of them are admins.")) + '</p><div class="meta">' +
+      E(admins < 2 ? "Make a second person an admin, so somebody can still let people in if one admin is away or locked out." : "Two or more admins, so nobody is stuck if one is away.") + '</div></div>';
+    h += '<div class="grid">';
+    h += '<div class="card wide" data-tour="people"><div class="ac-head"><h2>Everyone with an account</h2><button class="btn" data-ac-new>Add a person</button></div>' +
+      '<p class="lede">Press a name to change what they see or can do, give them a new password, or switch them off. Changes apply at their next click; they do not have to sign in again.</p>' +
+      tbl('<th>Person</th><th>Responsible for</th><th>Sees</th><th>Can do</th><th>Last signed in</th><th></th>', on.concat(off).map(a =>
+        '<tr class="' + (a.active ? "" : "ac-off") + '" data-ac-edit="' + E(a.id) + '" tabindex="0" style="cursor:pointer"><td><span class="nm">' + E(a.name) + (a.id === ADM.me ? ' <span class="tag clear">You</span>' : '') + '</span><span class="sm">' + E(a.email) + (a.title ? ' · ' + E(a.title) : '') + '</span></td>' +
+        '<td>' + E(respLabel(a.areas)) + '</td><td class="ac-chips">' + areaChips(a.areas) + '</td><td>' + E(LEVEL_INFO[a.level] ? LEVEL_INFO[a.level].label : a.level) + '</td>' +
+        '<td>' + E(whenSeen(a.lastSignIn)) + '</td><td>' + (!a.active ? '<span class="tag stop">Switched off</span>' : a.mustChange ? '<span class="tag caution">' + (a.lastSignIn ? "Temporary password" : "Not signed in yet") + '</span>' : '') + '</td></tr>'), "Nobody yet.", 60) + '</div>';
+
+    h += '<div class="card"><h2>What each responsibility sees</h2><p class="lede">A shortcut for a set of areas. Tick the areas yourself for anything in between; that shows as Custom.</p><p class="ac-sub">Responsibilities</p><dl class="facts">' +
+      RESP.filter(r => r[0] !== "custom").map(r => '<dt>' + E(r[1]) + '</dt><dd>' + RESP_AREAS[r[0]].map(k => AREA_INFO[k].label).join(", ") + '</dd>').join("") + '</dl>' +
+      '<p class="ac-sub">Areas</p><dl class="facts">' + AREA_KEYS.map(k => '<dt>' + E(AREA_INFO[k].label) + '</dt><dd>' + E(AREA_INFO[k].what) + '</dd>').join("") + '</dl></div>';
+    h += '<div class="card"><h2>What each level can do</h2><p class="lede">Separate from what they see. A field lead can make changes in Field without seeing Money.</p><dl class="facts">' +
+      ["view", "edit", "admin"].map(k => '<dt>' + E(LEVEL_INFO[k].label) + '</dt><dd>' + E(LEVEL_INFO[k].what) + '</dd>').join("") + '</dl></div>';
+
+    h += '<div class="card"><h2>Signing out on its own</h2><p class="lede">A computer or phone left open asks for the password again after this long without use. Everybody, on every device.</p>' +
+      '<div class="ac-row"><label class="fld"><span>Ask again after</span><select id="acIdle">' + ADM.idleChoices.map(n => '<option value="' + n + '"' + (n === ADM.settings.idleHours ? " selected" : "") + '>' + plural(n, "hour") + ' without use</option>').join("") + '</select></label>' +
+      '<button class="btn ghost" data-ac-idle>Save</button></div><p class="sub" id="acIdleMsg"></p></div>';
+    h += '<div class="card"><h2>Shop PINs and connections</h2><p class="lede">The shop\'s names and four-digit PINs, the JobTread key, the QuickBooks connection and the shop\'s own lock time are in the shop\'s Settings. Changing them there needs a shop PIN from the office.</p>' +
+      '<a class="btn ghost" href="/shop.html#/setup">Open the shop\'s Settings</a></div>';
+
+    h += '<div class="card wide"><h2>Recent changes</h2><p class="lede">Who changed what on this page, newest first.</p>' +
+      tbl('<th>When</th><th>By</th><th>What</th>', ADM.log.map(l => '<tr><td>' + E(showDate(l.at)) + ' ' + E(new Date(l.at).toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" })) + '</td><td>' + E(l.by) + '</td><td>' + E(logWords(l)) + '</td></tr>'), "Nothing changed yet.", 10) + '</div>';
+    return h + '</div>';
+  }
+};
+function logWords(l){
+  const who = l.who ? l.who + ": " : "";
+  if(l.action === "setup") return "Set up the first account. " + (l.detail || "");
+  if(l.action === "create") return "Added " + l.who + " (" + (l.detail || "") + ")";
+  if(l.action === "reset") return who + "new temporary password, signed out everywhere";
+  if(l.action === "remove") return "Removed " + l.who + " before they ever signed in";
+  if(l.action === "password") return who + (l.detail || "changed their password").toLowerCase();
+  return who + (l.detail || l.action);
+}
+
+/* ---------- the drawer: add or change one person ---------- */
+function acForm(a){
+  const isNew = !a, me = a && a.id === ADM.me;
+  a = a || { name:"", email:"", title:"", areas:["field"], level:"edit", active:true };
+  const resp = respOf(a.areas);
+  let h = '<form id="acForm" data-id="' + E(a.id || "") + '" onsubmit="return false" class="ac-form">' +
+    '<label class="fld"><span>Full name</span><input type="text" name="name" value="' + E(a.name) + '" autocomplete="off"></label>' +
+    '<label class="fld"><span>Work email</span><input type="email" name="email" value="' + E(a.email) + '" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="name@amabatement.com"></label>' +
+    '<label class="fld"><span>Job title</span><input type="text" name="title" value="' + E(a.title) + '" autocomplete="off" placeholder="For example: Operations manager"></label>' +
+    '<fieldset class="ac-set"><legend>Responsible for</legend><div class="ac-seg">' + RESP.map(r => '<label><input type="radio" name="resp" value="' + r[0] + '"' + (resp === r[0] ? " checked" : "") + '><span>' + E(r[1]) + '</span></label>').join("") + '</div></fieldset>' +
+    '<fieldset class="ac-set"><legend>Sees</legend>' + AREA_KEYS.map(k => '<label class="ac-check"><input type="checkbox" name="area" value="' + k + '"' + (a.areas.includes(k) ? " checked" : "") + '><span><b>' + E(AREA_INFO[k].label) + '</b> ' + E(AREA_INFO[k].what) + '</span></label>').join("") + '</fieldset>' +
+    '<fieldset class="ac-set"><legend>Can do</legend>' + ["view", "edit", "admin"].map(k => '<label class="ac-check"><input type="radio" name="level" value="' + k + '"' + (a.level === k ? " checked" : "") + (me && k !== "admin" ? " disabled" : "") + '><span><b>' + E(LEVEL_INFO[k].label) + '</b> ' + E(LEVEL_INFO[k].what) + '</span></label>').join("") +
+    (me ? '<p class="sub">You cannot take admin away from yourself. Another admin can.</p>' : '') + '</fieldset>' +
+    '<div class="actions"><button type="button" class="btn" data-ac-save>' + (isNew ? "Add and make a temporary password" : "Save the changes") + '</button></div><p class="sub" id="acMsg" role="status"></p></form>';
+  if(!isNew && !me){
+    h += '<div class="ac-more"><h3>Password</h3><p class="sub">Forgotten it, or a phone went missing? A new temporary password signs them out on every device straight away.</p>' +
+      '<div class="actions"><button type="button" class="btn ghost" data-ac-reset>Give a new temporary password</button></div>' +
+      '<h3>' + (a.active ? "Switch off" : "Switch back on") + '</h3><p class="sub">' + (a.active ? "Someone who has left, or is away for a long time. They are signed out at their next click and cannot sign in. Their name stays on everything they did." : "They can sign in again with the password they had.") + '</p>' +
+      '<div class="actions"><button type="button" class="btn ghost" data-ac-active="' + (a.active ? "0" : "1") + '">' + (a.active ? "Switch off " + E(a.name.split(" ")[0]) : "Switch " + E(a.name.split(" ")[0]) + " back on") + '</button>' +
+      (!a.lastSignIn ? '<button type="button" class="btn ghost" data-ac-remove>Remove, added by mistake</button>' : '') + '</div></div>';
+  }
+  if(!isNew) h += '<dl class="facts ac-facts"><dt>Added</dt><dd>' + E(showDate(a.createdAt)) + (a.createdBy ? ' by ' + E(a.createdBy) : '') + '</dd><dt>Last signed in</dt><dd>' + E(whenSeen(a.lastSignIn)) + '</dd><dt>Password set</dt><dd>' + E(showDate(a.passwordSetAt)) + (a.mustChange ? ' (temporary)' : '') + '</dd></dl>';
+  return h;
+}
+function acOpen(id){
+  const a = id ? (ADM.list || []).find(x => x.id === id) : null;
+  if(id && !a) return;
+  drawerState = { kind:"account", id: id || "" };
+  openDrawer(a ? '<small>' + E(a.email) + '</small>' + E(a.name) : '<small>People and access</small>Add a person', acForm(a));
+}
+function acRead(){
+  const f = $("acForm"); const v = n => (f.querySelector('[name="' + n + '"]') || {}).value || "";
+  const lv = f.querySelector('[name="level"]:checked');
+  return { name: v("name").trim(), email: v("email").trim(), title: v("title").trim(), areas: [...f.querySelectorAll('[name="area"]:checked')].map(x => x.value), level: lv ? lv.value : "" };
+}
+function acTemp(a, temp, why){
+  const first = a.name.split(" ")[0];
+  $("dbody").innerHTML = '<div class="state ok" style="margin-bottom:14px">' + E(why) + '</div>' +
+    '<div class="ac-temp"><span class="k">Temporary password for ' + E(a.name) + '</span><code id="acTempPw">' + E(temp) + '</code><button type="button" class="btn ghost" data-ac-copy>Copy</button></div>' +
+    '<p class="sub">This is the only time it is shown. Best given to ' + E(first) + ' in person or read out over the phone. It works once: ' + E(first) + ' goes to the app, signs in with <b>' + E(a.email) + '</b> and this password, and then chooses their own.</p>' +
+    '<div class="actions"><button type="button" class="btn" data-ac-done>Done</button></div>';
+}
+function acMsg(t){ const m = $("acMsg"); if(m) m.textContent = t; }
+document.addEventListener("change", ev => {
+  const f = ev.target.closest && ev.target.closest("#acForm"); if(!f) return;
+  if(ev.target.name === "resp" && ev.target.value !== "custom"){
+    const want = RESP_AREAS[ev.target.value];
+    f.querySelectorAll('[name="area"]').forEach(x => { x.checked = want.includes(x.value); });
+  }
+  if(ev.target.name === "area"){
+    const r = respOf([...f.querySelectorAll('[name="area"]:checked')].map(x => x.value));
+    const pick = f.querySelector('[name="resp"][value="' + r + '"]'); if(pick) pick.checked = true;
+  }
+});
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-ac-new],[data-ac-edit],[data-ac-save],[data-ac-reset],[data-ac-active],[data-ac-remove],[data-ac-copy],[data-ac-done],[data-ac-idle],[data-ac-yes],[data-me-open],[data-me-save]");
+  if(!t) return;
+  if(t.dataset.acNew !== undefined) return acOpen("");
+  if(t.dataset.acEdit) return acOpen(t.dataset.acEdit);
+  if(t.dataset.meOpen !== undefined) return meOpen();
+  if(t.dataset.meSave !== undefined) return meSave(t);
+  if(t.dataset.acDone !== undefined){ closeDrawer(); return; }
+  if(t.dataset.acCopy !== undefined){
+    const txt = ($("acTempPw") || {}).textContent || "";
+    const done = () => { t.textContent = "Copied"; setTimeout(() => { t.textContent = "Copy"; }, 2000); };
+    try{ navigator.clipboard.writeText(txt).then(done, () => { selectText($("acTempPw")); }); }catch(e){ selectText($("acTempPw")); }
+    return;
+  }
+  if(t.dataset.acIdle !== undefined){
+    const n = Number($("acIdle").value), m = $("acIdleMsg");
+    t.disabled = true; m.textContent = "Saving…";
+    acctCall("", { action:"settings", idleHours:n }).then(r => { ADM.settings = r.settings; m.textContent = "Saved. Everybody is asked again after " + plural(n, "hour") + " without use."; t.disabled = false; loadAccounts(); })
+      .catch(e => { m.textContent = errCopy(e); t.disabled = false; });
+    return;
+  }
+  const id = drawerState && drawerState.kind === "account" ? drawerState.id : "";
+  const a = id ? (ADM.list || []).find(x => x.id === id) : null;
+  if(t.dataset.acSave !== undefined){
+    const body = acRead();
+    if(!body.name) return acMsg("Type their full name.");
+    if(!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(body.email)) return acMsg("That email address does not look right.");
+    if(!body.areas.some(x => ["office","money","field"].includes(x))) return acMsg("Tick at least one of Office, Money or Field.");
+    if(!body.level) return acMsg("Choose what they can do.");
+    t.disabled = true; acMsg("Saving…");
+    const call = id ? acctCall("", { action:"update", id, ...body }) : acctCall("", { action:"create", ...body });
+    call.then(r => {
+      if(!id){ acTemp(r.account, r.temp, r.account.name + " is added. Nothing has been sent to them."); drawerState = { kind:"account", id: r.account.id }; }
+      else { acMsg("Saved. It applies at " + r.account.name.split(" ")[0] + "'s next click."); t.disabled = false; }
+      loadAccounts();
+    }).catch(e => { acMsg(errCopy(e)); t.disabled = false; });
+    return;
+  }
+  if(!a) return;
+  if(t.dataset.acReset !== undefined){
+    t.outerHTML = '<button type="button" class="btn" data-ac-yes="reset">Yes, sign ' + E(a.name.split(" ")[0]) + ' out and make a new one</button>'; return;
+  }
+  if(t.dataset.acRemove !== undefined){
+    t.outerHTML = '<button type="button" class="btn" data-ac-yes="remove">Yes, remove ' + E(a.name) + '</button>'; return;
+  }
+  if(t.dataset.acYes === "reset"){
+    t.disabled = true;
+    acctCall("", { action:"reset", id }).then(r => { acTemp(r.account, r.temp, a.name + " is signed out everywhere. The old password no longer works."); loadAccounts(); })
+      .catch(e => { t.disabled = false; t.insertAdjacentHTML("afterend", '<p class="sub">' + E(errCopy(e)) + '</p>'); });
+    return;
+  }
+  if(t.dataset.acYes === "remove"){
+    t.disabled = true;
+    acctCall("", { action:"remove", id }).then(() => { closeDrawer(); loadAccounts(); })
+      .catch(e => { t.disabled = false; t.insertAdjacentHTML("afterend", '<p class="sub">' + E(errCopy(e)) + '</p>'); });
+    return;
+  }
+  if(t.dataset.acActive !== undefined){
+    const on = t.dataset.acActive === "1"; t.disabled = true;
+    acctCall("", { action:"update", id, active: on }).then(r => {
+      ADM.list = ADM.list.map(x => x.id === id ? r.account : x); acOpen(id); acMsg(on ? r.account.name + " can sign in again." : r.account.name + " is switched off and signed out.");
+      loadAccounts();
+    }).catch(e => { t.disabled = false; t.insertAdjacentHTML("afterend", '<p class="sub">' + E(errCopy(e)) + '</p>'); });
+  }
+});
+document.addEventListener("keydown", ev => {
+  if(ev.key !== "Enter") return;
+  const r = ev.target.closest && ev.target.closest("tr[data-ac-edit]"); if(r) acOpen(r.dataset.acEdit);
+});
+function selectText(el){ if(!el) return; const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+
+/* ---------- My account: who am I, and change my password ---------- */
+function meOpen(){
+  drawerState = { kind:"me" };
+  const areas = ME.areas.map(k => AREA_INFO[k] ? AREA_INFO[k].label : k).join(", ");
+  openDrawer('<small>My account</small>' + E(ME.name),
+    '<dl class="facts"><dt>Email</dt><dd>' + E(ME.email) + '</dd>' + (ME.title ? '<dt>Job title</dt><dd>' + E(ME.title) + '</dd>' : '') +
+    '<dt>Responsible for</dt><dd>' + E(respLabel(ME.areas)) + '</dd><dt>Sees</dt><dd>' + E(areas) + '</dd><dt>Can do</dt><dd>' + E(LEVEL_INFO[ME.level] ? LEVEL_INFO[ME.level].label : ME.level) + '</dd></dl>' +
+    '<p class="sub">To see more or less, ask an admin' + (ME.admin ? ' (you are one: Admin, People and access)' : '') + '.</p>' +
+    '<h3>Change my password</h3><form id="meForm" class="ac-form" onsubmit="return false">' +
+    '<input type="email" autocomplete="username" value="' + E(ME.email) + '" hidden>' +
+    '<label class="fld"><span>Current password</span><input type="password" name="cur" autocomplete="current-password"></label>' +
+    '<label class="fld"><span>New password</span><input type="password" name="n1" autocomplete="new-password"></label>' +
+    '<label class="fld"><span>Type it again</span><input type="password" name="n2" autocomplete="new-password"></label>' +
+    '<div class="actions"><button type="button" class="btn" data-me-save>Change my password</button></div><p class="sub" id="meMsg" role="status">At least 10 characters. Changing it signs you out on every other device.</p></form>' +
+    '<div class="actions"><button type="button" class="btn ghost" onclick="toDoor(true)">Sign out on this device</button></div>');
+}
+function meSave(btn){
+  const f = $("meForm"), v = n => f.querySelector('[name="' + n + '"]').value, m = $("meMsg");
+  if(v("n1").length < 10) return m.textContent = "Use at least 10 characters.";
+  if(v("n1") !== v("n2")) return m.textContent = "The two new ones do not match.";
+  btn.disabled = true; m.textContent = "Saving…";
+  acctCall("", { action:"password", current: v("cur"), next: v("n1") }).then(async r => {
+    TOKEN = r.token; await idbSet("acctToken", r.token);
+    f.reset(); btn.disabled = false; m.textContent = "Changed. Other devices will ask for the new password.";
+  }).catch(e => { btn.disabled = false; m.textContent = errCopy(e); });
+}
+
 /* ---------- the command centre walkthrough ----------
    Built to the same house standard as the shop's walkthrough (public/tour.js):
    - it points at real parts of the screen through data-tour attributes
@@ -2505,14 +2803,14 @@ const CCTOUR = (function(){
         body: name + " is the A&M Office Command Centre. It reads JobTread, QuickBooks and the shop, and puts what needs a decision in one place. I will take you round it in about three minutes. I am talking as we go and the words are on screen too, so turn the sound off if you need to. Press Stop the voice once and I stay quiet." },
       { id:"sections", target:"#secs", at:"overview",
         title:"Sections across the top",
-        body:"These big buttons are the sections of the business." + (has("Office") ? " Office is estimating, dispatch, money, buying and records." : "") + (has("Field") ? " Field is projects, sites, closeout, equipment and the shop." : "") + (has("Assistants") ? " Assistants is the emails the AI assistants have written for you." : "") + " A red number on a button means something in that section needs a decision. Press " + fieldOrOffice + " now.",
+        body:"These big buttons are the sections of the business." + (has("Office") ? " Office is estimating, dispatch, money, buying and records." : "") + (has("Field") ? " Field is projects, sites, closeout, equipment and the shop." : "") + (has("Assistants") ? " Assistants is the emails the AI assistants have written for you." : "") + (has("Admin") ? " Admin is where you add people and set what they see and can do." : "") + " A red number on a button means something in that section needs a decision. Press " + fieldOrOffice + " now.",
         gate:{ click:"#secs .sec" } },
       { id:"pages", target:"#tabs",
         title:"The pages in that section",
         body:"The row underneath holds the pages of the section you are in. Each page carries its own number when something on it needs you. Each section remembers the page you were last on, so coming back puts you where you left off." },
       { id:"shop", target:'[data-tour="shop"]', at:"projects",
         title:"The shop is part of Field",
-        body:"Shop opens the shop screens: gear going out to a job and coming back, transfers between sites, the shelf, ordering and filter certificates. It is the same app. The Command centre button on those screens brings you straight back to Field." },
+        body:"Shop opens the shop screens: gear going out to a job and coming back, transfers between sites, the shelf, ordering and filter certificates. It is the same app, with its own sign-in: your name and four-digit PIN, as always. The Command centre button on those screens brings you straight back here." },
       { id:"postmortem", target:'[data-tour="page"]', at:"postmortem",
         title:"Post mortems",
         body:"When a job is finished, Craig, Jen or Amir runs a post mortem here with everyone who worked on it. Four perspectives, financial, operational, client, and employees and subcontractors, each scored 1 to 10. The plan and the actual figures come from JobTread and QuickBooks, and every commitment gets an owner and a date." },
@@ -2528,16 +2826,19 @@ const CCTOUR = (function(){
         gate:{ click:'[data-tour="flow"] [data-list]' } },
       { id:"drawer", target:"#drawer", keepDrawer:true,
         title:"The jobs open at the side",
-        body:"The list opens over here. Press any job to see everything on it, what is missing in JobTread, and the button that opens it in JobTread. If your role allows it, you can change the status, project manager, start date and notice dates right here, and it saves to JobTread under your name." },
+        body:"The list opens over here. Press any job to see everything on it, what is missing in JobTread, and the button that opens it in JobTread. If your account can make changes, you can change the status, project manager, start date and notice dates right here, and it saves to JobTread under your name." },
       { id:"find", target:'[data-tour="find"]',
         title:"Find any job",
         body:"Type a job number, a client, a name or part of an address and the job comes up as you type. Press it to open it at the side." },
       { id:"tosend", target:'[data-tour="page"]', at:"drafts",
         title:"Emails waiting for a person",
         body:"The AI assistants check the inboxes, JobTread and QuickBooks every morning and write the emails that need to go: quote follow-ups, payment reminders, requests for missing paperwork. They never send anything themselves. Open one, read it, then press Send or Discard. A client who replies gets estimating at A&M, not a robot." },
+      { id:"people", target:'[data-tour="people"]', at:"people",
+        title:"People and access",
+        body:"You are an admin, so this page is yours. Each person gets an account with their work email, what they are responsible for, the areas they see, and whether they can only look, make changes, or also manage people. Adding someone makes a temporary password that works once; they choose their own the first time they sign in. Switch someone off and they are out at their next click." },
       { id:"tools", target:'[data-tour="tools"]', at:"overview",
-        title:"Live, Refresh, Settings and Sign out",
-        body:"The dot tells you the numbers are live and when they were last read. They update every few minutes on their own, and Refresh reads them again now. Settings is where people, PINs and the JobTread and QuickBooks connections live. Sign out signs you out of the whole app on this device; it also locks itself after an hour idle." },
+        title:"Live, Refresh, My account and Sign out",
+        body:"The dot tells you the numbers are live and when they were last read. They update every few minutes on their own, and Refresh reads them again now. My account shows what you can see and do, and is where you change your password. Sign out signs you out of the command centre on this device. If it sits unused for a while, it asks for your password again." },
       { id:"done", bookend:true, at:"overview",
         title:"That is the whole of it",
         body:"That is the command centre. Sections across the top, pages underneath, what needs a decision first. Nothing here sends an email or changes a job unless a person presses the button. You can run this tour again any time with the Tour button at the top." }

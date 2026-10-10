@@ -20,7 +20,8 @@
    cannot be forgotten about and left as a way in. */
 
 import { authStore, signToken, readAuthIndex, writeAuthIndex, isArmed, isOffice, roleOf } from "./_auth.mjs";
-import { update } from "./_lock.mjs";
+import { pinHash, same, readFails, addFail as addFailKey, ipKey, ipBlocked, ipFail } from "./_pin.mjs";
+const addFail = (s, uid) => addFailKey(s, failKey(uid));
 
 const CATALOG = "catalog";
 
@@ -31,67 +32,7 @@ function json(body, status = 200) {
   });
 }
 
-const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
-
-async function pinHash(pin, salt) {
-  const data = new TextEncoder().encode(String(salt) + ":" + String(pin));
-  return hex(await globalThis.crypto.subtle.digest("SHA-256", data));
-}
-
-/* Compared all the way through rather than stopping at the first difference,
-   for the same reason the old shop code was. */
-function same(a, b) {
-  const x = String(a || ""), y = String(b || "");
-  if (x.length !== y.length) return false;
-  let diff = 0;
-  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
-  return diff === 0;
-}
-
 const failKey = uid => "authfail-" + uid;
-
-async function readFails(s, uid) {
-  return (await s.get(failKey(uid), { type: "json" })) || { n: 0, until: 0 };
-}
-
-/* Counted with a write that fails if somebody else counted in between, so a
-   burst of guesses sent all at once cannot all see the same count. */
-async function addFail(s, uid) {
-  return update(s, failKey(uid), cur => {
-    const n = ((cur && cur.n) || 0) + 1;
-    return { n, until: Date.now() + waitFor(n) };
-  });
-}
-
-/* A second count per network address, so one machine cannot work through
-   everybody's names in turn. Thirty wrong in an hour from one address, and that
-   address waits an hour. The address is scrambled before it is stored. */
-async function ipKey(req) {
-  const ip = req.headers.get("x-nf-client-connection-ip") || req.headers.get("x-forwarded-for") || "";
-  if (!ip) return "";
-  const d = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode("am:" + ip.split(",")[0].trim()));
-  return "authfail-ip-" + [...new Uint8Array(d)].slice(0, 12).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-async function ipBlocked(s, key) {
-  if (!key) return false;
-  const v = await s.get(key, { type: "json" });
-  return !!(v && v.n >= 30 && Date.now() - v.since < 3600000);
-}
-async function ipFail(s, key) {
-  if (!key) return;
-  try {
-    await update(s, key, cur => (!cur || Date.now() - cur.since > 3600000) ? { n: 1, since: Date.now() } : { n: cur.n + 1, since: cur.since });
-  } catch (e) {}
-}
-
-/* Five is generous for cold hands on a small keypad. After that the wait grows,
-   because somebody who has been wrong ten times in a row is not fumbling. At
-   fifteen minutes a run through all ten thousand takes about a year. */
-function waitFor(n) {
-  if (n < 5) return 0;
-  if (n < 10) return 15 * 60 * 1000;
-  return 60 * 60 * 1000;
-}
 
 export default async (req) => {
   const s = authStore();
@@ -142,7 +83,7 @@ export default async (req) => {
   const uid = user.id || "";
   if (!uid) return json({ error: "auth", message: "That person is not set up properly yet. The office can fix it on the people screen." }, 409);
 
-  const fails = await readFails(s, uid);
+  const fails = await readFails(s, failKey(uid));
   if (fails.until && Date.now() < fails.until) {
     const mins = Math.max(1, Math.ceil((fails.until - Date.now()) / 60000));
     return json({

@@ -1,32 +1,30 @@
 /* A&M Office Command Centre - the front door.
 
-   One sign-in for the whole app. Everybody starts here: tap your name, type
-   your four digits, and the app sends you to the part your role allows.
-     owner, office, field leads   the command centre
-     crew                         the shop screens
-   Who sees what is still decided by the office server on every request; this
-   page only decides where to send people first.
+   The command centre is signed in to with a work email and a password. Each
+   person's account, and what it can see and do, is set by an admin on Admin,
+   People and access, inside the command centre.
 
-   It signs people in exactly the way the shop screens always have, and keeps
-   what it learns in the same place on the device (IndexedDB "am-inventory",
-   store "kv"), so the shop works as before:
-     token     the person's own key for the office server
-     session   who is signed in and when they were last active
-     role      owner, office, field or crew, as the server said
-     mypin     this person's own PIN check, so the next sign-in works with no signal
-     bio       the fingerprint or face this device trusts, if they set it up
-   The first sign-in on a device needs a bar of signal. After that the same
-   person can sign in underground. Every screen locks after an hour idle and
-   sends people back here. */
+   The shop is separate and unchanged: crew sign in there with their name and
+   four-digit PIN, on the shop's own screen, and it still works with no signal.
+   This page sends crew phones straight to the shop, and has a button to it for
+   anybody else.
+
+   What this page keeps on the device (IndexedDB "am-inventory", store "kv"),
+   apart from anything the shop keeps:
+     acctToken    the signed-in person's key for the command centre
+     acctSession  who is signed in here and when they last used it
+     acctIdle     hours without use before it asks for the password again
+     acctEver     an account has signed in on this device at some point
+   The password itself is never kept. */
 (function () {
   'use strict';
-  const LOCK_MIN_DEFAULT = 60;
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const params = new URLSearchParams(location.search);
-  const NEXT = params.get('next') || '';          // "shop" or "command": where they were when they were sent here
-  const AFTER = params.get('h') || location.hash || '';  // a screen inside the shop, for example #/out
+  const NEXT = params.get('next') || '';                 // "command" (or an old "shop") : where they were sent from
+  const AFTER = params.get('h') || location.hash || '';  // the page they were on, for example #money
   const OUT = params.has('out');
+  const MIN_PW = 10;
 
   /* ------------------------------------------------------------ the device */
   let _db = null;
@@ -52,192 +50,180 @@
   }));
   const get = k => kv('readonly', s => s.get(k)).catch(() => undefined);
   const set = (k, v) => kv('readwrite', s => s.put(v, k)).catch(() => {});
-
-  async function sha256(text) {
-    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
-  }
   const nowISO = () => new Date().toISOString();
 
+  async function call(body) {
+    const r = await fetch('/api/account', { method: 'POST', headers: { 'content-type': 'application/json', ...(body._tok ? { authorization: 'Bearer ' + body._tok } : {}) }, body: JSON.stringify({ ...body, _tok: undefined }), cache: 'no-store' });
+    const b = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, b };
+  }
+
   /* ---------------------------------------------------------- where to go */
-  function goOn(role) {
-    const shopScreen = /^#\//.test(AFTER) ? AFTER : '#/';
-    if (!role || role === 'crew') return location.replace('/shop.html' + shopScreen);
-    if (NEXT === 'shop') return location.replace('/shop.html' + shopScreen);
-    if (NEXT === 'command' && /^#[a-z]+$/.test(AFTER)) return location.replace('/command.html' + AFTER);
+  const shopScreen = () => (/^#\//.test(AFTER) ? AFTER : '#/');
+  function goOn() {
+    if (NEXT === 'shop') return location.replace('/shop.html' + shopScreen());
+    if (/^#[a-z]+$/.test(AFTER)) return location.replace('/command.html' + AFTER);
     location.replace('/command.html');
+  }
+  async function keep(b) {
+    await set('acctToken', b.token);
+    await set('acctSession', { id: b.account.id, name: b.account.name, email: b.account.email, at: nowISO(), lastSeen: nowISO() });
+    if (b.idleHours) await set('acctIdle', b.idleHours);
+    await set('acctEver', true);
   }
 
   /* -------------------------------------------------------------- drawing */
   const card = html => { $('#door').innerHTML = html; };
-  function note(t, cls) { const m = $('#msg'); if (m) { m.textContent = t; m.className = 'msg ' + (cls || ''); } }
-
-  async function bioAvailable() {
-    try { return !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }
-    catch (e) { return false; }
+  const note = (t, cls) => { const m = $('#msg'); if (m) { m.textContent = t; m.className = 'msg ' + (cls || ''); } };
+  const pwField = (id, label, auto, extra) =>
+    `<label class="fld"><span>${label}</span><span class="pw"><input id="${id}" type="password" autocomplete="${auto}" autocapitalize="none" spellcheck="false" ${extra || ''}><button type="button" class="show" data-for="${id}" aria-pressed="false">Show</button></span></label>`;
+  function wireShow() {
+    document.querySelectorAll('.show').forEach(b => b.onclick = () => {
+      const i = document.getElementById(b.dataset.for); const on = i.type === 'password';
+      i.type = on ? 'text' : 'password'; b.textContent = on ? 'Hide' : 'Show'; b.setAttribute('aria-pressed', String(on)); i.focus();
+    });
   }
+  const shopDoor = () => `
+    <div class="shop-door">
+      <div><b>Crew and the shop floor</b><span>Stock out and back, transfers and counts. Sign in there with your name and four-digit PIN, as before.</span></div>
+      <a class="btn ghost" href="/shop.html#/" id="toShop">Open the shop</a>
+    </div>`;
+  const busy = (btn, on, text) => { btn.disabled = on; if (text) btn.textContent = text; };
 
-  let roster = null, required = false;
-  async function loadRoster() {
-    if (!navigator.onLine) return;
-    try {
-      const r = await fetch('/api/auth', { method: 'GET', cache: 'no-store' });
-      if (r.ok) { const b = await r.json(); roster = Array.isArray(b.people) ? b.people : null; required = !!b.required; if (required) set('authRequired', true); }
-    } catch (e) {}
-  }
-  async function people() {
-    if (roster) return roster;
-    const cat = await get('catalog');
-    return ((cat && cat.users) || []).filter(u => u && u.active !== false && u.name)
-      .map(u => ({ id: u.id || '', name: u.name, hasPin: !!(u.hasPin || (u.pin && u.pin.hash)) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  async function drawPick() {
-    const list = await people();
-    const bio = await get('bio'), token = await get('token'), mine = await get('mypin');
-    /* The key kept on this device belongs to whoever last signed in with a PIN.
-       A fingerprint only opens the app for that same person. */
-    const samePerson = !!(bio && mine && ((bio.userId && mine.id === bio.userId) || mine.name === bio.name));
-    const hasBio = !!(bio && bio.credId && token && samePerson) && await bioAvailable();
+  /* ------------------------------------------------------------- sign in */
+  async function drawSignIn(lede, cls) {
+    const last = await get('acctSession');
     card(`
       <h1>Sign in</h1>
-      <p class="lede">One sign-in for the whole A&amp;M app. Tap your name and type your four digits. You will see the parts of the app your role allows.</p>
-      ${hasBio ? `<button class="btn big" id="bioGo">Unlock as ${esc(bio.name)}</button>
-        <button class="link" id="bioAlt">Somebody else, or use a PIN</button>` : ''}
-      <div class="who ${hasBio ? 'tucked' : ''}" id="whoList">
-        ${list.map(u => `<button class="who-pick" data-n="${esc(u.name)}">${esc(u.name)}</button>`).join('') || '<p class="lede">Nobody has been added yet. The office adds people in Settings.</p>'}
-      </div>
-      <p class="small">${roster ? 'Not on the list? Ask the office to add you, then close and reopen the app.' : 'No signal, so this is the list this device last saw. Somebody added today shows once there is a bar.'}</p>
-      <p class="msg" id="msg"></p>`);
-    const bg = $('#bioGo');
-    if (bg) bg.onclick = async () => {
-      bg.disabled = true; bg.textContent = 'Waiting for the device…';
-      let ok = false;
-      try {
-        const id = new Uint8Array(bio.credId.match(/../g).map(h => parseInt(h, 16)));
-        ok = !!(await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), allowCredentials: [{ type: 'public-key', id }], userVerification: 'required', timeout: 60000 } }));
-      } catch (e) { ok = false; }
-      bg.disabled = false; bg.textContent = 'Unlock as ' + bio.name;
-      if (!ok) { note('That did not match. Use your PIN.', 'bad'); return; }
-      const all = await people();
-      if (roster && !all.some(u => (bio.userId && u.id === bio.userId) || u.name === bio.name)) { await set('bio', null); note('That person is no longer on the list. Use a PIN.', 'bad'); return; }
-      await set('session', { name: bio.name, id: bio.userId || null, at: nowISO(), lastSeen: nowISO() });
-      await set('me', bio.name);
-      goOn(await get('role'));
+      <p class="lede ${cls || ''}" id="lede">${esc(lede || 'The A&M Office Command Centre. Use your work email and your password.')}</p>
+      <form id="f" novalidate>
+        <label class="fld"><span>Work email</span><input id="em" type="email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" value="${esc((last && last.email) || '')}"></label>
+        ${pwField('pw', 'Password', 'current-password')}
+        <button class="btn big" type="submit" id="go">Sign in</button>
+        <p class="msg" id="msg" role="status"></p>
+      </form>
+      <p class="small">Forgot your password? An admin gives you a new one from Admin, People and access in the command centre.</p>
+      ${shopDoor()}`);
+    wireShow();
+    (last && last.email ? $('#pw') : $('#em')).focus();
+    $('#f').onsubmit = async ev => {
+      ev.preventDefault();
+      const email = $('#em').value.trim(), password = $('#pw').value, btn = $('#go');
+      if (!email || !password) return note('Type your email and your password.', 'bad');
+      busy(btn, true, 'Signing in…'); note('');
+      let r;
+      try { r = await call({ action: 'login', email, password }); }
+      catch (e) { busy(btn, false, 'Sign in'); return note('No connection. The command centre needs a bar of signal. The shop works without one.', 'bad'); }
+      if (!r.ok) { busy(btn, false, 'Sign in'); $('#pw').value = ''; $('#pw').focus(); return note(r.b.message || 'That did not work. Try again.', 'bad'); }
+      await keep(r.b);
+      if (r.b.mustChange) return drawChange(password, r.b.account);
+      goOn();
     };
-    const ba = $('#bioAlt'); if (ba) ba.onclick = () => $('#whoList').classList.remove('tucked');
-    document.querySelectorAll('.who-pick').forEach(b => b.onclick = () => {
-      const p = list.find(u => u.name === b.dataset.n); if (!p) return;
-      if (!roster && !p.hasPin) { note('The office has not issued you a PIN yet.', 'bad'); return; }
-      drawPin(p);
-    });
   }
 
-  function drawPin(picked) {
-    let entry = '';
+  /* ------------------------------------------------- choose own password */
+  function drawChange(current, account) {
+    const first = String((account && account.name) || '').split(' ')[0];
     card(`
-      <h1>${esc(picked.name)}</h1>
-      <p class="lede" id="msg">Your four digits.</p>
-      <div class="pin-dots" id="dots">${'<span></span>'.repeat(4)}</div>
-      <div class="pin-pad">
-        ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button class="pin-k" data-k="${n}">${n}</button>`).join('')}
-        <button class="pin-k ghost" id="pinBack">Back</button>
-        <button class="pin-k" data-k="0">0</button>
-        <button class="pin-k ghost" id="pinOther">Not me</button>
-      </div>`);
-    const dots = () => document.querySelectorAll('#dots span').forEach((s, i) => s.classList.toggle('on', i < entry.length));
-    const msg = (t, cls) => { const m = $('#msg'); m.textContent = t; m.className = 'lede ' + (cls || ''); };
-
-    const submit = async () => {
-      const f = (await get('pinFail')) || { n: 0, until: 0 };
-      if (f.until && Date.now() < f.until) { msg('Too many wrong. Wait a minute.', 'bad'); entry = ''; dots(); return; }
-      const wrong = async why => {
-        const n = (f.n || 0) + 1;
-        await set('pinFail', { n, until: n >= 5 ? Date.now() + 60000 : 0 });
-        entry = ''; dots(); msg(why || (n >= 5 ? 'Too many wrong. Wait a minute.' : 'That is not it. Try again.'), 'bad');
-      };
-      msg('Checking…');
-      let ok = false, role = null;
-      try {
-        const r = await fetch('/api/auth', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: picked.id || picked.name, pin: entry }) });
-        const b = await r.json().catch(() => null);
-        if (r.ok && b && b.token) {
-          await set('token', b.token);
-          if (b.pin) await set('mypin', { id: picked.id || '', name: picked.name, ...b.pin });
-          if (b.user && b.user.id && !picked.id) picked = { ...picked, id: b.user.id };
-          await set('isOffice', !!(b.user && b.user.office));
-          role = (b.user && b.user.role) || 'crew';
-          await set('role', role);
-          ok = true;
-        } else if (r.status === 429 || (r.status === 403 && b && b.error === 'nopin') || r.status === 409) {
-          entry = ''; dots(); msg((b && b.message) || 'Ask the office.', 'bad'); return;
-        }
-      } catch (e) {
-        /* No signal: only the last person who signed in on this device, with
-           the PIN this device was told about the last time it had signal. */
-        const mine = await get('mypin');
-        const same = mine && ((picked.id && mine.id === picked.id) || mine.name === picked.name);
-        if (!same || !mine.salt) { entry = ''; dots(); msg('No signal, and this device has not signed you in before. The first one needs a bar of signal.', 'bad'); return; }
-        ok = (await sha256(mine.salt + ':' + entry)) === mine.hash;
-        role = await get('role');
+      <h1>Choose your own password</h1>
+      <p class="lede">${first ? 'Hi ' + esc(first) + '. ' : ''}You signed in with a temporary password from an admin. Now choose one only you know. At least ${MIN_PW} characters. A short sentence you will remember works well.</p>
+      <form id="f" novalidate>
+        <input type="email" autocomplete="username" value="${esc((account && account.email) || '')}" hidden>
+        ${pwField('n1', 'New password', 'new-password', 'minlength="' + MIN_PW + '"')}
+        ${pwField('n2', 'Type it again', 'new-password')}
+        <button class="btn big" type="submit" id="go">Save and carry on</button>
+        <p class="msg" id="msg" role="status"></p>
+      </form>`);
+    wireShow(); $('#n1').focus();
+    $('#f').onsubmit = async ev => {
+      ev.preventDefault();
+      const a = $('#n1').value, b = $('#n2').value, btn = $('#go');
+      if (a.length < MIN_PW) return note(`Use at least ${MIN_PW} characters.`, 'bad');
+      if (a !== b) return note('The two do not match. Type them again.', 'bad');
+      busy(btn, true, 'Saving…');
+      let r;
+      try { r = await call({ action: 'password', current, next: a, _tok: await get('acctToken') }); }
+      catch (e) { busy(btn, false, 'Save and carry on'); return note('No connection. Try again with a bar of signal.', 'bad'); }
+      if (!r.ok) {
+        busy(btn, false, 'Save and carry on');
+        if (r.status === 401) { await set('acctToken', null); return drawSignIn(r.b.message || 'Sign in again.', 'bad'); }
+        return note(r.b.message || 'That did not save.', 'bad');
       }
-      if (!ok) { await wrong(); return; }
-      await set('pinFail', { n: 0, until: 0 });
-      await set('session', { name: picked.name, id: picked.id || null, at: nowISO(), lastSeen: nowISO() });
-      await set('me', picked.name);
-      /* Offered once per device, straight after the first PIN. */
-      const bio = await get('bio');
-      if (!bio && await bioAvailable()) return offerBio(picked, role);
-      goOn(role);
+      await keep({ ...r.b, idleHours: await get('acctIdle') });
+      goOn();
     };
-    document.querySelectorAll('.pin-k[data-k]').forEach(b => b.onclick = () => {
-      if (entry.length >= 4) return;
-      entry += b.dataset.k; dots();
-      if (entry.length === 4) setTimeout(submit, 80);
-    });
-    $('#pinBack').onclick = () => { entry = entry.slice(0, -1); dots(); };
-    $('#pinOther').onclick = () => drawPick();
   }
 
-  function offerBio(picked, role) {
+  /* ------------------------------------------------- the very first account */
+  async function drawSetup() {
+    let names = [];
+    try { const r = await fetch('/api/auth', { cache: 'no-store' }); const b = await r.json(); names = (b.people || []).filter(p => p.hasPin).map(p => p.name); } catch (e) {}
     card(`
-      <h1>Use your fingerprint next time?</h1>
-      <p class="lede">This device can unlock the app with the fingerprint or face it already trusts, so you do not type four digits twenty times a day. Nothing about you leaves the device.</p>
-      <button class="btn big" id="bioYes">Set it up</button>
-      <button class="link" id="bioNo">Not now</button>`);
-    $('#bioNo').onclick = () => goOn(role);
-    $('#bioYes').onclick = async () => {
-      try {
-        const cred = await navigator.credentials.create({ publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)), rp: { name: 'A&M Command Centre' },
-          user: { id: crypto.getRandomValues(new Uint8Array(16)), name: picked.name, displayName: picked.name },
-          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000, attestation: 'none' } });
-        if (cred) await set('bio', { userId: picked.id || null, name: picked.name, credId: [...new Uint8Array(cred.rawId)].map(x => x.toString(16).padStart(2, '0')).join(''), pinSetAt: '' });
-      } catch (e) {}
-      goOn(role);
+      <h1>Set up the first account</h1>
+      <p class="lede">Nobody has a command centre account yet. An owner sets up the first one, then adds everybody else from Admin, People and access. To prove it is you, use your name and PIN from the shop.</p>
+      <form id="f" novalidate>
+        <div class="two">
+          <label class="fld"><span>Your name in the shop</span><select id="sn"><option value="">Choose</option>${names.map(n => `<option>${esc(n)}</option>`).join('')}</select></label>
+          <label class="fld"><span>Your shop PIN</span><input id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+        </div>
+        <hr>
+        <label class="fld"><span>Your full name</span><input id="nm" type="text" autocomplete="name"></label>
+        <label class="fld"><span>Work email</span><input id="em" type="email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false"></label>
+        ${pwField('n1', 'Choose a password', 'new-password', 'minlength="' + MIN_PW + '"')}
+        ${pwField('n2', 'Type it again', 'new-password')}
+        <button class="btn big" type="submit" id="go">Create my account</button>
+        <p class="msg" id="msg" role="status"></p>
+      </form>
+      <p class="small">This only works while there are no accounts, and only for an owner (a name in OWNER_USERS in Netlify). Your account gets the whole company and admin.</p>
+      ${shopDoor()}`);
+    wireShow();
+    $('#f').onsubmit = async ev => {
+      ev.preventDefault();
+      const v = id => $('#' + id).value, btn = $('#go');
+      if (!v('sn') || !/^\d{4}$/.test(v('pin'))) return note('Choose your shop name and type your four-digit PIN.', 'bad');
+      if (!v('nm').trim() || !v('em').trim()) return note('Type your full name and your work email.', 'bad');
+      if (v('n1').length < MIN_PW) return note(`Use at least ${MIN_PW} characters for the password.`, 'bad');
+      if (v('n1') !== v('n2')) return note('The two passwords do not match.', 'bad');
+      busy(btn, true, 'Setting up…');
+      let r;
+      try { r = await call({ action: 'setup', shopName: v('sn'), pin: v('pin'), name: v('nm').trim(), email: v('em').trim(), password: v('n1') }); }
+      catch (e) { busy(btn, false, 'Create my account'); return note('No connection. Try again with a bar of signal.', 'bad'); }
+      if (!r.ok) { busy(btn, false, 'Create my account'); if (r.b.error === 'ready') return drawSignIn(r.b.message); return note(r.b.message || 'That did not work.', 'bad'); }
+      await keep(r.b);
+      goOn();
     };
   }
 
   /* ---------------------------------------------------------------- start */
   async function start() {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
-    if (OUT) await set('session', null);
-    const [token, session, role, cat] = await Promise.all([get('token'), get('session'), get('role'), get('catalog')]);
-    const lockMin = (cat && cat.settings && cat.settings.lockMinutes) || LOCK_MIN_DEFAULT;
-    /* Already signed in on this device and used within the hour: straight through. */
-    if (!OUT && token && session && role) {
-      const idle = (Date.now() - new Date(session.lastSeen || session.at).getTime()) / 60000;
-      if (idle <= lockMin) return goOn(role);
+    /* An old link from the shop. The shop signs its own people in now. */
+    if (NEXT === 'shop') return location.replace('/shop.html' + shopScreen());
+    if (OUT) { await set('acctToken', null); await set('acctSession', null); }
+    const [token, session, idleH, ever, shopToken, shopRole] = await Promise.all([get('acctToken'), get('acctSession'), get('acctIdle'), get('acctEver'), get('token'), get('role')]);
+    /* Signed in here and used recently: straight through. Idle too long, and
+       the key on this device is thrown away, so the password is needed again. */
+    let idledOut = false;
+    if (!OUT && token && session) {
+      const idleMin = (Date.now() - new Date(session.lastSeen || session.at).getTime()) / 60000;
+      if (idleMin <= (Number(idleH) || 8) * 60) return goOn();
+      idledOut = true; await set('acctToken', null);
     }
-    await loadRoster();
-    /* Before anybody has a PIN the app is still being set up, which happens on the shop screens. */
-    const list = await people();
-    if (roster && !required && !list.some(p => p.hasPin)) return location.replace('/shop.html#/');
-    if (session) await set('session', null);
-    drawPick();
+    /* A crew phone: the shop signed a crew member in on it, and no account
+       has ever signed in here. The app icon on a crew phone opens this page,
+       so send it straight on to the shop. */
+    if (!OUT && !NEXT && !ever && shopToken && shopRole === 'crew') return location.replace('/shop.html#/');
+    let ready = true;
+    try {
+      const r = await fetch('/api/account?action=status', { cache: 'no-store' });
+      const b = await r.json(); ready = !!b.ready;
+    } catch (e) {
+      return drawSignIn('No connection right now. The command centre needs a bar of signal. The shop works without one.', 'bad');
+    }
+    if (!ready) return drawSetup();
+    if (OUT) return drawSignIn('You are signed out of the command centre on this device.');
+    if (idledOut) return drawSignIn('Signed out after a while without use. Sign in again to carry on.');
+    drawSignIn();
   }
-  window.addEventListener('online', () => { if (!roster && document.querySelector('.who-pick')) loadRoster().then(drawPick); });
-  start().catch(() => drawPick());
+  start().catch(() => drawSignIn());
 })();
