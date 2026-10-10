@@ -68,7 +68,8 @@ async function loadBilling(s, c, who) {
     for (const f of CUSTOMER_FIELDS) if (r[f.name] !== undefined && r[f.name] !== null && r[f.name] !== "") values[ids[f.name]] = r[f.name];
     if (!Object.keys(values).length) continue;
     try {
-      await pave({ updateAccount: { $: { id: r.accountId, customFieldValues: values }, account: { id: {}, name: {} } } }, c.grantKey);
+      /* JobTread wants nothing asked back from an update ("updateAccount.account" needs arguments). */
+      await pave({ updateAccount: { $: { id: r.accountId, customFieldValues: values } } }, c.grantKey);
       done.push(r.customer);
     } catch (e) { failed.push({ customer: r.customer, why: e.message }); }
   }

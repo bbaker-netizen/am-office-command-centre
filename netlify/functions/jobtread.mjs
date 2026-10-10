@@ -532,8 +532,8 @@ async function linkJob(grantKey, organizationId, payload) {
         notify: false,
         /* JobTread takes these as an object keyed by field id. */
         customFieldValues: { [inventoryIdFieldId]: inventoryJobId }
-      },
-      job: { id: {} }
+      }
+      /* Nothing asked back: JobTread refuses "updateJob.job" without arguments. */
     }
   }, grantKey);
 

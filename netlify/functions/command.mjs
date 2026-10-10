@@ -368,8 +368,10 @@ async function updateJob(s, req) {
   if (!said.length) return json({ error: "nothing", message: "Nothing to change." }, 400);
   const c = (await s.get("jobtread-key", { type: "json" })) || {};
   if (!c.grantKey) return json({ error: "not_connected", message: "JobTread is not connected yet." }, 409);
-  const res = await pave({ updateJob: { $: { id: jobId, notify: false, customFieldValues: values },
-    job: { id: {}, number: {}, customFieldValues: { $: { size: 100 }, nodes: { value: {}, customField: { name: {} } } } } } }, c.grantKey);
+  /* Nothing is asked back: JobTread refuses "updateJob.job" without arguments,
+     which is what broke saving from the job panel. */
+  await pave({ updateJob: { $: { id: jobId, notify: false, customFieldValues: values } } }, c.grantKey);
+  const res = null;
   try {
     const logDoc = (await s.get("jobtread-log", { type: "json" })) || { entries: [] };
     logDoc.entries.unshift({ at: new Date().toISOString(), action: "updateJob", by: req.amUser.name, jobId, changes: said });
