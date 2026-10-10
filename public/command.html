@@ -499,6 +499,11 @@ button,input,select,textarea,optgroup{font-family:inherit}
 .cb-chip button{font:inherit;border:0;background:none;color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
 .cb-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:auto}
 .cb-foot .btn{padding:5px 10px;font-size:12px}
+.nextstep{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--rule);border-left:4px solid var(--cyan);border-radius:3px;background:var(--panel);margin:0 0 14px}
+.nextstep .sm{display:block;margin-top:2px}
+ul.drv{list-style:none;margin:0;padding:0}
+ul.drv li{padding:6px 0;border-top:1px solid var(--rule-soft);display:flex;flex-direction:column}
+ul.drv li:first-child{border-top:0}
 </style>
 </head><body><header class="top" id="top">
   <div class="in">
@@ -906,9 +911,12 @@ function openJob(id){
   openDrawer('<small>' + E(j._number) + ' · ' + E(st(j)) + '</small>' + E(j._name),
     '<div class="actions"><a class="btn" href="' + jtUrl(j._id) + '" target="_blank" rel="noopener">Open in JobTread</a>' +
     (drawerStateBack ? '<button class="btn ghost" data-back="1">Back to the list</button>' : '') + '</div>' +
+    nextStepPanel(j) +
     (gaps.length ? '<div class="state wait" style="margin-bottom:14px">Missing in JobTread: ' + E(gaps.join(", ")) + '. ' + (PLATFORM === "app" ? "Fill them in below and save." : "Fill these in JobTread and press Refresh here.") + '</div>' : '') +
     (PLATFORM === "app" && CAN_EDIT && typeof editForm === "function" ? editForm(j) : '') +
-    billingPanel(j) + '<dl class="facts">' + facts + '</dl><h3>Quotes</h3>' + qhtml);
+    billingPanel(j) + '<dl class="facts">' + facts + '</dl><h3>Quotes</h3>' + qhtml +
+    (PLATFORM === "app" ? '<h3>Job folder in Drive</h3><div id="jobDrive"><p class="sub">Checking…</p></div>' : ''));
+  if(PLATFORM === "app") setTimeout(() => jobDriveFill(j), 0);
 }
 let drawerStateBack = null;
 
@@ -2792,6 +2800,7 @@ VIEWS.people = {
     h += '<div class="card"><h2>Shop PINs and connections</h2><p class="lede">The shop\'s names and four-digit PINs, the JobTread key, the QuickBooks connection and the shop\'s own lock time are in the shop\'s Settings. Changing them there needs a shop PIN from the office.</p>' +
       '<a class="btn ghost" href="/shop.html#/setup">Open the shop\'s Settings</a></div>';
 
+    h += hrSlotCard();
     h += '<div class="card wide"><h2>Recent changes</h2><p class="lede">Who changed what on this page, newest first.</p>' +
       tbl('<th>When</th><th>By</th><th>What</th>', ADM.log.map(l => '<tr><td>' + E(showDate(l.at)) + ' ' + E(new Date(l.at).toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" })) + '</td><td>' + E(l.by) + '</td><td>' + E(logWords(l)) + '</td></tr>'), "Nothing changed yet.", 10) + '</div>';
     return h + '</div>';
@@ -2936,11 +2945,13 @@ function selectText(el){ if(!el) return; const r = document.createRange(); r.sel
 /* ---------- My account: who am I, and change my password ---------- */
 function meOpen(){
   drawerState = { kind:"me" };
+  if(!DRV.st && !DRV.err && !meOpen.asked){ meOpen.asked = 1; driveStatus().then(() => { meOpen.asked = 0; if(drawerState && drawerState.kind === "me") meOpen(); }); }
   const areas = ME.areas.map(k => AREA_INFO[k] ? AREA_INFO[k].label : k).join(", ");
   openDrawer('<small>My account</small>' + E(ME.name),
     '<dl class="facts"><dt>Email</dt><dd>' + E(ME.email) + '</dd>' + (ME.title ? '<dt>Job title</dt><dd>' + E(ME.title) + '</dd>' : '') +
     '<dt>Responsible for</dt><dd>' + E(respLabel(ME.areas)) + '</dd><dt>Sees</dt><dd>' + E(areas) + '</dd><dt>Can do</dt><dd>' + E(LEVEL_INFO[ME.level] ? LEVEL_INFO[ME.level].label : ME.level) + '</dd></dl>' +
     '<p class="sub">To see more or less, ask an admin' + (ME.admin ? ' (you are one: Admin, People and access)' : '') + '.</p>' +
+    driveBlock() +
     '<h3>Change my password</h3><form id="meForm" class="ac-form" onsubmit="return false">' +
     '<input type="email" autocomplete="username" value="' + E(ME.email) + '" hidden>' +
     '<label class="fld"><span>Current password</span><input type="password" name="cur" autocomplete="current-password"></label>' +
@@ -3024,14 +3035,15 @@ VIEWS.payroll = {
     if(PY.err) return h + failBox(PY.err, "Payroll");
     if(!PY.data){ if(!PY.loading) loadPY(); return h + wait("this pay period's timesheets"); }
     const d = PY.data, r = d.report, p = r.period, bs = pyBuckets(r);
-    h += '<div class="actions" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+    h += '<div class="actions" data-tour="py-period" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
       '<button class="btn ghost" data-py-go="' + E(p.previous) + '">Previous period</button>' +
       '<b style="padding:0 6px">' + E(p.start) + ' to ' + E(p.end) + '</b>' +
       '<button class="btn ghost" data-py-go="' + E(p.next) + '">Next period</button>' +
       '<button class="btn ghost" data-py-go="' + E(p.start) + '">' + (PY.loading ? "Reading…" : "Refresh") + '</button>' +
       '<span class="sp" style="flex:1"></span>' +
       '<button class="btn" data-py-csv="summary">' + ico("download") + 'Download summary</button>' +
-      '<button class="btn ghost" data-py-csv="detail">' + ico("download") + 'Download detail</button></div>';
+      '<button class="btn ghost" data-py-csv="detail">' + ico("download") + 'Download detail</button>' +
+      '<button class="btn ghost" data-py-tour>' + ico("tour") + 'Walk me through it</button></div>';
     h += verdictHtml(this.alerts(), "Every hour this period is approved, clocked out and has a city.", plural(r.totals.people, "employee") + ", " + H2(r.totals.hours) + " hours.");
     if(d.posted) h += '<div class="state ok" style="margin:12px 0">' + D2(d.posted.moved) + ' moved from payroll into cost of sales. Posted by ' + E(d.posted.by) + ' on ' + E(showWhen(d.posted.at)) + ', QuickBooks journal entry ' + E(d.posted.docNumber) + '</div>';
 
@@ -3040,10 +3052,10 @@ VIEWS.payroll = {
     const rows = r.employees.map(e => '<tr><td><span class="nm">' + E(e.name) + '</span></td><td class="r num"><b>' + H2(e.total) + '</b></td><td class="r num">' + H2(e.regular) + '</td><td class="r num">' + H2(e.overtime) + '</td><td class="r num"' + (e.unapproved ? ' style="color:var(--caution)"' : '') + '>' + H2(e.unapproved) + '</td>' +
       bs.map(b => '<td class="r num">' + H2(e.byBucket[b] && e.byBucket[b].total) + '</td>').join("") + '</tr>');
     rows.push('<tr><td><b>Total</b></td><td class="r num"><b>' + H2(r.totals.hours) + '</b></td><td></td><td></td><td class="r num">' + H2(r.totals.unapproved) + '</td>' + bs.map(b => '<td class="r num"><b>' + H2(r.totals.byBucket[b]) + '</b></td>').join("") + '</tr>');
-    h += '<div class="card wide" style="margin-top:16px"><h2>Hours by employee and bucket</h2><p class="lede">Regular plus overtime hours. This is the report Danielle asked for. Download it for her with the buttons above.</p>' + tbl(headRow, rows, "No A&M employee hours in JobTread for this period yet.", 60) + '</div>';
+    h += '<div class="card wide" data-tour="py-summary" style="margin-top:16px"><h2>Hours by employee and bucket</h2><p class="lede">Regular plus overtime hours. This is the report Danielle asked for. Download it for her with the buttons above.</p>' + tbl(headRow, rows, "No A&M employee hours in JobTread for this period yet.", 60) + '</div>';
 
     /* the journal entry */
-    h += '<div class="card wide" data-py-form style="margin-top:16px"><h2>Journal entry</h2><p class="lede">Type each person\'s payroll cost from the QuickBooks pay run. The app splits it by share of pay, with overtime hours counted at ' + E(r.otMultiplier) + ' times, and moves the cost of sales part out of payroll expense. A journal entry is a manual adjustment in the books. Nothing reaches QuickBooks until you press Post. Costs typed here are not saved.</p>';
+    h += '<div class="card wide" data-py-form data-tour="py-journal" style="margin-top:16px"><h2>Journal entry</h2><p class="lede">Type each person\'s payroll cost from the QuickBooks pay run. The app splits it by share of pay, with overtime hours counted at ' + E(r.otMultiplier) + ' times, and moves the cost of sales part out of payroll expense. A journal entry is a manual adjustment in the books. Nothing reaches QuickBooks until you press Post. Costs typed here are not saved.</p>';
     h += '<div class="scroll"><table><thead><tr><th>Employee</th><th class="r">Pay hours</th><th class="r">Payroll cost</th></tr></thead><tbody>' +
       r.employees.map(e => '<tr><td>' + E(e.name) + '</td><td class="r num">' + H2(e.payHours) + '</td><td class="r"><input type="number" step="0.01" min="0" inputmode="decimal" style="width:130px;font:inherit;padding:6px 8px;border:1px solid var(--rule);border-radius:3px;text-align:right" data-py-cost="' + E(e.name) + '" value="' + E(PY.costs[e.name] === undefined ? "" : PY.costs[e.name]) + '"></td></tr>').join("") +
       '</tbody></table></div>';
@@ -3082,7 +3094,7 @@ function pySettings(s){
       list.map(x => '<option value="' + E(x.id) + '"' + (cur && String(cur.id) === String(x.id) ? " selected" : "") + '>' + E(x.name) + (x.type ? " (" + E(x.type) + ")" : "") + '</option>').join("") + '</select>';
   };
   const m = s.map || {}, c = s.credit;
-  let h = '<details class="card wide" style="margin-top:16px"' + (PY.lists ? " open" : "") + '><summary style="cursor:pointer;font-weight:700">Payroll settings</summary>' +
+  let h = '<details class="card wide" data-tour="py-settings" style="margin-top:16px"' + (PY.lists ? " open" : "") + '><summary style="cursor:pointer;font-weight:700">Payroll settings</summary>' +
     '<p class="lede" style="margin-top:8px">Danielle should check these once. Each bucket needs the QuickBooks labour account it posts to, and the class (service line) and location (city) if your books use them. Last saved by ' + E(s.updatedBy || "nobody yet") + '.</p>';
   if(PY.listsErr) h += failBox(PY.listsErr, "QuickBooks lists");
   if(!L) h += '<button class="btn ghost" data-py-lists>Load accounts and classes from QuickBooks</button>';
@@ -3104,6 +3116,7 @@ function pyEditSettings(){
   return PY.edit;
 }
 document.addEventListener("click", ev => {
+  if(ev.target.closest && ev.target.closest("[data-py-tour]")){ CCTOUR.payroll(); return; }
   const t = ev.target.closest && ev.target.closest("[data-py-go],[data-py-csv],[data-py-preview],[data-py-post],[data-py-forget],[data-py-lists],[data-py-save]");
   if(!t) return;
   if(t.dataset.pyGo){ PY.data = PY.data && PY.data.report.period.start === t.dataset.pyGo ? PY.data : null; loadPY(t.dataset.pyGo); render(); return; }
@@ -3430,14 +3443,19 @@ var CLAUDE = (function(){
   let bub = null, panel = null, msgs = [], busy = false, ready = null;
   const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/></svg>';
   const CHIPS = {
-    overview:["What needs me first today?", "Explain the top alert in plain words", "Which number should worry me?"],
+    overview:["What needs me first today?", "Explain the top alert in plain words", "What does the SOP say happens next?"],
     money:["Who should we chase for payment first?", "How far behind are we paying suppliers?", "Explain cash in the bank"],
     payroll:["What do I fix before payroll closes?", "Who still has hours to approve?", "Explain how the split works"],
     estimating:["Which quotes need a follow-up?", "What bids are due soon?"],
     dispatch:["What starts in the next two weeks?", "Which won jobs have no start date?"],
     projects:["Which jobs look stuck?", "Who has the most on their plate?"],
     closeout:["What is holding up invoicing?", "Which job has been closing longest?"],
-    connections:["What is not connected yet?", "How do I get a JobTread key?"]
+    connections:["What is not connected yet?", "How do I connect Google Drive?"],
+    tm:["Which T&M hours still need a signed sheet?", "Which change orders are at risk?"],
+    clients:["Which clients have gone quiet?", "Who owes us the most?"],
+    scorecards:["What stands out this month?", "What does the profile say this measure means?"],
+    sites:["Which jobs are missing a daily log?", "What does the SOP say a supervisor does each day?"],
+    people:["How do I add someone?", "What can each level do?"]
   };
   const fmt = t => {
     let h = E(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
@@ -3587,6 +3605,7 @@ VIEWS.connections = {
        (q.connected ? '<p class="lede">Connected to company ' + E(q.realmId) + ' since ' + E(showWhen(q.connectedAt)) + (q.connectedBy ? ', by ' + E(q.connectedBy) : '') + '. Read only, apart from the payroll journal entry posted from the Payroll page.</p>' : '<p class="lede">Not connected. Press Connect, sign in to Intuit with an admin login for A&amp;M\'s company, and choose A&amp;M Abatement Services. You come straight back here.</p>') +
        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-cn-qb>' + (q.connected ? "Connect again" : "Connect QuickBooks") + '</button>' + (q.connected ? '<button class="btn ghost" data-cn-qbforget>Disconnect</button>' : '') + '</div>') + '</div>';
     if(d.jobtread.working) h += setupCard();
+    h += driveAdminCard();
     if(CN.mail) h += '<div class="card"><h2><span class="lamp' + (CN.mail.connected ? " on" : "") + '"></span>Robots\' mailbox</h2><p class="lede">' + (CN.mail.connected ? "Connected to " + E(CN.mail.email || CN.mail.mailbox || "") + "." : "Not connected. The assistants' emails send from it.") + '</p>' + (CN.mail.connected ? '' : '<button class="btn" data-mail-connect>Connect the mailbox</button>') + '</div>';
     if(ME.claude) h += '<div class="card"><h2><span class="lamp' + (CN.claude && CN.claude.ready ? " on" : "") + '"></span>Ask Claude</h2><p class="lede">' + (CN.claude && CN.claude.ready ? "Ready. People with Can ask Claude ticked see the Claude button in the corner of every page." : "Needs ANTHROPIC_API_KEY in Netlify, from A&amp;M's own account at console.anthropic.com. Until then the button still offers Continue in my own Claude.") + '</p></div>';
     h += '</div>';
@@ -3673,7 +3692,7 @@ function billingAlerts(){
 }
 function invoicingCard(){
   const L = readyToBill();
-  let h = '<div class="card wide"><h2>Invoicing deadlines</h2><p class="lede">Finished work not yet invoiced, with each client\'s billing rules. Soonest cut-off first.</p>';
+  let h = '<div class="card wide" data-tour="invoicing"><h2>Invoicing deadlines</h2><p class="lede">Finished work not yet invoiced, with each client\'s billing rules. Soonest cut-off first.</p>';
   if(!S.billing) return h + (S.billingErr ? failBox(S.billingErr, "the billing rules") : wait("the billing rules")) + '</div>';
   if(S.billing.ready === false) return h + '<div class="state wait">The billing rule fields are not in JobTread yet. An admin adds them in Settings, Connections, Set up billing fields.</div></div>';
   const rows = L.map(j => ({ j, p: billPlan(j) })).sort((a, b) => ((a.p && a.p.days !== null) ? a.p.days : 999) - ((b.p && b.p.days !== null) ? b.p.days : 999));
@@ -3717,7 +3736,7 @@ function crewBoard(){
   loadCrew();
   const canEdit = PLATFORM === "app" && CAN_EDIT;
   const L = boardJobs(), cl = clashes(L), people = (S.people && S.people.people) || [];
-  let h = '<div class="card wide" data-nofold><h2>Crew board</h2><p class="lede">Jobs on site and starting in the next two weeks. ' +
+  let h = '<div class="card wide" data-nofold data-tour="crewboard"><h2>Crew board</h2><p class="lede">Jobs on site and starting in the next two weeks. ' +
     (canEdit ? 'Drag a person onto a job to put them on the crew, or tap a person and then tap <b>Add here</b>. Pick the crew lead and the start times on each job. Every change saves to JobTread under your name. ' : '') +
     'A red name is booked on another job the same days.</p>';
   if(!L.length) return h + '<div class="state ok">Nothing on site or starting in the next two weeks.</div></div>';
@@ -4144,6 +4163,97 @@ VIEWS.scorecards = {
   }
 };
 
+/* ================= UPLOAD 3 (2026-10-10): Drive, the SOP's next step, HR slot =================*/
+/* ---------- the next SOP step for a job's status ---------- */
+/* SOP Manual 3.0 (September 2026), phase by phase. Owners are roles, not
+   names, so this stays right when people change. Where the SOP says Canopy,
+   A&M now uses JobTread and this command centre. */
+const NEXT = {
+  "New Lead":["1","Qualify the lead and assign an estimator within 4 business hours.","Estimating administrator"],
+  "Uploaded Without Plans":["1","Get the plans or a site visit booked, then assign an estimator.","Estimating administrator"],
+  "Uploaded With Plans":["1","Assign an estimator within 4 business hours.","Estimating administrator"],
+  "Estimating":["2","Site visit within 48 hours if urgent, 5 business days if planned. No asbestos quote without lab results.","Estimator"],
+  "Site Visit Scheduled":["2","Do the site visit: photos, measurements, access, adjacent spaces, anything that could become a change order.","Estimator"],
+  "Pending Estimate Review":["2","Estimate review under the Estimate Review Policy before it goes out.","Estimating manager"],
+  "Estimate Review Completed":["2","Format and send the quote, with the PM named.","Estimating administrator"],
+  "Estimate Sent":["2","Follow up on the cadence until there is an answer.","Estimator"],
+  "Pending":["2","Follow up on the cadence until there is an answer.","Estimator"],
+  "Follow Up Required":["2","Follow up now, then set the next date.","Estimator"],
+  "Bid Accepted":["3","Get the PO, then book the turnover meeting.","Project manager"],
+  "Upcoming To Be Scheduled":["3","Set the start date, crew size and days of work.","Project manager and project coordinator"],
+  "Scheduling required":["3","Set the start date, crew size and days of work.","Project manager and project coordinator"],
+  "Turnover Meeting Required":["3","Hold the turnover meeting in person with the estimator, PM and administrator. Not by email.","Project manager"],
+  "Scheduled (Date promised)":["4","Mobilize: notice of project for asbestos work, crew and work order, gear out from the shop.","Project manager and shop"],
+  "NOP":["4","File the notice of project before anyone disturbs material.","Project manager"],
+  "Site work":["5","Daily log every day. Tell the PM at once about incidents, changes or extra work, and write the change order.","Site supervisor"],
+  "Loose Ends Required":["6","Finish the loose ends and the final inspection.","Site supervisor and project manager"],
+  "Job Complete by A&M":["7","Demobilize: gear back to the shop, close-out file complete.","Project manager and shop"],
+  "PM Approvals":["7","Sign off the costs and close-out so it can be invoiced.","Project manager"],
+  "Invoicing":["8","Invoice within 48 hours, following the client's billing rules.","Admin manager"],
+  "Job Post Mortem":["8","Do the post mortem on the Post mortem page.","Project manager"]
+};
+function nextStepPanel(j){
+  const n = NEXT[st(j)]; if(!n) return "";
+  return '<div class="nextstep"><span class="tag mute">SOP phase ' + E(n[0]) + '</span><div><b>Next: </b>' + E(n[1]) + '<span class="sm">Owner: ' + E(n[2]) + '</span></div></div>';
+}
+
+/* ---------- Google Drive, read as each person ---------- */
+const DRV = { st:null, err:null, job:{} };
+function driveCall(body){
+  return fetch("/api/drive" + (body && body.get ? "?action=" + body.get : ""), body && !body.get ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
+    .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || "The app answered " + r.status + "." }; return b; });
+}
+function driveStatus(force){
+  if(PLATFORM !== "app") return Promise.resolve(null);
+  if(DRV.st && !force) return Promise.resolve(DRV.st);
+  return driveCall().then(d => { DRV.st = d; return d; }).catch(e => { DRV.err = e; return null; });
+}
+function driveBlock(){
+  const d = DRV.st;
+  if(!d) return '<h3>Google Drive</h3><p class="sub" id="meDrive">' + (DRV.err ? E(errCopy(DRV.err)) : "Checking…") + '</p>';
+  if(!d.ready) return '<h3>Google Drive</h3><p class="sub">Not set up yet. An admin adds the Google settings in Netlify first.</p>';
+  if(d.connected) return '<h3>Google Drive</h3><p class="sub">Connected as <b>' + E(d.email || "your Google account") + '</b> since ' + E(showDate(d.since)) + '. Read only. Claude can read A&amp;M\'s documents for you, and each job shows its Drive folder, only ever what your own Google account can open.</p><div class="actions"><button type="button" class="btn ghost" data-drv="forget">Disconnect Google Drive</button></div>';
+  return '<h3>Google Drive</h3><p class="sub">Connect your A&amp;M Google account once, read only. Then Claude can answer from the SOP, your role profile and other A&amp;M documents, and each job shows its Drive folder. You only ever see what your own Google account can open.</p><div class="actions"><button type="button" class="btn" data-drv="start">Connect Google Drive</button></div>';
+}
+function jobDriveFill(j){
+  const box = document.getElementById("jobDrive"); if(!box) return;
+  const show = d => { if(!document.getElementById("jobDrive")) return;
+    if(!d || !d.folder){ box.innerHTML = '<p class="sub">No folder named Job ' + E(j._number) + ' that your Google account can open. The Job Folder Creator makes them.</p>'; return; }
+    box.innerHTML = '<p class="sub"><a href="' + E(d.folder.link) + '" target="_blank" rel="noopener">' + E(d.folder.name) + '</a></p>' +
+      (d.files.length ? '<ul class="drv">' + d.files.slice(0, 15).map(f => '<li><a href="' + E(f.link) + '" target="_blank" rel="noopener">' + E(f.name) + '</a><span class="sm">' + E(f.type) + ' · ' + E(showDate(f.modified)) + '</span></li>').join("") + '</ul>' : '<p class="sub">The folder is empty.</p>');
+  };
+  if(DRV.job[j._number]) return show(DRV.job[j._number]);
+  driveStatus().then(st => {
+    if(!st || !st.connected){ box.innerHTML = '<p class="sub">' + (st && st.ready ? 'Connect Google Drive under My account to see this job\'s folder here.' : 'Google Drive is not set up yet.') + '</p>'; return; }
+    box.innerHTML = '<p class="sub">Looking in Drive…</p>';
+    driveCall({ action:"job", number: j._number }).then(d => { DRV.job[j._number] = d; show(d); }).catch(e => { box.innerHTML = '<p class="sub">' + E(errCopy(e)) + '</p>'; });
+  });
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-drv]"); if(!t) return;
+  if(t.dataset.drv === "start"){ t.classList.add("is-busy"); driveCall({ get:"start" }).then(r => { location.href = r.url; }).catch(e => { t.classList.remove("is-busy"); toast(errCopy(e), "bad"); }); }
+  if(t.dataset.drv === "forget"){ if(!confirm("Disconnect Google Drive? Claude stops reading A&M documents for you, and jobs stop showing their folder.")) return;
+    driveCall({ action:"forget" }).then(() => { DRV.st = null; DRV.job = {}; toast("Google Drive disconnected."); driveStatus(true).then(() => { if(drawerState && drawerState.kind === "me") meOpen(); }); }).catch(e => toast(errCopy(e), "bad")); }
+});
+(function(){
+  try{
+    const u = new URL(location.href), v = u.searchParams.get("drive"); if(!v) return;
+    u.searchParams.delete("drive"); history.replaceState(null, "", u.pathname + u.search + u.hash);
+    const said = { connected:"Google Drive connected. Claude can now read A&M documents for you.", cancelled:"Google Drive was not connected.", failed:"Google did not finish connecting. Try again from My account.", expired:"That took too long. Try again from My account." }[v];
+    if(said) setTimeout(() => toast(said, v === "connected" ? "" : "bad"), 1200);
+  }catch(e){}
+})();
+function driveAdminCard(){
+  driveStatus();
+  const d = DRV.st;
+  return '<div class="card"><h2><span class="lamp' + (d && d.ready ? " on" : "") + '"></span>Google Drive</h2><p class="lede">' +
+    (d && d.ready ? 'Ready. Each person connects their own A&amp;M Google account under My account, read only. Claude and the job panel then read Drive as that person, so nobody sees a file they could not open in Drive.' :
+      'Needs, in Netlify: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (the same ones as the robots\' mailbox) and AUTH_SECRET. In Google Cloud: switch on the Google Drive API, and add ' + E(location.origin) + '/api/drive?action=callback as an authorized redirect address.') + '</p></div>';
+}
+function hrSlotCard(){
+  return '<div class="card"><h2><span class="lamp"></span>HR system</h2><p class="lede">Not connected yet. Once A&amp;M chooses its HR system, it connects here so each person\'s tickets, training and expiry dates, and safety records, show on their account and on the scorecards. Nothing is kept here in the meantime.</p></div>';
+}
+
 /* ---------- the command centre walkthrough ----------
    Built to the same house standard as the shop's walkthrough (public/tour.js):
    - it points at real parts of the screen through data-tour attributes
@@ -4211,6 +4321,24 @@ const CCTOUR = (function(){
       { id:"payroll", clips:["payroll"], target:'[data-tour="page"]', at:"payroll",
         title:"Payroll",
         body:"Payroll takes everyone's hours and splits them into the buckets the bookkeeper posts to, each service line in Edmonton or Calgary, while shop and office time stays in general payroll. You can download the report for her, or type in the pay costs and post the journal entry to QuickBooks once the period closes." },
+      { id:"crewboard", clips:["crewboard"], target:'[data-tour="crewboard"]', at:"dispatch",
+        title:"The crew board",
+        body:"This is where crews get built. Drag someone onto a job, or on a phone, tap a person and then tap Add here. Pick the crew lead and the start times, and it all lands on the job's Site Work task in JobTread, so the crew see it in their own JobTread app. A red name means that person is booked somewhere else the same day. Work order prints a one-page sheet for the crew lead." },
+      { id:"tm", clips:["tm"], target:'[data-tour="page"]', at:"tm",
+        title:"T&M and extras",
+        body:"This page looks after the money that goes missing when the paperwork does. T&M jobs get a sheet built straight from the timesheets, ready for the client to sign. Change orders show how long they've waited, and jobs on site with hours but no approved quote are flagged, because that's usually extra work nobody has written up yet." },
+      { id:"invoicing", clips:["invoicing"], target:'[data-tour="invoicing"]', at:"closeout",
+        title:"Invoicing deadlines",
+        body:"Every client has their own billing rules: where the invoice goes, the cut-off date, and whether it needs a PO, a subcontract number, holdback or a portal. They live on the customer in JobTread, and this card lines up finished work by the soonest cut-off, so nothing slides into next month." },
+      { id:"clients", clips:["clients"], target:'[data-tour="page"]', at:"clients",
+        title:"Clients",
+        body:"Clients shows every customer in one place: what we've won and lost, quotes waiting, what they owe, and whether their billing rules are on file. Gone quiet lists good repeat clients who haven't sent anything in a while, so someone can pick up the phone." },
+      { id:"scorecards", clips:["scorecards"], target:'[data-tour="page"]', at:"scorecards",
+        title:"Scorecards",
+        body:"Scorecards pulls together the numbers from each position profile that the systems can actually measure, for the monthly reviews. It's a starting point for a conversation, not the whole story." },
+      { id:"drive", clips:["drive"], target:'[data-ico="account"]', at:"overview",
+        title:"Connect Google Drive",
+        body:"One more thing worth doing today. Open My account and press Connect Google Drive. It's read only, and it uses your own Google access, so you never see anything you couldn't already open. After that, each job shows its Drive folder, and Claude can answer from the SOP and your role profile." },
       { id:"connections", clips:["connections"], target:'[data-tour="page"]', at:"connections",
         title:"Connections",
         body:"Settings brings you here. This is where JobTread and QuickBooks are connected for the whole company. Paste in a JobTread key and the app checks it before saving. Press Connect QuickBooks, sign in with Intuit, and you'll land right back here." },
@@ -4226,6 +4354,27 @@ const CCTOUR = (function(){
     ];
   }
 
+  /* A short walkthrough of the Payroll page on its own, made for the bookkeeper.
+     Started from the Walk me through it button on Payroll. */
+  function payrollChapters(){
+    return [
+      { id:"pay-intro", clips:["pay-intro"], bookend:true, at:"payroll", title:"Payroll, step by step",
+        body:"Hi" + (S.meName ? " " + S.meName : "") + "! This page does the hour-by-hour split that used to be done by hand. The crews' hours come straight from JobTread timesheets, and the app sorts them into your buckets. Let's walk through it once." },
+      { id:"pay-period", clips:["pay-period"], target:'[data-tour="py-period"]', at:"payroll", title:"Pick the pay period",
+        body:"Up here you pick the two-week pay period. Previous and Next move a period at a time, and Refresh reads the timesheets again. The two Download buttons give you the summary or every line, as a spreadsheet." },
+      { id:"pay-check", clips:["pay-check"], target:"#main .verdict", at:"payroll", title:"Fix these first",
+        body:"This box lists anything that would make the split wrong: hours not approved yet, someone still clocked in, or a job with no city. Fix those in JobTread first, then press Refresh, and the box clears itself." },
+      { id:"pay-summary", clips:["pay-summary"], target:'[data-tour="py-summary"]', at:"payroll", title:"Hours by employee and bucket",
+        body:"This is the report you asked for. Each person's hours, split by service line, Edmonton or Calgary, with shop and office time kept in general payroll. ACES temps are shown separately, because they aren't A&M payroll." },
+      { id:"pay-journal", clips:["pay-journal"], target:'[data-tour="py-journal"]', at:"payroll", title:"The journal entry",
+        body:"Once the pay run is done in QuickBooks, type each person's payroll cost here. The app splits it by their share of hours, with overtime counted at one and a half, and builds the journal entry. Press Show the entry to check it, then Post sends it to QuickBooks, once per period." },
+      { id:"pay-settings", clips:["pay-settings"], target:'[data-tour="py-settings"]', at:"payroll", title:"Payroll settings",
+        body:"The first time, open Payroll settings and pick the QuickBooks account for each bucket. After that you shouldn't need to touch it." },
+      { id:"pay-done", clips:["pay-done"], bookend:true, at:"payroll", title:"That's payroll",
+        body:"That's it! Check the box at the top, download or post, and you're done. If anything looks off, press the round Claude button and ask, or press Walk me through it to see this again." }
+    ];
+  }
+  let SET = "";
   let steps = [], i = 0, liveTour = false, muted = false, gateOk = true, gateOff = null, releaseTimer = null;
   const countable = () => steps.filter(s => !s.bookend);
 
@@ -4367,11 +4516,11 @@ const CCTOUR = (function(){
   }
 
   /* ---------- start and stop ---------- */
-  function start(){
+  function start(set){
     if(liveTour) return;
-    liveTour = true;
+    liveTour = true; SET = set || "";
     try{ muted = localStorage.getItem(MUTE) === "1"; }catch(e){ muted = false; }
-    steps = chapters().filter(s => !s.at || CFG.tabs.includes(s.at));
+    steps = (SET === "payroll" ? payrollChapters() : chapters()).filter(s => !s.at || CFG.tabs.includes(s.at));
     if(!q("#ccTour")){
       const d = document.createElement("div"); d.id = "ccTour";
       d.innerHTML = '<div id="ccSpot"></div><div id="ccCard" role="dialog" aria-live="polite" aria-label="Walkthrough"></div>';
@@ -4385,8 +4534,8 @@ const CCTOUR = (function(){
     const d = q("#ccTour"); if(d) d.remove();
     document.body.classList.remove("cct-on");
     if(drawerState) closeDrawer();
-    try{ localStorage.setItem(SEEN, "1"); }catch(e){}
-    go("overview");
+    if(SET !== "payroll"){ try{ localStorage.setItem(SEEN, "1"); }catch(e){} }
+    go(SET === "payroll" ? "payroll" : "overview"); SET = "";
   }
   window.addEventListener("resize", () => { if(liveTour) paint(); });
   window.addEventListener("scroll", () => { if(liveTour) paint(); }, true);
@@ -4398,7 +4547,8 @@ const CCTOUR = (function(){
   return {
     start,
     ready(){ try{ if(localStorage.getItem(SEEN) === "1") return; }catch(e){ return; } start(); },
-    replay(){ try{ localStorage.removeItem(SEEN); }catch(e){} start(); }
+    replay(){ try{ localStorage.removeItem(SEEN); }catch(e){} start(); },
+    payroll(){ start("payroll"); }
   };
 })();
 
