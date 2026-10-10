@@ -220,9 +220,11 @@ async function readBilling(s) {
   if (!names.length) return { rules: {}, ready: false };
   const rules = {}; let page = null, guard = 0; const t0 = Date.now();
   do {
-    const args = { size: 50, where: ["type", "customer"] }; if (page) args.page = page;
+    /* 40 customers with 12 values each stays under JobTread's size limit
+       (it refuses large requests with "Request Entity Too Large"). */
+    const args = { size: 40, where: ["type", "customer"] }; if (page) args.page = page;
     const res = await pave({ organization: { $: { id: c.organizationId }, accounts: { $: args, nextPage: {}, nodes: { id: {}, name: {},
-      customFieldValues: { $: { size: 20 }, nodes: { value: {}, customField: { name: {} } } } } } } }, c.grantKey);
+      customFieldValues: { $: { size: 12 }, nodes: { value: {}, customField: { name: {} } } } } } } }, c.grantKey);
     const a = res.organization && res.organization.accounts;
     if (!a) break;
     for (const n of a.nodes || []) {

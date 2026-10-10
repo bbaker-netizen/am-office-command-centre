@@ -70,16 +70,12 @@ async function loadBilling(s, c, who) {
   for (const f of CUSTOMER_FIELDS) { const id = map[f.name + "|customer"]; if (id) ids[f.name] = id; else missing.push(f.name); }
   if (missing.length) return { ok: false, message: "Add the fields first. JobTread does not have: " + missing.join(", ") + "." };
   const typeId = map["Type|customer"];
-  /* What each customer already carries, read in one request. */
-  const q = {};
-  BILLING_RULES.forEach((r, i) => { q["a" + i] = { _: "account", $: { id: r.accountId }, id: {}, customFieldValues: { $: { size: 30 }, nodes: { value: {}, customField: { name: {} } } } }; });
-  const cur = await pave(q, c.grantKey);
   const done = [], failed = [], typed = [];
   const jobs = BILLING_RULES.map((r, i) => async () => {
     const values = {};
     for (const f of CUSTOMER_FIELDS) if (r[f.name] !== undefined && r[f.name] !== null && r[f.name] !== "") values[ids[f.name]] = r[f.name];
     if (!Object.keys(values).length) return;
-    const have = ((cur["a" + i] && cur["a" + i].customFieldValues && cur["a" + i].customFieldValues.nodes) || []);
+    const have = ((cur[r.accountId] && cur[r.accountId].customFieldValues && cur[r.accountId].customFieldValues.nodes) || []);
     if (typeId && !have.some(v => v.customField && v.customField.name === "Type" && v.value)) {
       const t = PUBLIC_BODIES.includes(r.accountId) ? "Institution (Hospital, School etc.)" : "Commercial";
       values[typeId] = t; typed.push(r.customer + ": " + t);
@@ -90,8 +86,17 @@ async function loadBilling(s, c, who) {
       done.push(r.customer);
     } catch (e) { failed.push({ customer: r.customer, why: e.message }); }
   });
-  /* Eight at a time, so 47 customers take a few seconds, not half a minute. */
-  for (let i = 0; i < jobs.length; i += 8) await Promise.all(jobs.slice(i, i + 8).map(f => f()));
+  /* Eight at a time, so 47 customers take a few seconds, not half a minute.
+     Each eight are read first, to see whether Type is already set. All 47 in
+     one read was "Request Entity Too Large", so the reads go in eights too. */
+  const cur = {};
+  for (let i = 0; i < jobs.length; i += 8) {
+    const q = {};
+    BILLING_RULES.slice(i, i + 8).forEach((r, k) => { q["a" + k] = { _: "account", $: { id: r.accountId }, id: {}, customFieldValues: { $: { size: 15 }, nodes: { value: {}, customField: { name: {} } } } }; });
+    const res = await pave(q, c.grantKey);
+    Object.values(res || {}).forEach(a => { if (a && a.id) cur[a.id] = a; });
+    await Promise.all(jobs.slice(i, i + 8).map(f => f()));
+  }
   const stamp = { at: new Date().toISOString(), by: who, customers: done.length, failed: failed.length, typeFilled: typed.length };
   if (done.length) { await logIt(s, who, "updateAccount billing rules", done.concat(typed.map(t => "Type set, " + t))); await s.setJSON("billing-rules-loaded", stamp); }
   try { await s.delete("cc-cache-billing"); } catch (e) {}
