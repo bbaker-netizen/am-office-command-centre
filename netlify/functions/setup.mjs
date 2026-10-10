@@ -57,26 +57,45 @@ async function addFields(s, c, who) {
   return { added, failed, noRight, ...after };
 }
 
+/* JobTread will not save a customer whose required "Type" is empty, and only
+   about one customer in fourteen has one. So for a customer with no Type, the
+   app fills it in with its best reading and lists it in the result for Jen to
+   check: public bodies are "Institution (Hospital, School etc.)", every other
+   client on Craig's sheet is a contractor or property company, "Commercial".
+   A Type already set is never changed. */
+const PUBLIC_BODIES = ["22PSLrujDBxB", "22PSLrvYLyEV", "22PSLs2e3AaB"]; /* City of Edmonton, Edmonton Public Schools, Strathcona County */
 async function loadBilling(s, c, who) {
   const map = await fieldIds(s, c, true);
   const ids = {}; const missing = [];
   for (const f of CUSTOMER_FIELDS) { const id = map[f.name + "|customer"]; if (id) ids[f.name] = id; else missing.push(f.name); }
   if (missing.length) return { ok: false, message: "Add the fields first. JobTread does not have: " + missing.join(", ") + "." };
-  const done = [], failed = [];
-  for (const r of BILLING_RULES) {
+  const typeId = map["Type|customer"];
+  /* What each customer already carries, read in one request. */
+  const q = {};
+  BILLING_RULES.forEach((r, i) => { q["a" + i] = { _: "account", $: { id: r.accountId }, id: {}, customFieldValues: { $: { size: 30 }, nodes: { value: {}, customField: { name: {} } } } }; });
+  const cur = await pave(q, c.grantKey);
+  const done = [], failed = [], typed = [];
+  const jobs = BILLING_RULES.map((r, i) => async () => {
     const values = {};
     for (const f of CUSTOMER_FIELDS) if (r[f.name] !== undefined && r[f.name] !== null && r[f.name] !== "") values[ids[f.name]] = r[f.name];
-    if (!Object.keys(values).length) continue;
+    if (!Object.keys(values).length) return;
+    const have = ((cur["a" + i] && cur["a" + i].customFieldValues && cur["a" + i].customFieldValues.nodes) || []);
+    if (typeId && !have.some(v => v.customField && v.customField.name === "Type" && v.value)) {
+      const t = PUBLIC_BODIES.includes(r.accountId) ? "Institution (Hospital, School etc.)" : "Commercial";
+      values[typeId] = t; typed.push(r.customer + ": " + t);
+    }
     try {
-      /* JobTread wants nothing asked back from an update ("updateAccount.account" needs arguments). */
+      /* JobTread wants nothing asked back from an update. */
       await pave({ updateAccount: { $: { id: r.accountId, customFieldValues: values } } }, c.grantKey);
       done.push(r.customer);
     } catch (e) { failed.push({ customer: r.customer, why: e.message }); }
-  }
-  const stamp = { at: new Date().toISOString(), by: who, customers: done.length, failed: failed.length };
-  if (done.length) { await logIt(s, who, "updateAccount billing rules", done); await s.setJSON("billing-rules-loaded", stamp); }
+  });
+  /* Eight at a time, so 47 customers take a few seconds, not half a minute. */
+  for (let i = 0; i < jobs.length; i += 8) await Promise.all(jobs.slice(i, i + 8).map(f => f()));
+  const stamp = { at: new Date().toISOString(), by: who, customers: done.length, failed: failed.length, typeFilled: typed.length };
+  if (done.length) { await logIt(s, who, "updateAccount billing rules", done.concat(typed.map(t => "Type set, " + t))); await s.setJSON("billing-rules-loaded", stamp); }
   try { await s.delete("cc-cache-billing"); } catch (e) {}
-  return { ok: !failed.length, done, failed, loaded: stamp };
+  return { ok: !failed.length, done, failed, typed, loaded: stamp };
 }
 
 export default async (req) => {
