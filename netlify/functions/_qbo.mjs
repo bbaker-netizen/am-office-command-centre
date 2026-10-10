@@ -2,8 +2,9 @@
 
    Moved out of qbo.mjs so the command centre can read reports through the same
    connection the office set up, instead of a second app holding a second set of
-   keys. Read only: every call to Intuit here is a GET, apart from the token
-   exchange itself.
+   keys. Everything here is a read, apart from the token exchange and qboPost,
+   which only the payroll journal entry uses (payroll.mjs), after a person in
+   the office presses Post.
 
    Intuit rotates the refresh token every time it is used, and an old one stops
    working. Two copies of a function refreshing at the same moment would leave
@@ -104,4 +105,25 @@ export async function qboGet(path, params = {}) {
 
 export async function query(sql) {
   return qboGet("query", { query: sql });
+}
+
+/* One write against the company. Used only by payroll.mjs to post the payroll
+   split journal entry, after a person presses Post. `path` is the entity, for
+   example "journalentry". */
+export async function qboPost(path, body) {
+  const { apiBase } = env();
+  const { token, realmId } = await accessToken();
+  const qs = new URLSearchParams({ minorversion: MINOR_VERSION });
+  const r = await fetch(`${apiBase}/v3/company/${realmId}/${path}?${qs}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const text = await r.text().catch(() => "");
+  let out; try { out = JSON.parse(text); } catch { out = null; }
+  if (!r.ok) {
+    const f = out && out.Fault && out.Fault.Error && out.Fault.Error[0];
+    throw new Error(`QuickBooks did not accept it (HTTP ${r.status}). ${f ? (f.Message + (f.Detail ? ": " + f.Detail : "")) : text.slice(0, 300)}`);
+  }
+  return out;
 }

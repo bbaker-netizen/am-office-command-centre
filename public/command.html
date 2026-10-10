@@ -405,6 +405,7 @@ const TABS = {
   sites:     { label:"Sites",        group:"Field" },
   closeout:  { label:"Closeout",     group:"Field" },
   postmortem:{ label:"Post mortem",  group:"Field" },
+  payroll:   { label:"Payroll",      group:"Office" },
   equipment: { label:"Equipment",    group:"Field" },
   drafts:    { label:"To send", group:"Assistants" },
   people:    { label:"People and access", group:"Admin" }
@@ -699,7 +700,7 @@ function render(){
 function footer(){
   return '<div class="note"><b>Where these numbers come from.</b> Read live from ' +
     (CFG.qb ? "JobTread and QuickBooks" : "JobTread") + (PLATFORM === "app" ? ", plus the shop's own stock records," : "") + (CFG.gmail ? ", plus your Gmail drafts," : "") +
-    (PLATFORM === "app" ? ' through the A&amp;M app, every few minutes or when you press Refresh.' : ' using your own sign in, every time the page opens or you press Refresh.') + (PLATFORM === "app" ? ' Nothing is copied into a second list. QuickBooks is only read. The only things saved back to JobTread are job details someone changes and finished post-mortem notes, each under that person\'s name. ' : ' Nothing is copied or stored here and nothing here changes either system. ') +
+    (PLATFORM === "app" ? ' through the A&amp;M app, every few minutes or when you press Refresh.' : ' using your own sign in, every time the page opens or you press Refresh.') + (PLATFORM === "app" ? ' Nothing is copied into a second list. QuickBooks is only read, apart from the payroll journal entry posted on the Payroll page. The only things saved back to JobTread are job details someone changes and finished post-mortem notes, each under that person\'s name. ' : ' Nothing is copied or stored here and nothing here changes either system. ') +
     'To change a job, open it and press <b>Open in JobTread</b>. Site photos live in Encircle and safety records live in SiteDocs, so neither is shown here. All money is Canadian dollars.</div>' +
     '<div class="foot"><span>A&amp;M Abatement Services Ltd</span><span>' + E(CFG.title) + '</span><span class="sp"></span><span>' + (PLATFORM === "app" ? 'Reads live; changes only what a person saves' : 'Reads live, stores nothing, changes nothing') + '</span></div>';
 }
@@ -1183,7 +1184,7 @@ async function startApp(){
   CAN_EDIT = !!me.edit;
   const tabs = ["overview"];
   if(has("office")) tabs.push("estimating", "dispatch");
-  if(has("money")) tabs.push("money", "buying");
+  if(has("money")) tabs.push("money", "payroll", "buying");
   if(has("office")) tabs.push("records");
   if(has("field")) tabs.push("projects", "sites", "closeout");
   /* Post mortems: in Field beside Closeout, or in Office for people with no Field section. */
@@ -2530,7 +2531,7 @@ document.addEventListener("keydown", ev => { if(ev.key === "Enter" && ev.target.
    on every request. The shop's names and PINs are separate and unchanged. */
 const AREA_INFO = {
   office:     { label:"Office",     what:"Estimating, dispatch and records" },
-  money:      { label:"Money",      what:"Money and buying, read from QuickBooks" },
+  money:      { label:"Money",      what:"Money, buying and payroll, from QuickBooks and JobTread" },
   field:      { label:"Field",      what:"Projects, sites, closeout, post mortems and equipment" },
   assistants: { label:"Assistants", what:"The robots' emails waiting to be sent" }
 };
@@ -2773,6 +2774,202 @@ function meSave(btn){
     f.reset(); btn.disabled = false; m.textContent = "Changed. Other devices will ask for the new password.";
   }).catch(e => { btn.disabled = false; m.textContent = errCopy(e); });
 }
+
+/* ---------- payroll split (accounts that see Money) ----------
+   Danielle's report: each employee's hours split into the cost of sales
+   buckets (service line, Edmonton or Calgary), with shop and office time kept
+   in general payroll. Worked out on the server from JobTread timesheets
+   (netlify/functions/payroll.mjs). She types each person's payroll cost and the
+   page builds the journal entry; pressing Post sends it to QuickBooks once per
+   pay period. Costs typed here are not saved anywhere. */
+const PY = { start:null, data:null, err:null, loading:false, costs:{}, journal:null, jErr:null, busy:false, msg:"", lists:null, listsErr:null, edit:null };
+const H2 = v => (v === null || v === undefined || isNaN(v) || !v) ? "-" : Number(v).toFixed(2);
+const D2 = v => (v === null || v === undefined || isNaN(v)) ? "" : "$" + Number(v).toLocaleString("en-CA", { minimumFractionDigits:2, maximumFractionDigits:2 });
+function pyCall(params, body){
+  const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) }
+                    : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
+  return fetch("/api/payroll" + (params ? "?" + params : ""), opts).then(async r => {
+    const b = await r.json().catch(() => ({}));
+    if(!r.ok) throw Object.assign({ code: b.error || ("http_" + r.status), message: b.message || ("The app answered " + r.status + "."), status: r.status }, b);
+    return b;
+  });
+}
+function loadPY(start){
+  PY.loading = true; if(start) PY.start = start;
+  return pyCall("action=report" + (PY.start ? "&start=" + encodeURIComponent(PY.start) : "")).then(d => {
+    if(PY.data && PY.data.report.period.start !== d.report.period.start){ PY.costs = {}; PY.journal = null; PY.jErr = null; PY.msg = ""; }
+    PY.data = d; PY.start = d.report.period.start; PY.err = null; PY.loading = false; render();
+  }).catch(e => { PY.err = e; PY.loading = false; render(); });
+}
+function pyBuckets(rep){
+  /* Only the buckets that have hours this period, cost of sales first, then general payroll. */
+  return rep.buckets.filter(b => rep.totals.byBucket[b]);
+}
+function pyCsv(rows){ return rows.map(r => r.map(v => { const s = String(v === null || v === undefined ? "" : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(",")).join("\r\n"); }
+function pyDownload(kind){
+  const rep = PY.data && PY.data.report; if(!rep) return;
+  const p = rep.period; let rows, name;
+  if(kind === "summary"){
+    rows = [["Employee","Total hours","Regular","Overtime","Not yet approved"].concat(rep.buckets).concat(rep.buckets.map(b => b + " share of pay"))];
+    rep.employees.forEach(e => rows.push([e.name, e.total, e.regular, e.overtime, e.unapproved].concat(rep.buckets.map(b => e.byBucket[b] ? e.byBucket[b].total : 0)).concat(rep.buckets.map(b => e.share[b] ? (e.share[b] * 100).toFixed(2) + "%" : "0%"))));
+    rows.push(["Total", rep.totals.hours, "", "", rep.totals.unapproved].concat(rep.buckets.map(b => rep.totals.byBucket[b] || 0)));
+    name = "Payroll Split - " + p.start + ".csv";
+  } else {
+    rows = [["Employee","Job","Job name","Cost code","Bucket","City from address","Regular hours","Overtime hours","Total hours","Not yet approved"]];
+    rep.detail.forEach(d => rows.push([d.person, d.job, d.jobName, d.costCode, d.bucket, d.assumed ? "Yes" : "", d.reg, d.ot, d.total, d.unapproved]));
+    name = "Payroll Split Detail - " + p.start + ".csv";
+  }
+  const blob = new Blob(["\ufeff" + pyCsv(rows)], { type:"text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+VIEWS.payroll = {
+  hold(){ const a = document.activeElement; return !!(a && a.closest && a.closest("[data-py-form]") && /INPUT|TEXTAREA|SELECT/.test(a.tagName)); },
+  alerts(){
+    const out = []; const d = PY.data; if(!d) return out;
+    const r = d.report, openEmp = r.open.filter(o => !o.temp);
+    if(openEmp.length) out.push({ lvl:"stop", text: plural(openEmp.length, "employee is", "employees are") + " still clocked in for this pay period.", meta: "Not counted until they clock out: " + openEmp.map(o => o.person + " since " + showWhen(o.since)).join(" · ") });
+    if(r.totals.unapproved) out.push({ lvl:"caution", text: H2(r.totals.unapproved) + " hours are not approved yet.", meta:"They are counted, but a supervisor may still change them. Approve them in JobTread, then press Refresh." });
+    if(r.assumedJobs.length) out.push({ lvl:"info", text: plural(r.assumedJobs.length, "job has", "jobs have") + " no Estimating branch, so the city came from the address.", meta: r.assumedJobs.map(j => j.job).join(", ") });
+    if(r.conflicts.length) out.push({ lvl:"info", text: "Branch and address disagree on " + r.conflicts.map(c => c.job).join(", ") + ".", meta:"Counted by the Estimating branch. Check which one is right." });
+    return out;
+  },
+  render(){
+    let h = head("Payroll split", "Each employee's hours for the pay period, split into the cost of sales buckets Danielle posts to: each service line, Edmonton or Calgary. Shop and office time stays in general payroll. Read from JobTread timesheets. ACES temps are not A&M payroll and are shown separately.");
+    if(PY.err) return h + failBox(PY.err, "Payroll");
+    if(!PY.data){ if(!PY.loading) loadPY(); return h + wait("this pay period's timesheets"); }
+    const d = PY.data, r = d.report, p = r.period, bs = pyBuckets(r);
+    h += '<div class="actions" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+      '<button class="btn ghost" data-py-go="' + E(p.previous) + '">Previous period</button>' +
+      '<b style="padding:0 6px">' + E(p.start) + ' to ' + E(p.end) + '</b>' +
+      '<button class="btn ghost" data-py-go="' + E(p.next) + '">Next period</button>' +
+      '<button class="btn ghost" data-py-go="' + E(p.start) + '">' + (PY.loading ? "Reading…" : "Refresh") + '</button>' +
+      '<span class="sp" style="flex:1"></span>' +
+      '<button class="btn" data-py-csv="summary">Download summary</button>' +
+      '<button class="btn ghost" data-py-csv="detail">Download detail</button></div>';
+    h += verdictHtml(this.alerts(), "Every hour this period is approved, clocked out and has a city.", plural(r.totals.people, "employee") + ", " + H2(r.totals.hours) + " hours.");
+    if(d.posted) h += '<div class="state ok" style="margin:12px 0">' + D2(d.posted.moved) + ' moved from payroll into cost of sales. Posted by ' + E(d.posted.by) + ' on ' + E(showWhen(d.posted.at)) + ', QuickBooks journal entry ' + E(d.posted.docNumber) + '</div>';
+
+    /* the summary */
+    const headRow = '<th>Employee</th><th class="r">Total</th><th class="r">Regular</th><th class="r">Overtime</th><th class="r">Not approved</th>' + bs.map(b => '<th class="r">' + E(b) + (r.overheadBuckets.includes(b) ? ' <span class="sm">stays</span>' : '') + '</th>').join("");
+    const rows = r.employees.map(e => '<tr><td><span class="nm">' + E(e.name) + '</span></td><td class="r num"><b>' + H2(e.total) + '</b></td><td class="r num">' + H2(e.regular) + '</td><td class="r num">' + H2(e.overtime) + '</td><td class="r num"' + (e.unapproved ? ' style="color:var(--caution)"' : '') + '>' + H2(e.unapproved) + '</td>' +
+      bs.map(b => '<td class="r num">' + H2(e.byBucket[b] && e.byBucket[b].total) + '</td>').join("") + '</tr>');
+    rows.push('<tr><td><b>Total</b></td><td class="r num"><b>' + H2(r.totals.hours) + '</b></td><td></td><td></td><td class="r num">' + H2(r.totals.unapproved) + '</td>' + bs.map(b => '<td class="r num"><b>' + H2(r.totals.byBucket[b]) + '</b></td>').join("") + '</tr>');
+    h += '<div class="card wide" style="margin-top:16px"><h2>Hours by employee and bucket</h2><p class="lede">Regular plus overtime hours. This is the report Danielle asked for. Download it for her with the buttons above.</p>' + tbl(headRow, rows, "No A&M employee hours in JobTread for this period yet.", 60) + '</div>';
+
+    /* the journal entry */
+    h += '<div class="card wide" data-py-form style="margin-top:16px"><h2>Journal entry</h2><p class="lede">Type each person\'s payroll cost from the QuickBooks pay run. The app splits it by share of pay, with overtime hours counted at ' + E(r.otMultiplier) + ' times, and moves the cost of sales part out of payroll expense. A journal entry is a manual adjustment in the books. Nothing reaches QuickBooks until you press Post. Costs typed here are not saved.</p>';
+    h += '<div class="scroll"><table><thead><tr><th>Employee</th><th class="r">Pay hours</th><th class="r">Payroll cost</th></tr></thead><tbody>' +
+      r.employees.map(e => '<tr><td>' + E(e.name) + '</td><td class="r num">' + H2(e.payHours) + '</td><td class="r"><input type="number" step="0.01" min="0" inputmode="decimal" style="width:130px;font:inherit;padding:6px 8px;border:1px solid var(--rule);border-radius:3px;text-align:right" data-py-cost="' + E(e.name) + '" value="' + E(PY.costs[e.name] === undefined ? "" : PY.costs[e.name]) + '"></td></tr>').join("") +
+      '</tbody></table></div>';
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn ghost" data-py-preview' + (PY.busy ? " disabled" : "") + '>Show the entry</button>' +
+      (!CAN_EDIT ? '' : d.posted ? '<button class="btn ghost" data-py-forget>Clear the posted record</button>' : '<button class="btn" data-py-post' + (PY.busy || !PY.journal || !PY.journal.ok || !d.quickbooks ? " disabled" : "") + '>Post to QuickBooks</button>') + '</div>';
+    if(!CAN_EDIT) h += '<div class="state" style="margin-top:10px">Your account can see the entry but not post it. Ask an admin if you need to.</div>';
+    if(!d.quickbooks) h += '<div class="state wait" style="margin-top:10px">QuickBooks is not connected to the app yet. Press Connect on QuickBooks in Settings, signed in to A&amp;M\'s company. You can still see the entry.</div>';
+    if(PY.msg) h += '<div class="state ok" style="margin-top:10px">' + E(PY.msg) + '</div>';
+    if(PY.jErr) h += failBox(PY.jErr, "Journal entry");
+    if(PY.journal){
+      const j = PY.journal;
+      if(j.errors.length) h += '<div class="state wait" style="margin-top:10px">' + j.errors.map(E).join("<br>") + '</div>';
+      if(j.lines.length) h += '<div class="scroll" style="margin-top:12px"><table><thead><tr><th>Account</th><th>Class</th><th>Location</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead><tbody>' +
+        j.lines.map(l => '<tr><td>' + E(l.accountName || l.bucket) + '<span class="sm">' + E(l.bucket) + '</span></td><td>' + E(l.className || "") + '</td><td>' + E(l.departmentName || "") + '</td><td class="r num">' + (l.posting === "Debit" ? D2(l.amount) : "") + '</td><td class="r num">' + (l.posting === "Credit" ? D2(l.amount) : "") + '</td></tr>').join("") +
+        '</tbody></table></div><p class="sm" style="margin-top:6px">Entry ' + E(j.docNumber) + ', dated ' + E(p.end) + '. ' + D2(j.moved) + ' moves into cost of sales. Shop and office time stays in payroll expense.</p>';
+    }
+    h += '</div>';
+
+    /* check before payroll */
+    const openRows = r.open.map(o => '<tr><td>' + E(o.person) + (o.temp ? ' <span class="tag mute">ACES</span>' : '') + '</td><td>' + E(o.job + " " + o.jobName) + '</td><td>' + E(showWhen(o.since)) + '</td></tr>');
+    const jobRows = r.assumedJobs.map(j => '<tr><td>' + E(j.job) + '</td><td>' + E(j.jobName) + '</td><td>' + E(j.city || "(blank)") + '</td><td>' + E(j.countedAs) + '</td></tr>');
+    h += '<div class="grid" style="margin-top:16px"><div class="card"><h2>Still clocked in</h2><p class="lede">Not counted until they clock out. A shift running more than a day is almost always a missed clock-out.</p>' +
+      tbl('<th>Person</th><th>Job</th><th>Since</th>', openRows, "Nobody is clocked in for this period.") + '</div>' +
+      '<div class="card"><h2>Jobs with no Estimating branch</h2><p class="lede">The city came from the address. Fill in the branch on the job once and it drops off this list.</p>' +
+      tbl('<th>Job</th><th>Name</th><th>City</th><th>Counted as</th>', jobRows, "Every job has a branch.") + '</div></div>';
+    h += '<div class="card wide" style="margin-top:16px"><h2>ACES temp hours</h2><p class="lede">' + H2(r.tempHours) + ' hours from ' + plural(r.temps.length, "temp") + '. Billed by the staffing agency, so they are not part of the payroll split. Useful for checking the ACES invoice.</p></div>';
+
+    h += pySettings(d.settings);
+    return h;
+  }
+};
+function pySettings(s){
+  const L = PY.lists, sel = (kind, cur, list, attr) => {
+    if(!L) return E(cur ? (cur.name || "") : "") || '<span class="sm">Not chosen</span>';
+    return '<select ' + attr + ' style="font:inherit;font-size:13px;padding:5px;max-width:100%"><option value="">' + (kind === "account" ? "Choose an account" : "None") + '</option>' +
+      list.map(x => '<option value="' + E(x.id) + '"' + (cur && String(cur.id) === String(x.id) ? " selected" : "") + '>' + E(x.name) + (x.type ? " (" + E(x.type) + ")" : "") + '</option>').join("") + '</select>';
+  };
+  const m = s.map || {}, c = s.credit;
+  let h = '<details class="card wide" style="margin-top:16px"' + (PY.lists ? " open" : "") + '><summary style="cursor:pointer;font-weight:700">Payroll settings</summary>' +
+    '<p class="lede" style="margin-top:8px">Danielle should check these once. Each bucket needs the QuickBooks labour account it posts to, and the class (service line) and location (city) if your books use them. Last saved by ' + E(s.updatedBy || "nobody yet") + '.</p>';
+  if(PY.listsErr) h += failBox(PY.listsErr, "QuickBooks lists");
+  if(!L) h += '<button class="btn ghost" data-py-lists>Load accounts and classes from QuickBooks</button>';
+  else {
+    h += '<div data-py-form class="scroll"><table><thead><tr><th>Bucket</th><th>Account</th><th>Class</th><th>Location</th></tr></thead><tbody>' +
+      PY.data.report.cosBuckets.map(b => { const x = m[b] || {};
+        return '<tr><td>' + E(b) + '</td><td>' + sel("account", { id:x.accountId }, L.accounts, 'data-py-map="' + E(b) + ':account"') + '</td><td>' + sel("class", { id:x.classId }, L.classes, 'data-py-map="' + E(b) + ':class"') + '</td><td>' + sel("department", { id:x.departmentId }, L.departments, 'data-py-map="' + E(b) + ':department"') + '</td></tr>'; }).join("") +
+      '<tr><td><b>Comes out of</b><span class="sm">payroll expense</span></td><td>' + sel("account", { id:c && c.accountId }, L.accounts, 'data-py-map="credit:account"') + '</td><td>' + sel("class", { id:c && c.classId }, L.classes, 'data-py-map="credit:class"') + '</td><td></td></tr>' +
+      '</tbody></table>' +
+      '<div class="ctl" style="margin-top:12px"><label class="fld"><b>First day of a pay period</b><input type="date" data-py-set="anchor" value="' + E(s.anchor) + '"></label>' +
+      '<label class="fld"><b>Overtime counts as</b><input type="number" step="0.5" min="1" max="3" data-py-set="otMultiplier" value="' + E(s.otMultiplier) + '"></label></div>' +
+      '<label class="fld"><b>Jobs that stay in general payroll</b><textarea data-py-set="overhead" rows="3" style="font:inherit;font-size:13px;padding:7px;border:1px solid var(--rule);border-radius:3px">' + E(Object.entries(s.overheadJobs).map(([k, v]) => k + " = " + v).join("\n")) + '</textarea><span class="sm">One per line: job number = name. Add a training and safety job here once it exists in JobTread.</span></label>' +
+      (CAN_EDIT ? '<div style="margin-top:12px"><button class="btn" data-py-save>Save settings</button></div>' : '<div class="state" style="margin-top:12px">Your account can look at these settings but not change them.</div>') + '</div>';
+  }
+  return h + '</details>';
+}
+function pyEditSettings(){
+  if(!PY.edit) PY.edit = JSON.parse(JSON.stringify(PY.data.settings));
+  return PY.edit;
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-py-go],[data-py-csv],[data-py-preview],[data-py-post],[data-py-forget],[data-py-lists],[data-py-save]");
+  if(!t) return;
+  if(t.dataset.pyGo){ PY.data = PY.data && PY.data.report.period.start === t.dataset.pyGo ? PY.data : null; loadPY(t.dataset.pyGo); render(); return; }
+  if(t.dataset.pyCsv){ pyDownload(t.dataset.pyCsv); return; }
+  const start = PY.data && PY.data.report.period.start;
+  if(t.dataset.pyPreview !== undefined || t.dataset.pyPost !== undefined){
+    const post = t.dataset.pyPost !== undefined;
+    if(post && !confirm("Post this journal entry to QuickBooks? It moves " + D2(PY.journal && PY.journal.moved) + " from payroll expense into cost of sales for " + start + " to " + PY.data.report.period.end + ". It can only be posted once per pay period.")) return;
+    PY.busy = true; PY.jErr = null; PY.msg = ""; render();
+    pyCall("", { action:"journal", start, costs: PY.costs, post }).then(res => {
+      PY.busy = false; PY.journal = res.journal;
+      if(res.posted && post){ PY.data.posted = res.posted; PY.msg = "Posted. Journal entry " + res.posted.docNumber + " is in QuickBooks."; }
+      render();
+    }).catch(e => { PY.busy = false; PY.jErr = e; if(e.journal) PY.journal = e.journal; if(e.posted) PY.data.posted = e.posted; render(); });
+    return;
+  }
+  if(t.dataset.pyForget !== undefined){
+    if(!confirm("Only do this after deleting the journal entry in QuickBooks. Clear the posted record for this period?")) return;
+    pyCall("", { action:"forget", start }).then(() => { PY.data.posted = null; PY.journal = null; render(); }).catch(e => { PY.jErr = e; render(); });
+    return;
+  }
+  if(t.dataset.pyLists !== undefined){
+    t.disabled = true; t.textContent = "Reading QuickBooks…";
+    pyCall("action=lists").then(l => { PY.lists = l; PY.listsErr = null; render(); }).catch(e => { PY.listsErr = e; render(); });
+    return;
+  }
+  if(t.dataset.pySave !== undefined){
+    const s = pyEditSettings(); t.disabled = true; t.textContent = "Saving…";
+    pyCall("", { action:"settings", settings: s }).then(res => { PY.data.settings = res.settings; PY.edit = null; PY.journal = null; PY.msg = ""; loadPY(PY.start); })
+      .catch(e => { PY.listsErr = e; render(); });
+  }
+});
+document.addEventListener("input", ev => {
+  const el = ev.target; if(!el.dataset) return;
+  if(el.dataset.pyCost !== undefined){ if(el.value === "") delete PY.costs[el.dataset.pyCost]; else PY.costs[el.dataset.pyCost] = el.value; PY.journal = null; return; }
+  if(el.dataset.pySet){
+    const s = pyEditSettings();
+    if(el.dataset.pySet === "overhead"){
+      const o = {}; el.value.split("\n").forEach(line => { const i = line.indexOf("="); if(i > 0){ const k = line.slice(0, i).trim(), v = line.slice(i + 1).trim(); if(k && v) o[k] = v; } });
+      s.overheadJobs = o;
+    } else s[el.dataset.pySet] = el.value;
+  }
+});
+document.addEventListener("change", ev => {
+  const el = ev.target; if(!el.dataset || !el.dataset.pyMap) return;
+  const [b, kind] = el.dataset.pyMap.split(":"), s = pyEditSettings(), L = PY.lists;
+  const list = kind === "account" ? L.accounts : kind === "class" ? L.classes : L.departments;
+  const hit = list.find(x => String(x.id) === el.value);
+  const slot = b === "credit" ? (s.credit = s.credit || {}) : (s.map[b] = s.map[b] || {});
+  slot[kind + "Id"] = hit ? hit.id : ""; slot[kind + "Name"] = hit ? hit.name : "";
+});
 
 /* ---------- the command centre walkthrough ----------
    Built to the same house standard as the shop's walkthrough (public/tour.js):
