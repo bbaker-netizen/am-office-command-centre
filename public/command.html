@@ -1717,7 +1717,7 @@ VIEWS.dispatch = {
     if(nodate.length) a.push({ lvl:"caution", text: plural(nodate.length, "won job has", "won jobs have") + " no start date.", meta:"Nobody can plan crews around a job with no date." });
     const nocrew = pre.filter(j => (d => d !== null && d >= 0 && d <= 7)(daysTo(startOf(j))) && crew(j) === null);
     if(nocrew.length) a.push({ lvl:"caution", text: plural(nocrew.length, "job starting this week has", "jobs starting this week have") + " no crew size.", meta:"Fill in Number of Guys Required so the crew load below is right." });
-    const nolead = pre.filter(j => (d => d !== null && d >= 0 && d <= 3)(daysTo(startOf(j))) && !leadOf(j));
+    const nolead = pre.filter(j => (d => d !== null && d >= 0 && d <= 3)(daysTo(startOf(j))) && crewRec(j) && !leadOf(j));
     if(nolead.length) a.push({ lvl:"caution", text: plural(nolead.length, "job starting in the next three days has", "jobs starting in the next three days have") + " no crew lead.", meta:"Pick one on the crew board below: " + nolead.map(j => j._number).join(", ") + "." });
     const cl = clashes(boardJobs()), who = [...new Set(Object.keys(cl).map(k => k.split("|")[0]))];
     if(who.length) a.push({ lvl:"caution", text: plural(who.length, "person is", "people are") + " booked on two jobs the same days.", meta: who.slice(0, 6).join(", ") + ". Their names show red on the crew board." });
@@ -3602,13 +3602,29 @@ document.addEventListener("click", ev => {
    Billing rules live on each customer in JobTread (Invoice Email, Invoice
    Cut-off, PO Required, Subcontract Number Required, Holdback %, Billing
    Portal, Client Template Required, Billing Notes), loaded once from Craig's
-   sheet "Accounting info for invoicing". The crew plan lives on each job in
-   JobTread (Crew Lead, Crew, Shop Start Time, Site Start Time), replacing
-   Craig's Work Order sheet. The app reads both and writes the crew plan back
-   through the same checked door as every other job change. */
+   sheet "Accounting info for invoicing". The crew plan, replacing Craig's Work
+   Order sheet, lives on each job's Site Work task in JobTread's schedule:
+   assigned people, plus crew lead and start-time lines in its description.
+   The app reads both and writes the crew plan back under the person's name. */
 const custRules = j => (S.billing && S.billing.rules && j._custId && S.billing.rules[j._custId]) || null;
-const crewOf = j => String(F(j["Crew"]) || "").split(",").map(x => x.trim()).filter(Boolean);
-const leadOf = j => String(F(j["Crew Lead"]) || "").trim();
+/* The crew plan lives on the job's Site Work task in JobTread's schedule
+   (JobTread allows 25 fields on a job and A&M uses all 25): the crew are the
+   task's assigned people, and the lead and start times are lines in its
+   description. S.crew holds what was read, by job id. */
+const crewRec = j => (S.crew && S.crew[j._id]) || null;
+const crewOf = j => ((crewRec(j) || {}).members || []).map(m => m.name).filter(Boolean);
+const leadOf = j => (crewRec(j) || {}).lead || "";
+const timeOf = (j, k) => (crewRec(j) || {})[k] || "";
+function loadCrew(force){
+  if(PLATFORM !== "app" || !S.jobs) return;
+  const ids = boardJobs().map(j => j._id), key = ids.join(",");
+  if(!ids.length || (!force && S.crewKey === key)) return;
+  S.crewKey = key;
+  fetch("/api/command?part=crew&ids=" + encodeURIComponent(key), { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
+    .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || "The app answered " + r.status + "." }; return b; })
+    .then(b => { S.crew = Object.assign({}, S.crew || {}, b.crew || {}); S.crewErr = null; render(); })
+    .catch(e => { S.crewErr = e; render(); });
+}
 const isYes = v => v === true || /^(true|yes|1)$/i.test(String(F(v) || ""));
 function nextCutoff(rule){
   const r = String(rule || "").trim().toLowerCase(); if(!r) return null;
@@ -3689,14 +3705,16 @@ function clashes(list){
   return out;
 }
 function crewBoard(){
+  loadCrew();
   const canEdit = PLATFORM === "app" && CAN_EDIT;
   const L = boardJobs(), cl = clashes(L), people = (S.people && S.people.people) || [];
   let h = '<div class="card wide" data-nofold><h2>Crew board</h2><p class="lede">Jobs on site and starting in the next two weeks. ' +
     (canEdit ? 'Drag a person onto a job to put them on the crew, or tap a person and then tap <b>Add here</b>. Pick the crew lead and the start times on each job. Every change saves to JobTread under your name. ' : '') +
     'A red name is booked on another job the same days.</p>';
   if(!L.length) return h + '<div class="state ok">Nothing on site or starting in the next two weeks.</div></div>';
+  if(S.crewErr) h += '<div class="state err" style="margin-bottom:10px">The crews did not load from JobTread: ' + E(errCopy(S.crewErr)) + '</div>';
   if(canEdit){
-    h += '<div class="cb-people" aria-label="People">' + (S.people ? people.map(p => '<button type="button" class="cb-person' + (p.temp ? " temp" : "") + (CB.pick === p.name ? " on" : "") + '" draggable="true" data-cb-person="' + E(p.name) + '" title="' + E(p.role) + '">' + E(p.name) + '</button>').join("") :
+    h += '<div class="cb-people" aria-label="People">' + (S.people ? people.map(p => '<button type="button" class="cb-person' + (p.temp || p.sub ? " temp" : "") + (CB.pick === p.name ? " on" : "") + '" draggable="true" data-cb-person="' + E(p.name) + '" title="' + E(p.role + (p.sub ? ", subtrade" : "")) + '">' + E(p.name) + '</button>').join("") :
       (S.peopleErr ? '<span class="sm">The crew list did not load: ' + E(errCopy(S.peopleErr)) + '</span>' : '<span class="sm">Loading the crew list…</span>')) + '</div>';
   }
   h += '<div class="cb-jobs">' + L.map(j => {
@@ -3705,13 +3723,14 @@ function crewBoard(){
     const chip = n => '<span class="cb-chip' + (cl[n + "|" + j._id] ? " clash" : "") + '"' + (cl[n + "|" + j._id] ? ' title="Also on ' + E(cl[n + "|" + j._id].join(", ")) + ' the same days"' : '') + '>' + E(n) +
       (canEdit ? '<button type="button" aria-label="Take ' + E(n) + ' off" data-cb-off="' + E(n) + '" data-cbj="' + E(j._id) + '">×</button>' : '') + '</span>';
     const leadSel = canEdit ? '<select data-cb-lead="' + E(j._id) + '"><option value="">No lead</option>' +
-      people.filter(p => !p.temp).map(p => '<option' + (p.name === lead ? " selected" : "") + '>' + E(p.name) + '</option>').join("") + (lead && !people.some(p => p.name === lead) ? '<option selected>' + E(lead) + '</option>' : '') + '</select>' : E(lead || "No lead");
-    const tIn = (k, ph) => canEdit ? '<input type="text" inputmode="text" placeholder="' + ph + '" value="' + E(F(j[k]) || "") + '" data-cb-time="' + E(k) + '" data-cbj="' + E(j._id) + '" data-was="' + E(F(j[k]) || "") + '">' : E(F(j[k]) || "Not set");
+      people.filter(p => !p.temp && !p.sub).map(p => '<option' + (p.name === lead ? " selected" : "") + '>' + E(p.name) + '</option>').join("") + (lead && !people.some(p => p.name === lead) ? '<option selected>' + E(lead) + '</option>' : '') + '</select>' : E(lead || "No lead");
+    const tIn = (k, ph) => canEdit ? '<input type="text" inputmode="text" placeholder="' + ph + '" value="' + E(timeOf(j, k)) + '" data-cb-time="' + E(k) + '" data-cbj="' + E(j._id) + '" data-was="' + E(timeOf(j, k)) + '">' : E(timeOf(j, k) || "Not set");
+    if(!crewRec(j)) return '<div class="cb-job"><div class="cb-head"><button type="button" class="cb-name" data-job="' + E(j._id) + '">' + E(j._number) + ' ' + E(j._name) + '</button></div>' + (S.crewErr ? '<span class="sm">Crew not loaded.</span>' : wait("the crew")) + '</div>';
     return '<div class="cb-job' + (CB.busy[j._id] ? " is-busy" : "") + '" data-cb-drop="' + E(j._id) + '">' +
       '<div class="cb-head"><button type="button" class="cb-name" data-job="' + E(j._id) + '">' + E(j._number) + ' ' + E(j._name) + '</button>' +
       '<span class="tag ' + (site ? "clear" : d !== null && d <= 2 ? "caution" : "mute") + '">' + (site ? "On site" : rel(d, false, true)) + '</span></div>' +
       '<div class="sm">' + E(j._addr || j._cust || "") + (startOf(j) ? ' · starts ' + E(showDate(startOf(j))) : '') + (dur(j) ? ' · ' + plural(dur(j), "day") : '') + '</div>' +
-      '<div class="cb-row"><label>Lead ' + leadSel + '</label><label>Shop ' + tIn("Shop Start Time", "6:30 AM") + '</label><label>Site ' + tIn("Site Start Time", "7:30 AM") + '</label></div>' +
+      '<div class="cb-row"><label>Lead ' + leadSel + '</label><label>Shop ' + tIn("shop", "6:30 AM") + '</label><label>Site ' + tIn("site", "7:30 AM") + '</label></div>' +
       '<div class="cb-crew">' + (crewL.length ? crewL.map(chip).join("") : '<span class="sm">Nobody on the crew yet.</span>') + '</div>' +
       '<div class="cb-foot"><span class="tag ' + (need === null ? "caution" : have >= need ? "clear" : "caution") + '">' + have + ' of ' + (need === null ? "?" : need) + ' people</span>' +
       (canEdit ? '<button type="button" class="btn ghost" data-cb-add="' + E(j._id) + '"' + (CB.pick ? '' : ' hidden') + '>Add ' + E(CB.pick || "") + ' here</button>' : '') +
@@ -3719,17 +3738,20 @@ function crewBoard(){
   }).join("") + '</div></div>';
   return h;
 }
-function cbSave(id, changes, said){
-  const j = (S.jobs || []).find(x => x._id === id); if(!j) return;
-  const before = {}; Object.keys(changes).forEach(k => { before[k] = j[k]; j[k] = changes[k] === null ? undefined : changes[k]; });
+function cbSave(id, patch, said){
+  const j = (S.jobs || []).find(x => x._id === id); const rec = j && crewRec(j); if(!rec) return;
+  const before = JSON.parse(JSON.stringify(rec)); Object.assign(rec, patch);
+  const days = onDays(j) || [];
   CB.busy[id] = 1; render();
-  apiPost({ jobId: id, changes }).then(() => { delete CB.busy[id]; toast(said + " Saved to JobTread."); render(); try{ fetch("/api/command?part=jobs&fresh=1", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }); }catch(e){} })
-    .catch(e => { Object.assign(j, before); delete CB.busy[id]; toast(errCopy(e), "bad"); render(); });
+  apiPost({ crew:{ jobId: id, members: rec.members.map(m => m.id), lead: rec.lead || "", shop: rec.shop || "", site: rec.site || "", startDate: days[0] || "", endDate: days[days.length - 1] || "" } })
+    .then(r => { delete CB.busy[id]; if(r.taskId) rec.taskId = r.taskId; toast(said + (r.created ? " A Site Work task was made for it in JobTread." : " Saved to JobTread.")); render(); })
+    .catch(e => { S.crew[id] = before; delete CB.busy[id]; toast(errCopy(e), "bad"); render(); });
 }
 function cbAdd(id, name){
-  const j = (S.jobs || []).find(x => x._id === id); if(!j || !name) return;
-  const list = crewOf(j); if(list.includes(name)){ toast(name + " is already on that crew."); return; }
-  list.push(name); cbSave(id, { "Crew": list.join(", ") }, name + " added to " + j._number + ".");
+  const j = (S.jobs || []).find(x => x._id === id); const rec = j && crewRec(j); if(!rec || !name) return;
+  if(rec.members.some(m => m.name === name)){ toast(name + " is already on that crew."); return; }
+  const p = ((S.people && S.people.people) || []).find(x => x.name === name); if(!p){ toast("Could not find " + name + " in JobTread's people.", "bad"); return; }
+  cbSave(id, { members: rec.members.concat([{ id: p.id, name: p.name }]) }, name + " added to " + j._number + ".");
 }
 document.addEventListener("click", ev => {
   const p = ev.target.closest && ev.target.closest("[data-cb-person]");
@@ -3738,17 +3760,18 @@ document.addEventListener("click", ev => {
   if(a){ cbAdd(a.dataset.cbAdd, CB.pick); CB.pick = null; return; }
   const o = ev.target.closest && ev.target.closest("[data-cb-off]");
   if(o){ ev.stopPropagation(); const j = (S.jobs || []).find(x => x._id === o.dataset.cbj); if(!j) return;
-    cbSave(j._id, { "Crew": crewOf(j).filter(n => n !== o.dataset.cbOff).join(", ") || null }, o.dataset.cbOff + " taken off " + j._number + "."); return; }
+    const rec = crewRec(j); if(!rec) return;
+    cbSave(j._id, { members: rec.members.filter(m => m.name !== o.dataset.cbOff) }, o.dataset.cbOff + " taken off " + j._number + "."); return; }
   const w = ev.target.closest && ev.target.closest("[data-cb-wo]");
   if(w){ workOrder(w.dataset.cbWo); return; }
 }, true);
 document.addEventListener("change", ev => {
   const s = ev.target.closest && ev.target.closest("[data-cb-lead]");
-  if(s){ const j = (S.jobs || []).find(x => x._id === s.dataset.cbLead); if(j) cbSave(j._id, { "Crew Lead": s.value || null }, (s.value ? s.value + " leads " : "No lead on ") + j._number + "."); return; }
+  if(s){ const j = (S.jobs || []).find(x => x._id === s.dataset.cbLead); if(j) cbSave(j._id, { lead: s.value || "" }, (s.value ? s.value + " leads " : "No lead on ") + j._number + "."); return; }
   const t = ev.target.closest && ev.target.closest("[data-cb-time]");
   if(t){ const v = t.value.trim(); if(v === t.dataset.was) return;
     if(v && !/^(1[0-2]|0?[1-9]):[0-5]\d ?(am|pm)$|^([01]?\d|2[0-3]):[0-5]\d$/i.test(v)){ toast("Write the time like 6:30 AM or 14:00.", "bad"); t.value = t.dataset.was; return; }
-    const j = (S.jobs || []).find(x => x._id === t.dataset.cbj); if(j) cbSave(j._id, { [t.dataset.cbTime]: v ? v.toUpperCase() : null }, t.dataset.cbTime + " on " + j._number + " set."); }
+    const j = (S.jobs || []).find(x => x._id === t.dataset.cbj); if(j) cbSave(j._id, { [t.dataset.cbTime]: v ? v.toUpperCase() : "" }, (t.dataset.cbTime === "shop" ? "Shop" : "Site") + " start on " + j._number + (v ? " set." : " cleared.")); }
 });
 document.addEventListener("dragstart", ev => { const p = ev.target.closest && ev.target.closest("[data-cb-person]"); if(!p) return; ev.dataTransfer.setData("text/plain", p.dataset.cbPerson); ev.dataTransfer.effectAllowed = "copy"; });
 document.addEventListener("dragover", ev => { const z = ev.target.closest && ev.target.closest("[data-cb-drop]"); if(!z) return; ev.preventDefault(); z.classList.add("drop"); });
@@ -3766,7 +3789,7 @@ function workOrder(id){
     '.top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #1a1917;padding-bottom:10px}.am{font-size:26px;font-weight:800}.am b{color:#329dbb}table{width:100%;border-collapse:collapse}th{text-align:left;width:32%;padding:6px 8px;background:#f2f2f0;vertical-align:top}td{padding:6px 8px;border-bottom:1px solid #ddd}.no{color:#a33}.foot{margin-top:28px;font-size:11px;color:#666}@media print{body{margin:14mm}}</style></head><body>' +
     '<div class="top"><div><div class="am">A<b>&amp;</b>M</div><div>A&amp;M Abatement Services Ltd.</div></div><div style="text-align:right"><h1>Work order</h1><div>' + E(j._number) + ' · printed ' + iso(new Date()) + '</div></div></div>' +
     '<h2>Job</h2><table>' + row("Job", E(j._number + " " + j._name)) + row("Site address", E(j._addr)) + row("Client", E(j._cust)) + row("Job type", E(types(j).join(", "))) + row("Risk level", v("Risk Level")) + row("Project manager", E(pm(j))) + '</table>' +
-    '<h2>When and who</h2><table>' + row("Start date", E(showDate(startOf(j)))) + row("Expected days of work", v("Estimated Days of Work")) + row("Shop start time", v("Shop Start Time")) + row("Site start time", v("Site Start Time")) +
+    '<h2>When and who</h2><table>' + row("Start date", E(showDate(startOf(j)))) + row("Expected days of work", v("Estimated Days of Work")) + row("Shop start time", E(timeOf(j, "shop"))) + row("Site start time", E(timeOf(j, "site"))) +
       row("Crew lead", E(leadOf(j))) + row("Crew", E(crewOf(j).join(", "))) + row("People required", v("Number of Guys Required")) + '</table>' +
     '<h2>Getting in</h2><table>' + row("Site contact phone", v("Site Contact Phone Number")) + row("Site access", v("Site Access Notes")) + row("Entry code", F(j["Entry Code"]) ? "On file in JobTread, ask the PM" : "") + '</table>' +
     '<h2>Scope</h2><table>' + row("Notes", v("Notes")) + row("NOP filed", E(showWhen(F(j["NOP Filed Date and Time"]) || ""))) + '</table>' +
@@ -3788,8 +3811,8 @@ function setupCard(){
   if(SU.err) return h + '<div class="state err">' + E(errCopy(SU.err)) + '</div></div>';
   if(!SU.data) return h + wait("JobTread's fields") + '</div>';
   const d = SU.data;
-  h += '<p class="lede">Twelve fields the app needs in JobTread: eight billing rules on each customer, and the crew lead, crew and start times on each job. ' +
-    (d.missing ? '<b>' + d.missing + ' of 12 are missing.</b>' : 'All twelve are there.') + '</p>';
+  h += '<p class="lede">Eight billing-rule fields the app needs on each customer in JobTread. ' +
+    (d.missing ? '<b>' + d.missing + ' of ' + d.fields.length + ' are missing.</b>' : 'All ' + d.fields.length + ' are there.') + ' The crew plan needs no fields: it goes on each job\'s Site Work task.</p>';
   if(d.missing) h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" data-su="fields">Set up billing and crew fields</button></div>';
   if(SU.last && SU.last.noRight) h += '<div class="state wait" style="margin-bottom:10px">JobTread does not let the app\'s key add fields. Add these by hand in JobTread, under Settings, Custom Fields, with the names exactly as written, then press Check again: ' +
     E(d.fields.filter(f => !f.exists).map(f => f.name + " (" + f.on + ")").join(", ")) + '. <button class="btn ghost" data-su="check">Check again</button></div>';
