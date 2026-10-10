@@ -478,6 +478,27 @@ button,input,select,textarea,optgroup{font-family:inherit}
 .card.fold .fold-body{display:none}
 .card.fold.open .fold-body{display:block;animation:am-up .28s cubic-bezier(.2,.8,.2,1)}
 .card.fold:not(.open){padding-bottom:14px}
+/* crew board */
+.cb-people{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px;max-height:132px;overflow:auto;padding:2px}
+.cb-person{font:inherit;font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--rule);background:var(--panel);color:var(--ink);cursor:grab}
+.cb-person.temp{color:var(--ink-3);border-style:dashed}
+.cb-person.on{background:var(--cyan);border-color:var(--cyan);color:#fff}
+.cb-jobs{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));grid-auto-rows:1fr}
+.cb-job{border:1px solid var(--rule);border-radius:4px;padding:12px;background:var(--panel);display:flex;flex-direction:column;gap:8px;transition:box-shadow .15s,border-color .15s}
+.cb-job.drop{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-wash)}
+.cb-job.is-busy{opacity:.6}
+.cb-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.cb-name{font:inherit;font-weight:700;font-size:14px;text-align:left;background:none;border:0;padding:0;color:var(--ink);cursor:pointer}
+.cb-row{display:flex;flex-wrap:wrap;gap:8px}
+.cb-row label{display:flex;flex-direction:column;font-size:11px;font-weight:700;color:var(--ink-3);gap:3px;flex:1 1 90px}
+.cb-row input::placeholder{color:var(--ink-3);opacity:.55}
+.cb-row select,.cb-row input{font:inherit;font-size:13px;padding:5px 6px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);color:var(--ink);min-width:0}
+.cb-crew{display:flex;flex-wrap:wrap;gap:6px;min-height:28px}
+.cb-chip{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;padding:3px 4px 3px 10px;border-radius:999px;background:var(--cyan-wash);color:var(--ink)}
+.cb-chip.clash{background:var(--stop);color:#fff}
+.cb-chip button{font:inherit;border:0;background:none;color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
+.cb-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:auto}
+.cb-foot .btn{padding:5px 10px;font-size:12px}
 </style>
 </head><body><header class="top" id="top">
   <div class="in">
@@ -663,6 +684,7 @@ function flat(job){
   o._created = job.createdAt; o._closed = job.closedOn;
   o._addr = (job.location && job.location.address) || "";
   o._cust = (job.location && job.location.account && job.location.account.name) || "";
+  o._custId = (job.location && job.location.account && job.location.account.id) || "";
   return o;
 }
 
@@ -884,7 +906,7 @@ function openJob(id){
     (drawerStateBack ? '<button class="btn ghost" data-back="1">Back to the list</button>' : '') + '</div>' +
     (gaps.length ? '<div class="state wait" style="margin-bottom:14px">Missing in JobTread: ' + E(gaps.join(", ")) + '. ' + (PLATFORM === "app" ? "Fill them in below and save." : "Fill these in JobTread and press Refresh here.") + '</div>' : '') +
     (PLATFORM === "app" && CAN_EDIT && typeof editForm === "function" ? editForm(j) : '') +
-    '<dl class="facts">' + facts + '</dl><h3>Quotes</h3>' + qhtml);
+    billingPanel(j) + '<dl class="facts">' + facts + '</dl><h3>Quotes</h3>' + qhtml);
 }
 let drawerStateBack = null;
 
@@ -1278,6 +1300,8 @@ function appLoad(fresh){
   }).catch(e => { S.bsErr = S.arErr = S.apErr = S.plErr = e; render(); }));
   if(ME.areas.some(a => ["office","field","money"].includes(a))) waits.push(api("inventory", fresh).then(d => { S.inv = d; S.invErr = null; render(); })
     .catch(e => { S.invErr = e; render(); }));
+  if(CFG.tabs.some(t => ["dispatch","closeout","money","overview"].includes(t))) waits.push(api("billing", fresh).then(d => { S.billing = d; S.billingErr = null; render(); }).catch(e => { S.billingErr = e; render(); }));
+  if(CFG.tabs.includes("dispatch") && CAN_EDIT) waits.push(api("people", fresh).then(d => { S.people = d; S.peopleErr = null; render(); }).catch(e => { S.peopleErr = e; render(); }));
   if(CFG.tabs.includes("drafts")) waits.push(loadMail());
   if(CFG.tabs.includes("postmortem")) waits.push(loadPM());
   if(CFG.tabs.includes("people")) waits.push(loadAccounts());
@@ -1693,6 +1717,10 @@ VIEWS.dispatch = {
     if(nodate.length) a.push({ lvl:"caution", text: plural(nodate.length, "won job has", "won jobs have") + " no start date.", meta:"Nobody can plan crews around a job with no date." });
     const nocrew = pre.filter(j => (d => d !== null && d >= 0 && d <= 7)(daysTo(startOf(j))) && crew(j) === null);
     if(nocrew.length) a.push({ lvl:"caution", text: plural(nocrew.length, "job starting this week has", "jobs starting this week have") + " no crew size.", meta:"Fill in Number of Guys Required so the crew load below is right." });
+    const nolead = pre.filter(j => (d => d !== null && d >= 0 && d <= 3)(daysTo(startOf(j))) && !leadOf(j));
+    if(nolead.length) a.push({ lvl:"caution", text: plural(nolead.length, "job starting in the next three days has", "jobs starting in the next three days have") + " no crew lead.", meta:"Pick one on the crew board below: " + nolead.map(j => j._number).join(", ") + "." });
+    const cl = clashes(boardJobs()), who = [...new Set(Object.keys(cl).map(k => k.split("|")[0]))];
+    if(who.length) a.push({ lvl:"caution", text: plural(who.length, "person is", "people are") + " booked on two jobs the same days.", meta: who.slice(0, 6).join(", ") + ". Their names show red on the crew board." });
     return a;
   },
   render(){
@@ -1701,6 +1729,7 @@ VIEWS.dispatch = {
     let h = head("Dispatch", "Who is going where, and when. Crew load for the next four weeks, jobs about to start, and won work with no date.");
     h += verdictHtml(this.alerts(), "Every job about to start has a date, a PM and a crew size.", "");
     h += '<div class="grid">';
+    h += crewBoard();
     const wk = crewLoad();
     const max = Math.max(1, ...wk.map(w => w.peak));
     h += '<div class="card wide"><h2>Crew load, next four weeks</h2><p class="lede">The busiest weekday in each week, adding up Number of Guys Required on every job on site that day. A job runs from its start date for its Estimated Days of Work, weekdays only.</p><ul class="bars">' +
@@ -1753,7 +1782,7 @@ VIEWS.money = {
     if(n.ar && n.arBS !== undefined && n.arBS !== null && Math.abs(n.ar.tot.Total - n.arBS) > 5) a.push({ lvl:"caution", text:"The receivables report and the balance sheet disagree by " + M(Math.abs(n.ar.tot.Total - n.arBS)) + ".", meta:"The balance sheet figure is the one to trust until the bookkeeper finds the gap." });
     const b = booksCheck(); if(b && b.faults.length) a.push({ lvl:"caution", text:"Do not price work from the QuickBooks margin yet.", meta: b.faults[0] });
     if(S.jobs){ const tb = live().filter(j => TOBILL.includes(st(j))); if(tb.length) a.push({ lvl:"caution", text: plural(tb.length, "finished job has", "finished jobs have") + " not been invoiced yet.", meta:"Money already spent and not yet asked for." }); }
-    return a;
+    return CFG.tabs.includes("closeout") ? a : a.concat(billingAlerts());
   },
   render(){
     let h = head("Money", "Cash, who owes us, who we owe, and whether the books are safe to price from. QuickBooks owns every figure here.");
@@ -1831,6 +1860,7 @@ VIEWS.money = {
     h += '<div class="card wide"><h2>Bank balance, next 13 weeks</h2><p class="lede">A rough draft from QuickBooks totals and this year\'s pace. Move the sliders to test what happens if customers pay slower or bills get paid faster.</p>' + runwayHtml() + '</div>';
 
     /* to bill */
+    if(S.jobs) h += invoicingCard();
     if(S.jobs){
       const tb = live().filter(j => TOBILL.includes(st(j))).sort((a, b) => String(a._created).localeCompare(String(b._created)));
       h += '<div class="card wide"><h2>Work finished and not invoiced</h2><p class="lede">Jobs at loose ends, complete, PM approvals or invoicing in JobTread. Approved quote is the value of quotes approved in JobTread, before GST. Part of it may already be billed in QuickBooks.</p>' +
@@ -2000,7 +2030,7 @@ VIEWS.closeout = {
     const a = []; if(!S.jobs) return a;
     const stuck = live().filter(j => CLOSE.includes(st(j)) && st(j) !== "Job Post Mortem" && (d => d !== null && d > 30)(daysSince(startOf(j) || j._created)));
     if(stuck.length) a.push({ lvl:"caution", text: plural(stuck.length, "job has", "jobs have") + " been in closeout for over a month since it started.", meta:"Until the PM signs off, the invoice cannot go out." });
-    return a;
+    return a.concat(billingAlerts());
   },
   render(){
     const nr = jobsReady(); if(nr) return head("Closeout", "") + nr;
@@ -2009,6 +2039,7 @@ VIEWS.closeout = {
     h += verdictHtml(this.alerts(), "Closeout is moving.", plural(J.length, "job") + " in closeout.");
     h += '<div class="grid">';
     h += '<div class="card"><h2>Where closeout is stuck</h2><p class="lede">Press a line to see the jobs.</p>' + bars(CLOSE.map(s => [s, J.filter(j => st(j) === s).length, "status:" + s]).filter(x => x[1])) + '</div>';
+    h += invoicingCard();
     const val = J.reduce((s, j) => s + approvedFor(j._id), 0);
     h += '<div class="card"><h2>Approved quotes in closeout</h2><p class="lede">The value of quotes approved in JobTread on these jobs, before GST. Some may already be billed in QuickBooks.</p><div class="big num">' + (S.orders ? M(val) : "…") + '</div><p class="sub">' +
       plural(J.filter(j => approvedFor(j._id) > 0).length, "job") + ' of ' + J.length + ' carry an approved quote. The rest were quoted outside JobTread.</p></div>';
@@ -3546,6 +3577,7 @@ VIEWS.connections = {
       (q.missingEnv && q.missingEnv.length ? '<div class="state wait">Netlify still needs: ' + E(q.missingEnv.join(", ")) + '.</div>' :
        (q.connected ? '<p class="lede">Connected to company ' + E(q.realmId) + ' since ' + E(showWhen(q.connectedAt)) + (q.connectedBy ? ', by ' + E(q.connectedBy) : '') + '. Read only, apart from the payroll journal entry posted from the Payroll page.</p>' : '<p class="lede">Not connected. Press Connect, sign in to Intuit with an admin login for A&amp;M\'s company, and choose A&amp;M Abatement Services. You come straight back here.</p>') +
        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-cn-qb>' + (q.connected ? "Connect again" : "Connect QuickBooks") + '</button>' + (q.connected ? '<button class="btn ghost" data-cn-qbforget>Disconnect</button>' : '') + '</div>') + '</div>';
+    if(d.jobtread.working) h += setupCard();
     if(CN.mail) h += '<div class="card"><h2><span class="lamp' + (CN.mail.connected ? " on" : "") + '"></span>Robots\' mailbox</h2><p class="lede">' + (CN.mail.connected ? "Connected to " + E(CN.mail.email || CN.mail.mailbox || "") + "." : "Not connected. The assistants' emails send from it.") + '</p>' + (CN.mail.connected ? '' : '<button class="btn" data-mail-connect>Connect the mailbox</button>') + '</div>';
     if(ME.claude) h += '<div class="card"><h2><span class="lamp' + (CN.claude && CN.claude.ready ? " on" : "") + '"></span>Ask Claude</h2><p class="lede">' + (CN.claude && CN.claude.ready ? "Ready. People with Can ask Claude ticked see the Claude button in the corner of every page." : "Needs ANTHROPIC_API_KEY in Netlify, from A&amp;M's own account at console.anthropic.com. Until then the button still offers Continue in my own Claude.") + '</p></div>';
     h += '</div>';
@@ -3564,6 +3596,221 @@ document.addEventListener("click", ev => {
   if(t.dataset.cnJtforget !== undefined){ if(!confirm("Disconnect JobTread? Every page stops reading jobs until a key is saved again.")) return; cnCall({ action:"jobtread-forget" }).then(() => { toast("JobTread disconnected."); CN.data = null; render(); }).catch(e => toast(e.message, "bad")); return; }
   if(t.dataset.cnQb !== undefined){ t.classList.add("is-busy"); cnCall({ action:"quickbooks" }).then(r => { location.href = r.url; }).catch(e => { t.classList.remove("is-busy"); toast(e.message, "bad"); }); return; }
   if(t.dataset.cnQbforget !== undefined){ if(!confirm("Disconnect QuickBooks? Money pages stop reading until it is connected again.")) return; cnCall({ action:"quickbooks-forget" }).then(() => { toast("QuickBooks disconnected."); CN.data = null; render(); }).catch(e => toast(e.message, "bad")); }
+});
+
+/* ================= BILLING RULES AND THE CREW BOARD (Upload 1, 2026-10-10) =================
+   Billing rules live on each customer in JobTread (Invoice Email, Invoice
+   Cut-off, PO Required, Subcontract Number Required, Holdback %, Billing
+   Portal, Client Template Required, Billing Notes), loaded once from Craig's
+   sheet "Accounting info for invoicing". The crew plan lives on each job in
+   JobTread (Crew Lead, Crew, Shop Start Time, Site Start Time), replacing
+   Craig's Work Order sheet. The app reads both and writes the crew plan back
+   through the same checked door as every other job change. */
+const custRules = j => (S.billing && S.billing.rules && j._custId && S.billing.rules[j._custId]) || null;
+const crewOf = j => String(F(j["Crew"]) || "").split(",").map(x => x.trim()).filter(Boolean);
+const leadOf = j => String(F(j["Crew Lead"]) || "").trim();
+const isYes = v => v === true || /^(true|yes|1)$/i.test(String(F(v) || ""));
+function nextCutoff(rule){
+  const r = String(rule || "").trim().toLowerCase(); if(!r) return null;
+  const d0 = today(), last = (y, m) => new Date(y, m + 1, 0);
+  const pick = fn => { for(let k = 0; k < 3; k++){ const b = new Date(d0.getFullYear(), d0.getMonth() + k, 1); const d = fn(b.getFullYear(), b.getMonth()); if(d && d >= d0) return d; } return null; };
+  const n = r.match(/^(\d{1,2})(st|nd|rd|th)?$/);
+  if(n){ const day = Math.min(31, Math.max(1, +n[1])); return pick((y, m) => new Date(y, m, Math.min(day, last(y, m).getDate()))); }
+  if(/month\s*end|end of (the )?month/.test(r) && !/working/.test(r)) return pick((y, m) => last(y, m));
+  const w = r.match(/(\d+)\s*working days? before (the )?(end of (the )?month|month\s*end)/);
+  if(w) return pick((y, m) => { let d = last(y, m), left = +w[1]; while(left > 0){ d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1); if(d.getDay() && d.getDay() !== 6) left--; } return d; });
+  return null;
+}
+/* What a job ready to bill needs, from its client's rules. */
+function billPlan(j){
+  const r = custRules(j); if(!r) return null;
+  const cut = nextCutoff(F(r["Invoice Cut-off"])), days = cut ? Math.round((cut - today()) / 86400000) : null;
+  const flags = [];
+  const po = String(F(j["Customer PO"]) || "").trim(), poSt = F(j["PO Status"]);
+  if(isYes(r["PO Required"]) && !po && poSt !== "Received") flags.push({ lvl:"stop", t:"PO needed, none on the job" });
+  else if(isYes(r["PO Required"])) flags.push({ lvl:"mute", t:"Quote PO " + (po || "on file") });
+  if(isYes(r["Subcontract Number Required"])) flags.push({ lvl:"caution", t:"Subcontract number on the invoice" });
+  const hb = parseFloat(F(r["Holdback %"])); if(hb > 0) flags.push({ lvl:"mute", t: hb + "% holdback" });
+  const portal = F(r["Billing Portal"]); if(portal && portal !== "Email") flags.push({ lvl:"caution", t:"Through " + portal });
+  const tpl = F(r["Client Template Required"]); if(tpl) flags.push({ lvl:"caution", t:"Their template: " + tpl });
+  return { r, cut, days, flags, email: F(r["Invoice Email"]) || "", notes: F(r["Billing Notes"]) || "", rule: F(r["Invoice Cut-off"]) || "" };
+}
+function readyToBill(){ return S.jobs ? live().filter(j => TOBILL.includes(st(j))) : []; }
+function billingAlerts(){
+  const a = []; if(!S.jobs || !S.billing) return a;
+  const plans = readyToBill().map(j => ({ j, p: billPlan(j) })).filter(x => x.p);
+  const near = plans.filter(x => x.p.days !== null && x.p.days <= 5);
+  if(near.length) a.push({ lvl: near.some(x => x.p.days <= 2) ? "stop" : "caution", text: plural(near.length, "finished job's client has", "finished jobs' clients have") + " an invoice cut-off in the next five days.",
+    meta: near.slice(0, 4).map(x => x.j._number + " " + (x.j._cust || "") + ", " + rel(x.p.days, false, true).toLowerCase()).join("; ") + ". Miss it and the money waits another month." });
+  const nopo = plans.filter(x => x.p.flags.some(f => f.lvl === "stop"));
+  if(nopo.length) a.push({ lvl:"caution", text: plural(nopo.length, "job ready to bill is", "jobs ready to bill are") + " for a client who needs a PO, and there is none on the job.", meta:"Get the PO before the invoice goes, or the client sends it back: " + nopo.map(x => x.j._number).join(", ") + "." });
+  return a;
+}
+function invoicingCard(){
+  const L = readyToBill();
+  let h = '<div class="card wide"><h2>Invoicing deadlines</h2><p class="lede">Finished work not yet invoiced, with each client\'s own billing rules from JobTread: where the invoice goes, the cut-off date, and what it must carry. Soonest cut-off first.</p>';
+  if(!S.billing) return h + (S.billingErr ? failBox(S.billingErr, "the billing rules") : wait("the billing rules")) + '</div>';
+  if(S.billing.ready === false) return h + '<div class="state wait">The billing rule fields are not in JobTread yet. An admin adds them in Settings, Connections, Set up billing and crew fields, then presses Load billing rules.</div></div>';
+  const rows = L.map(j => ({ j, p: billPlan(j) })).sort((a, b) => ((a.p && a.p.days !== null) ? a.p.days : 999) - ((b.p && b.p.days !== null) ? b.p.days : 999));
+  return h + tbl('<th>Job</th><th>Send to</th><th>What it must carry</th><th class="r">Cut-off</th>', rows.map(({ j, p }) => {
+    if(!p) return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td colspan="2"><span class="tag mute">No billing rules on file for this client</span></td><td class="r"></td></tr>';
+    return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(p.email || "Not on file") + (p.notes ? '<span class="sm">' + E(p.notes) + '</span>' : '') + '</td>' +
+      '<td>' + (p.flags.length ? p.flags.map(f => '<span class="tag ' + f.lvl + '" style="margin:0 4px 4px 0">' + E(f.t) + '</span>').join("") : '<span class="sm">Nothing special</span>') + '</td>' +
+      '<td class="r">' + (p.cut ? '<span class="tag ' + (p.days <= 2 ? "stop" : p.days <= 5 ? "caution" : "mute") + '">' + rel(p.days, false, true) + '</span><span class="sm">' + iso(p.cut) + '</span>' : '<span class="sm">' + E(p.rule || "No cut-off") + '</span>') + '</td></tr>';
+  }), "Nothing is waiting to be invoiced.", 25) + '</div>';
+}
+function billingPanel(j){
+  const p = billPlan(j); if(!p) return "";
+  return '<h3>Billing rules for ' + E(j._cust || "this client") + '</h3><dl class="facts">' +
+    '<dt>Invoice goes to</dt><dd>' + E(p.email || "Not on file") + '</dd>' +
+    '<dt>Cut-off</dt><dd>' + E(p.rule || "None") + (p.cut ? " (next: " + iso(p.cut) + ", " + rel(p.days, false, true).toLowerCase() + ")" : "") + '</dd>' +
+    '<dt>Must carry</dt><dd>' + E(p.flags.map(f => f.t).join("; ") || "Nothing special") + '</dd>' +
+    (p.notes ? '<dt>Notes</dt><dd>' + E(p.notes) + '</dd>' : '') + '</dl><p class="sm">These rules live on the customer in JobTread. Change them there.</p>';
+}
+
+/* ---------- the crew board ---------- */
+const CB = { pick:null, busy:{} };
+function onDays(j){
+  const s = dOnly(startOf(j)); if(!s) return null;
+  const n = Math.max(1, Math.ceil(dur(j) || 1)); const days = []; let d = new Date(s), guard = 0;
+  while(days.length < n && guard++ < 120){ if(d.getDay() && d.getDay() !== 6) days.push(iso(d)); d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); }
+  return days;
+}
+function boardJobs(){
+  return live().filter(j => { const g = stageOf(st(j)); if(g === "site") return true; if(!["won","sched"].includes(g)) return false; const d = daysTo(startOf(j)); return d !== null && d >= -3 && d <= 14; })
+    .sort((a, b) => (stageOf(st(a)) === "site" ? -1 : 0) - (stageOf(st(b)) === "site" ? -1 : 0) || (daysTo(startOf(a)) ?? 99) - (daysTo(startOf(b)) ?? 99));
+}
+/* Anyone booked on two jobs whose working days overlap. */
+function clashes(list){
+  const by = {};
+  list.forEach(j => { const days = onDays(j) || []; [...new Set([leadOf(j), ...crewOf(j)].filter(Boolean))].forEach(p => { (by[p] = by[p] || []).push({ j, days }); }); });
+  const out = {};
+  Object.entries(by).forEach(([p, arr]) => arr.forEach((a, i) => arr.forEach((b, k) => { if(i !== k && a.days.some(d => b.days.includes(d))) (out[p + "|" + a.j._id] = out[p + "|" + a.j._id] || []).push(b.j._number); })));
+  return out;
+}
+function crewBoard(){
+  const canEdit = PLATFORM === "app" && CAN_EDIT;
+  const L = boardJobs(), cl = clashes(L), people = (S.people && S.people.people) || [];
+  let h = '<div class="card wide" data-nofold><h2>Crew board</h2><p class="lede">Jobs on site and starting in the next two weeks. ' +
+    (canEdit ? 'Drag a person onto a job to put them on the crew, or tap a person and then tap <b>Add here</b>. Pick the crew lead and the start times on each job. Every change saves to JobTread under your name. ' : '') +
+    'A red name is booked on another job the same days.</p>';
+  if(!L.length) return h + '<div class="state ok">Nothing on site or starting in the next two weeks.</div></div>';
+  if(canEdit){
+    h += '<div class="cb-people" aria-label="People">' + (S.people ? people.map(p => '<button type="button" class="cb-person' + (p.temp ? " temp" : "") + (CB.pick === p.name ? " on" : "") + '" draggable="true" data-cb-person="' + E(p.name) + '" title="' + E(p.role) + '">' + E(p.name) + '</button>').join("") :
+      (S.peopleErr ? '<span class="sm">The crew list did not load: ' + E(errCopy(S.peopleErr)) + '</span>' : '<span class="sm">Loading the crew list…</span>')) + '</div>';
+  }
+  h += '<div class="cb-jobs">' + L.map(j => {
+    const crewL = crewOf(j), lead = leadOf(j), need = crew(j), have = crewL.length + (lead && !crewL.includes(lead) ? 1 : 0);
+    const d = daysTo(startOf(j)), site = stageOf(st(j)) === "site";
+    const chip = n => '<span class="cb-chip' + (cl[n + "|" + j._id] ? " clash" : "") + '"' + (cl[n + "|" + j._id] ? ' title="Also on ' + E(cl[n + "|" + j._id].join(", ")) + ' the same days"' : '') + '>' + E(n) +
+      (canEdit ? '<button type="button" aria-label="Take ' + E(n) + ' off" data-cb-off="' + E(n) + '" data-cbj="' + E(j._id) + '">×</button>' : '') + '</span>';
+    const leadSel = canEdit ? '<select data-cb-lead="' + E(j._id) + '"><option value="">No lead</option>' +
+      people.filter(p => !p.temp).map(p => '<option' + (p.name === lead ? " selected" : "") + '>' + E(p.name) + '</option>').join("") + (lead && !people.some(p => p.name === lead) ? '<option selected>' + E(lead) + '</option>' : '') + '</select>' : E(lead || "No lead");
+    const tIn = (k, ph) => canEdit ? '<input type="text" inputmode="text" placeholder="' + ph + '" value="' + E(F(j[k]) || "") + '" data-cb-time="' + E(k) + '" data-cbj="' + E(j._id) + '" data-was="' + E(F(j[k]) || "") + '">' : E(F(j[k]) || "Not set");
+    return '<div class="cb-job' + (CB.busy[j._id] ? " is-busy" : "") + '" data-cb-drop="' + E(j._id) + '">' +
+      '<div class="cb-head"><button type="button" class="cb-name" data-job="' + E(j._id) + '">' + E(j._number) + ' ' + E(j._name) + '</button>' +
+      '<span class="tag ' + (site ? "clear" : d !== null && d <= 2 ? "caution" : "mute") + '">' + (site ? "On site" : rel(d, false, true)) + '</span></div>' +
+      '<div class="sm">' + E(j._addr || j._cust || "") + (startOf(j) ? ' · starts ' + E(showDate(startOf(j))) : '') + (dur(j) ? ' · ' + plural(dur(j), "day") : '') + '</div>' +
+      '<div class="cb-row"><label>Lead ' + leadSel + '</label><label>Shop ' + tIn("Shop Start Time", "6:30 AM") + '</label><label>Site ' + tIn("Site Start Time", "7:30 AM") + '</label></div>' +
+      '<div class="cb-crew">' + (crewL.length ? crewL.map(chip).join("") : '<span class="sm">Nobody on the crew yet.</span>') + '</div>' +
+      '<div class="cb-foot"><span class="tag ' + (need === null ? "caution" : have >= need ? "clear" : "caution") + '">' + have + ' of ' + (need === null ? "?" : need) + ' people</span>' +
+      (canEdit ? '<button type="button" class="btn ghost" data-cb-add="' + E(j._id) + '"' + (CB.pick ? '' : ' hidden') + '>Add ' + E(CB.pick || "") + ' here</button>' : '') +
+      '<button type="button" class="btn ghost" data-cb-wo="' + E(j._id) + '">Work order</button></div></div>';
+  }).join("") + '</div></div>';
+  return h;
+}
+function cbSave(id, changes, said){
+  const j = (S.jobs || []).find(x => x._id === id); if(!j) return;
+  const before = {}; Object.keys(changes).forEach(k => { before[k] = j[k]; j[k] = changes[k] === null ? undefined : changes[k]; });
+  CB.busy[id] = 1; render();
+  apiPost({ jobId: id, changes }).then(() => { delete CB.busy[id]; toast(said + " Saved to JobTread."); render(); try{ fetch("/api/command?part=jobs&fresh=1", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }); }catch(e){} })
+    .catch(e => { Object.assign(j, before); delete CB.busy[id]; toast(errCopy(e), "bad"); render(); });
+}
+function cbAdd(id, name){
+  const j = (S.jobs || []).find(x => x._id === id); if(!j || !name) return;
+  const list = crewOf(j); if(list.includes(name)){ toast(name + " is already on that crew."); return; }
+  list.push(name); cbSave(id, { "Crew": list.join(", ") }, name + " added to " + j._number + ".");
+}
+document.addEventListener("click", ev => {
+  const p = ev.target.closest && ev.target.closest("[data-cb-person]");
+  if(p){ CB.pick = CB.pick === p.dataset.cbPerson ? null : p.dataset.cbPerson; render(); return; }
+  const a = ev.target.closest && ev.target.closest("[data-cb-add]");
+  if(a){ cbAdd(a.dataset.cbAdd, CB.pick); CB.pick = null; return; }
+  const o = ev.target.closest && ev.target.closest("[data-cb-off]");
+  if(o){ ev.stopPropagation(); const j = (S.jobs || []).find(x => x._id === o.dataset.cbj); if(!j) return;
+    cbSave(j._id, { "Crew": crewOf(j).filter(n => n !== o.dataset.cbOff).join(", ") || null }, o.dataset.cbOff + " taken off " + j._number + "."); return; }
+  const w = ev.target.closest && ev.target.closest("[data-cb-wo]");
+  if(w){ workOrder(w.dataset.cbWo); return; }
+}, true);
+document.addEventListener("change", ev => {
+  const s = ev.target.closest && ev.target.closest("[data-cb-lead]");
+  if(s){ const j = (S.jobs || []).find(x => x._id === s.dataset.cbLead); if(j) cbSave(j._id, { "Crew Lead": s.value || null }, (s.value ? s.value + " leads " : "No lead on ") + j._number + "."); return; }
+  const t = ev.target.closest && ev.target.closest("[data-cb-time]");
+  if(t){ const v = t.value.trim(); if(v === t.dataset.was) return;
+    if(v && !/^(1[0-2]|0?[1-9]):[0-5]\d ?(am|pm)$|^([01]?\d|2[0-3]):[0-5]\d$/i.test(v)){ toast("Write the time like 6:30 AM or 14:00.", "bad"); t.value = t.dataset.was; return; }
+    const j = (S.jobs || []).find(x => x._id === t.dataset.cbj); if(j) cbSave(j._id, { [t.dataset.cbTime]: v ? v.toUpperCase() : null }, t.dataset.cbTime + " on " + j._number + " set."); }
+});
+document.addEventListener("dragstart", ev => { const p = ev.target.closest && ev.target.closest("[data-cb-person]"); if(!p) return; ev.dataTransfer.setData("text/plain", p.dataset.cbPerson); ev.dataTransfer.effectAllowed = "copy"; });
+document.addEventListener("dragover", ev => { const z = ev.target.closest && ev.target.closest("[data-cb-drop]"); if(!z) return; ev.preventDefault(); z.classList.add("drop"); });
+document.addEventListener("dragleave", ev => { const z = ev.target.closest && ev.target.closest("[data-cb-drop]"); if(z && !z.contains(ev.relatedTarget)) z.classList.remove("drop"); });
+document.addEventListener("drop", ev => { const z = ev.target.closest && ev.target.closest("[data-cb-drop]"); if(!z) return; ev.preventDefault(); z.classList.remove("drop"); cbAdd(z.dataset.cbDrop, ev.dataTransfer.getData("text/plain")); });
+
+/* A one-page A&M work order, the same boxes as Craig's Work Order sheet, to
+   print or save as a PDF for the crew lead. */
+function workOrder(id){
+  const j = (S.jobs || []).find(x => x._id === id); if(!j) return;
+  const v = k => E(F(j[k]) || "");
+  const row = (a, b) => '<tr><th>' + a + '</th><td>' + (b || '<span class="no">Not set in JobTread</span>') + '</td></tr>';
+  const html = '<!doctype html><html lang="en-CA"><head><meta charset="utf-8"><title>' + E(j._number) + ' - Work order - ' + iso(new Date()) + '</title><style>' +
+    'body{font-family:Arial,Helvetica,sans-serif;color:#1a1917;margin:32px;font-size:13px}h1{font-size:22px;margin:0}h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#329dbb;margin:22px 0 6px;border-bottom:2px solid #329dbb;padding-bottom:4px}' +
+    '.top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #1a1917;padding-bottom:10px}.am{font-size:26px;font-weight:800}.am b{color:#329dbb}table{width:100%;border-collapse:collapse}th{text-align:left;width:32%;padding:6px 8px;background:#f2f2f0;vertical-align:top}td{padding:6px 8px;border-bottom:1px solid #ddd}.no{color:#a33}.foot{margin-top:28px;font-size:11px;color:#666}@media print{body{margin:14mm}}</style></head><body>' +
+    '<div class="top"><div><div class="am">A<b>&amp;</b>M</div><div>A&amp;M Abatement Services Ltd.</div></div><div style="text-align:right"><h1>Work order</h1><div>' + E(j._number) + ' · printed ' + iso(new Date()) + '</div></div></div>' +
+    '<h2>Job</h2><table>' + row("Job", E(j._number + " " + j._name)) + row("Site address", E(j._addr)) + row("Client", E(j._cust)) + row("Job type", E(types(j).join(", "))) + row("Risk level", v("Risk Level")) + row("Project manager", E(pm(j))) + '</table>' +
+    '<h2>When and who</h2><table>' + row("Start date", E(showDate(startOf(j)))) + row("Expected days of work", v("Estimated Days of Work")) + row("Shop start time", v("Shop Start Time")) + row("Site start time", v("Site Start Time")) +
+      row("Crew lead", E(leadOf(j))) + row("Crew", E(crewOf(j).join(", "))) + row("People required", v("Number of Guys Required")) + '</table>' +
+    '<h2>Getting in</h2><table>' + row("Site contact phone", v("Site Contact Phone Number")) + row("Site access", v("Site Access Notes")) + row("Entry code", F(j["Entry Code"]) ? "On file in JobTread, ask the PM" : "") + '</table>' +
+    '<h2>Scope</h2><table>' + row("Notes", v("Notes")) + row("NOP filed", E(showWhen(F(j["NOP Filed Date and Time"]) || ""))) + '</table>' +
+    '<p class="foot">From JobTread through the A&amp;M command centre. Change anything here in JobTread, not on paper. Safety paperwork for this job is in SiteDocs; site photos go in Encircle.</p>' +
+    '<script>window.onload=function(){window.print()}<\/script></body></html>';
+  const w = window.open("", "_blank"); if(!w){ toast("Your browser blocked the new window. Allow pop-ups for this site and press Work order again.", "bad"); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
+/* ---------- Settings, Connections: the one-time JobTread set-up (admins) ---------- */
+const SU = { data:null, err:null, last:null };
+function suCall(body){
+  return fetch("/api/setup", body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
+    .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || "The app answered " + r.status + "." }; return b; });
+}
+function setupCard(){
+  if(!SU.data && !SU.err){ suCall().then(d => { SU.data = d; render(); }).catch(e => { SU.err = e; render(); }); }
+  let h = '<div class="card"><h2><span class="lamp' + (SU.data && !SU.data.missing && SU.data.billing.loaded ? " on" : "") + '"></span>JobTread set-up</h2>';
+  if(SU.err) return h + '<div class="state err">' + E(errCopy(SU.err)) + '</div></div>';
+  if(!SU.data) return h + wait("JobTread's fields") + '</div>';
+  const d = SU.data;
+  h += '<p class="lede">Twelve fields the app needs in JobTread: eight billing rules on each customer, and the crew lead, crew and start times on each job. ' +
+    (d.missing ? '<b>' + d.missing + ' of 12 are missing.</b>' : 'All twelve are there.') + '</p>';
+  if(d.missing) h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" data-su="fields">Set up billing and crew fields</button></div>';
+  if(SU.last && SU.last.noRight) h += '<div class="state wait" style="margin-bottom:10px">JobTread does not let the app\'s key add fields. Add these by hand in JobTread, under Settings, Custom Fields, with the names exactly as written, then press Check again: ' +
+    E(d.fields.filter(f => !f.exists).map(f => f.name + " (" + f.on + ")").join(", ")) + '. <button class="btn ghost" data-su="check">Check again</button></div>';
+  h += '<p class="lede" style="margin-top:6px">Billing rules from Craig\'s sheet: ' + d.billing.rules + ' customer records ready. ' +
+    (d.billing.loaded ? 'Loaded ' + E(showWhen(d.billing.loaded.at)) + ' by ' + E(d.billing.loaded.by) + ' (' + d.billing.loaded.customers + ' written' + (d.billing.loaded.failed ? ', ' + d.billing.loaded.failed + ' failed' : '') + ').' : 'Not loaded yet.') + '</p>' +
+    (!d.missing ? '<button class="btn' + (d.billing.loaded ? ' ghost' : '') + '" data-su="billing">' + (d.billing.loaded ? 'Load them again' : 'Load billing rules') + '</button>' : '<p class="sm">Load billing rules appears once the fields are there.</p>');
+  if(SU.last && SU.last.failed && SU.last.failed.length && !SU.last.noRight) h += '<div class="state err" style="margin-top:10px">' + E(SU.last.failed.slice(0, 5).map(f => (f.customer || f.field) + ": " + f.why).join(" · ")) + '</div>';
+  return h + '</div>';
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-su]"); if(!t) return;
+  const act = t.dataset.su;
+  if(act === "check"){ SU.data = null; SU.last = null; render(); return; }
+  if(act === "billing" && !confirm("Write the billing rules from Craig's sheet onto " + (SU.data ? SU.data.billing.rules : "the") + " JobTread customers? Anything already in those fields is replaced. It is logged under your name.")) return;
+  t.classList.add("is-busy");
+  suCall({ action: act }).then(r => {
+    SU.last = r;
+    if(act === "fields") toast(r.added && r.added.length ? plural(r.added.length, "field") + " added to JobTread." : r.noRight ? "JobTread did not allow it. The list to add by hand is below." : "Nothing needed adding.", r.noRight ? "bad" : "");
+    else { toast(plural((r.done || []).length, "customer") + " given their billing rules." + (r.failed && r.failed.length ? " " + r.failed.length + " failed." : ""), r.failed && r.failed.length ? "bad" : ""); api("billing", true).then(b => { S.billing = b; render(); }).catch(() => {}); }
+    SU.data = null; render();
+  }).catch(e => { t.classList.remove("is-busy"); toast(errCopy(e), "bad"); });
 });
 
 /* ---------- the command centre walkthrough ----------
