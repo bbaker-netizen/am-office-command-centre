@@ -4248,7 +4248,7 @@ function driveAdminCard(){
   const d = DRV.st;
   return '<div class="card"><h2><span class="lamp' + (d && d.ready ? " on" : "") + '"></span>Google Drive</h2><p class="lede">' +
     (d && d.ready ? 'Ready. Each person connects their own A&amp;M Google account under My account, read only. Claude and the job panel then read Drive as that person, so nobody sees a file they could not open in Drive.' :
-      'Needs, in Netlify: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (the same ones as the robots\' mailbox) and AUTH_SECRET. In Google Cloud: switch on the Google Drive API, and add ' + E(location.origin) + '/api/drive?action=callback as an authorized redirect address.') + '</p></div>';
+      'Not ready: Netlify is missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET, the same two the robots\' mailbox uses. In Google Cloud the Drive API must be on and ' + E(location.origin) + '/api/drive?action=callback added as a redirect address.') + '</p></div>';
 }
 function hrSlotCard(){
   return '<div class="card"><h2><span class="lamp"></span>HR system</h2><p class="lede">Not connected yet. Once A&amp;M chooses its HR system, it connects here so each person\'s tickets, training and expiry dates, and safety records, show on their account and on the scorecards. Nothing is kept here in the meantime.</p></div>';
