@@ -63,26 +63,37 @@ async function pave(query, grantKey) {
   return body;
 }
 
-async function readJobs(s) {
+/* JobTread refuses a request that asks for too much at once ("Request Entity
+   Too Large"): 50 jobs with 100 custom fields each was refused outright, which
+   is why the top bar said JobTread was not answering. So: 25 jobs a page, up to
+   20 fields each (the most any A&M job has is about 16), and no more than about
+   seven seconds of reading per call, well inside Netlify's limit. With 200 and
+   more jobs that means the page asks again with the nextPage it is handed and
+   adds the rest as they arrive. */
+async function readJobs(s, startPage) {
   const c = (await s.get("jobtread-key", { type: "json" })) || {};
   if (!c.grantKey || !c.organizationId) {
     const e = new Error("JobTread is not connected yet. An admin connects it in Settings, Connections.");
     e.status = 409; throw e;
   }
-  const nodes = []; let total = null, page = null, guard = 0;
+  const nodes = []; let total = null, page = startPage || null, guard = 0;
+  const t0 = Date.now();
   do {
-    const args = { size: 50 }; if (page) args.page = page;
+    const args = { size: 25 }; if (page) args.page = page;
     const res = await pave({ organization: { $: { id: c.organizationId }, jobs: { $: args, count: {}, nextPage: {}, nodes: {
       id: {}, name: {}, number: {}, createdAt: {}, closedOn: {},
       location: { address: {}, account: { name: {} } },
-      customFieldValues: { $: { size: 100 }, nodes: { value: {}, customField: { name: {} } } }
+      customFieldValues: { $: { size: 20 }, nodes: { value: {}, customField: { name: {} } } }
     } } } }, c.grantKey);
     const jb = res && res.organization && res.organization.jobs;
     if (!jb) throw new Error("JobTread did not return a job list.");
     nodes.push(...(jb.nodes || []));
     if (total === null && typeof jb.count === "number") total = jb.count;
     page = jb.nextPage || null;
-  } while (page && ++guard < 100);
+  } while (page && ++guard < 100 && Date.now() - t0 < 7000);
+  /* A follow-on call only carries more jobs. */
+  if (startPage) return { nodes, total, nextPage: page };
+  const nextPage = page;
 
   const orders = []; page = null; guard = 0;
   do {
@@ -96,7 +107,7 @@ async function readJobs(s) {
     page = d.nextPage || null;
   } while (page && ++guard < 100);
 
-  return { nodes, total, orders };
+  return { nodes, total, orders, nextPage };
 }
 
 /* Buying: purchase orders and supplier paperwork from JobTread, bills and
@@ -249,6 +260,7 @@ export default async (req) => {
 
   try {
     if (part === "me") return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, claude: !!u.claude, today: localDay() });
+    if (part === "jobs" && url.searchParams.get("page")) return json(await readJobs(s, url.searchParams.get("page")));
     if (part === "jobs") return json(await cached(s, "jobs", () => readJobs(s), fresh));
     if (part === "money") return json(await cached(s, "money", () => readMoney(), fresh));
     if (part === "inventory") return json(await cached(s, "inventory", () => readInventory(s), fresh));

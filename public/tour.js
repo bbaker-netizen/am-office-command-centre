@@ -67,48 +67,48 @@
       {
         id: 'welcome', clip: '01-welcome', bookend: true,
         title: 'The shop lives here now',
-        body: 'This is where the shop lives now. Every machine, every roll of poly, and where all of it is right this minute. I will walk you through it, and it will take about three minutes. I am talking as we go, and the words are on screen too, so turn the sound off if you are somewhere you cannot use it. There is a stop button on every step and pressing it once keeps me quiet for the rest.'
+        body: 'Hi, and welcome to the shop! This is where every machine and every roll of poly lives, and you can see where all of it is right now. Let\'s take a quick walk through. It takes about three minutes. I\'ll talk as we go, and the words are on screen too, so if you\'re somewhere you can\'t use sound, just press Stop the voice and I\'ll stay quiet.'
       },
       {
         id: 'who', clip: '02-who', at: '#/', target: S.who,
         title: 'Your name goes on everything',
-        body: 'First, your name. Every scan and every return carries whoever was holding the phone, which is not about checking up on anybody. It is so that when something lands on the wrong job, and it will, somebody can find it and put it right in ten seconds instead of asking around all afternoon. Pick your name from the list. If it is not there, type it in.',
+        body: 'First up, your name. Every scan and every return carries the name of whoever\'s holding the phone. It\'s not about checking up on anyone. It\'s so that when something lands on the wrong job, and it happens, it takes ten seconds to find and fix instead of an afternoon of asking around. Pick your name from the list, or type it in if it\'s not there.',
         gate: { click: '.who-pick, #whoAdd' }
       },
       {
         id: 'mobilize', clip: '03-mobilize', at: '#/out', target: S.jobpick,
         title: 'Gear leaving the shop',
-        body: 'Gear leaving the shop starts here. Pick the job it is going to, and the camera opens straight away. Scan the code on the machine, or the card on the shelf edge, and it lands on the list. If a code will not read, there is a button to pick it off a list instead, and that is fine. It just gets marked, so the shop can see how much of the day never got scanned. Go ahead and add one thing.',
+        body: 'Gear heading out to a job starts here. Pick the job it\'s going to, and the camera opens right away. Scan the code on the machine, or the card on the shelf edge, and it pops onto the list. If a code won\'t read, there\'s a button to pick it from a list instead, and that\'s fine. It just gets marked, so the shop can see how much never got scanned. Go ahead and add one thing.',
         gate: { present: S.line }
       },
       {
         id: 'send', clip: '04-send', target: S.send,
         title: 'Nothing is on the job until you send it',
-        body: 'That list is what is going out. Nothing is on the job until you send it, so you can pull the whole pile, check it against the van, and then commit the lot in one go. Once you send it, every one of those items is against that job with your name and the time on it. Send it now.',
+        body: 'That list is what\'s going out. Nothing\'s on the job until you send it, so you can pull the whole pile, check it against the van, and send it all in one go. Once you do, every item is on that job with your name and the time. Go ahead and send it now.',
         gate: { click: S.send }
       },
       {
         id: 'teardown', clip: '05-teardown', atFn: () => '#/back?job=' + encodeURIComponent(practiceId()),
         target: S.outlist,
         title: 'The part that gets the gear home',
-        body: 'This is the part that gets the gear home. Open the job at tear down and you see everything still out on it. Tap things back as they go in the van and the list shrinks in front of you, so you know what is missing while you are still standing on the site. The last thing on the strike list is to sweep the closets, because that is where it always is. Tap one item back.',
+        body: 'This is the part that gets the gear home. Open the job at tear down and you\'ll see everything still out on it. Tap things back as they go in the van, and the list shrinks right in front of you, so you know what\'s missing while you\'re still on site. And sweep the closets last, because that\'s usually where it is! Tap one item back.',
         gate: { click: S.back, optional: true }
       },
       {
         id: 'transfer', clip: '06-transfer', at: '#/move', target: '.panel',
         title: 'Site to site is one action',
-        body: 'A machine going straight to the next job never has to come back through the shop. Scan it, pick the new job, done. It is one action, not a return and then a check out, and the cost picks up on the new job from that moment. If it is a negative air unit or a HEPA vacuum, the app will remind you it needs a fresh certificate on the new site before it runs.'
+        body: 'Moving a machine straight to the next job? It never has to come back through the shop. Scan it, pick the new job, and you\'re done. It\'s one step, not a return and then a check out, and the cost moves to the new job from that moment. If it\'s a negative air unit or a HEPA vacuum, the app will remind you it needs a fresh certificate on the new site before it runs.'
       },
       {
         id: 'find', clip: '07-find', at: '#/find', target: S.findbox,
         title: 'Where is it',
-        body: 'Twenty dehumidifiers and you need to know where all twenty are. Type a name, a number or a serial and it tells you where each one is, who took it and when. This is the bit JobTread cannot do, because it holds no equipment at all, so this screen is where that question gets answered from now on. Type something in and have a look.',
+        body: 'Twenty dehumidifiers, and you need to know where all twenty are? Type a name, a number or a serial, and it shows you where each one is, who took it, and when. JobTread doesn\'t track equipment at all, so this is the place to answer that question from now on. Type something in and have a look.',
         gate: { input: S.findbox }
       },
       {
         id: 'done', clip: '08-done', at: '#/', bookend: true,
-        title: 'That is the whole of it',
-        body: 'That is the whole of it. Out, back, moved, found. Everything you just did works with no signal, so a basement with no bars changes nothing; the phone holds it and sends it when you come up. If you are in the office there is a button top right that opens the jobs, the ordering and the certificates, with everything that gets set up once behind Settings. You can run this walkthrough again any time from Settings.'
+        title: 'That\'s it',
+        body: 'And that\'s it! Out, back, moved and found. Everything you just did works with no signal, so a basement with no bars is no problem. The phone holds onto it and sends it when you\'re back in range. If you\'re in the office, the button at the top right opens jobs, ordering and certificates, with the one-time setup behind Settings. You can run this walkthrough again any time from Settings. Thanks, and welcome aboard!'
       }
     ];
   }
@@ -163,14 +163,21 @@
      walkthrough opens on its own before anybody has touched anything. So the
      first clip is very often refused. That is normal, not an error: say so, put
      a Play button in front of them, and retry the moment they touch anything. */
+  let AMV = null;
+  try { fetch('/api/voice?action=status', { cache: 'no-store' }).then(r => r.json()).then(v => { AMV = v.take || null; }).catch(() => {}); } catch (e) {}
   function speak(clip) {
     stopAudio();
     if (muted || !clip) return;
     try {
-      audio = new Audio('tour/' + clip + '.mp3');
+      /* A natural voice recorded on Admin, Connections plays when there is one;
+         if it will not load, the clip that ships with the app plays instead. */
+      const custom = AMV && !speak.noCustom;
+      audio = new Audio(custom ? '/api/voice?clip=shop/' + clip + '&v=' + AMV : 'tour/' + clip + '.mp3');
+      if (custom) audio.onerror = () => { speak.noCustom = true; speak(clip); speak.noCustom = false; };
       audio.play().then(() => {
         if (blocked) { blocked = false; paint(); }
-      }).catch(() => {
+      }).catch(err => {
+        if (err && err.name && err.name !== 'NotAllowedError') return;
         if (!blocked) { blocked = true; paint(); }
       });
     } catch (e) {}

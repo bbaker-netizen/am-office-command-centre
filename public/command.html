@@ -787,7 +787,7 @@ function render(){
   $("main").innerHTML = html + footer();
   try{ afterRender(); }catch(e){}
   const n = S.jobs ? S.jobs.length : 0;
-  $("connlabel").textContent = S.jobs ? ("Live · " + n + " jobs" + (S.stamp ? " · " + new Date(S.stamp).toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit"}) : "")) : (S.jobsErr ? (S.jobsErr.code === "not_connected" ? "JobTread not connected" : "JobTread not answering") : "Reading");
+  $("connlabel").textContent = S.jobs && S.jobsMore ? ("Reading jobs · " + n + " of " + (S.jobTotal || "?")) : S.jobs ? ("Live · " + n + " jobs" + (S.stamp ? " · " + new Date(S.stamp).toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit"}) : "")) : (S.jobsErr ? (S.jobsErr.code === "not_connected" ? "JobTread not connected" : "JobTread not answering") : "Reading");
   /* When JobTread is down or not connected, the label says why and, for an admin, opens Connections. */
   const cl = $("connlabel"); cl.title = S.jobsErr ? errCopy(S.jobsErr) : "";
   cl.style.cursor = S.jobsErr && ME.admin ? "pointer" : ""; cl.style.textDecoration = S.jobsErr && ME.admin ? "underline" : "";
@@ -1223,10 +1223,23 @@ function api(part, fresh){
 }
 function appLoad(fresh){
   const waits = [];
-  waits.push(api("jobs", fresh).then(d => {
-    S.jobs = (d.nodes || []).map(flat); S.jobTotal = d.total; S.stamp = d.storedAt;
-    S.jobsShort = d.total != null && (d.nodes || []).length < d.total;
-    S.orders = d.orders || []; S.jobsErr = S.ordersErr = null; render();
+  /* The first answer carries up to about seven seconds' worth of jobs. If
+     there are more, keep asking with the nextPage it hands back, and show the
+     list growing as it comes. */
+  waits.push(api("jobs", fresh).then(async d => {
+    let rows = d.nodes || [], next = d.nextPage, guard = 0;
+    const show = () => {
+      S.jobs = rows.map(flat); S.jobTotal = d.total; S.stamp = d.storedAt;
+      S.jobsShort = d.total != null && rows.length < d.total; S.jobsMore = !!next;
+      S.orders = d.orders || []; S.jobsErr = S.ordersErr = null; render();
+    };
+    show();
+    while(next && guard++ < 30){
+      const r = await fetch("/api/command?part=jobs&page=" + encodeURIComponent(next), { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" });
+      const b = await r.json().catch(() => ({}));
+      if(!r.ok) throw { code: b.error || ("http_" + r.status), message: b.message || ("The app answered " + r.status + "."), status: r.status };
+      rows = rows.concat(b.nodes || []); next = b.nextPage || null; show();
+    }
   }).catch(e => { S.jobsErr = S.ordersErr = e; render(); }));
   if(CFG.qb) waits.push(api("money", fresh).then(d => {
     S.M.bs = d.bs; S.M.ar = d.ar; S.M.ap = d.ap; S.M.pl = d.pl;
@@ -1299,6 +1312,7 @@ async function startApp(){
   /* Admins: Settings beside Tour opens Admin, Connections, where JobTread and QuickBooks are connected. */
   if(me.admin){ const set = document.createElement("button"); set.className = "refresh"; set.textContent = "Settings"; set.title = "Connect JobTread and QuickBooks"; set.onclick = () => go("connections"); $("refresh").parentNode.insertBefore(set, $("refresh").parentNode.firstChild); sizeTop(); }
   if(me.claude) CLAUDE.mount();
+  fetch("/api/voice?action=status", { cache:"no-store" }).then(r => r.json()).then(v => { window.AMVOICE = v.take || null; CN.voice = v; }).catch(() => {});
   const h = (location.hash || "").replace("#", "");
   current = CFG.tabs.includes(h) ? h : (CFG.tabs.includes(store("tab." + ROLE)) ? store("tab." + ROLE) : "overview");
   render();
@@ -1447,6 +1461,7 @@ function jobsReady(){
   return null;
 }
 function shortWarn(){
+  if(S.jobsShort && S.jobsMore) return '<div class="state loading" style="margin-bottom:14px"><span class="dots">Still reading jobs from JobTread: ' + S.jobs.length + ' of ' + S.jobTotal + ' so far. The counts fill in as they arrive</span></div>';
   return S.jobsShort ? '<div class="state wait" style="margin-bottom:14px">Only ' + S.jobs.length + ' of ' + S.jobTotal + ' jobs came back from JobTread, so every count here is short. Press Refresh.</div>' : '';
 }
 
@@ -3399,10 +3414,45 @@ VIEWS.connections = {
        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-cn-qb>' + (q.connected ? "Connect again" : "Connect QuickBooks") + '</button>' + (q.connected ? '<button class="btn ghost" data-cn-qbforget>Disconnect</button>' : '') + '</div>') + '</div>';
     if(CN.mail) h += '<div class="card"><h2><span class="lamp' + (CN.mail.connected ? " on" : "") + '"></span>Robots\' mailbox</h2><p class="lede">' + (CN.mail.connected ? "Connected to " + E(CN.mail.email || CN.mail.mailbox || "") + "." : "Not connected. The assistants' emails send from it.") + '</p>' + (CN.mail.connected ? '' : '<button class="btn" data-mail-connect>Connect the mailbox</button>') + '</div>';
     if(ME.claude) h += '<div class="card"><h2><span class="lamp' + (CN.claude && CN.claude.ready ? " on" : "") + '"></span>Ask Claude</h2><p class="lede">' + (CN.claude && CN.claude.ready ? "Ready. People with Can ask Claude ticked see the Claude button in the corner of every page." : "Needs ANTHROPIC_API_KEY in Netlify, from A&amp;M's own account at console.anthropic.com. Until then the button still offers Continue in my own Claude.") + '</p></div>';
+    const v = CN.voice;
+    if(v) h += '<div class="card" data-cn-form><h2><span class="lamp' + (v.take ? " on" : "") + '"></span>Tour voice</h2>' +
+      (v.take ? '<p class="lede">The walkthroughs use the <b>' + E(v.voice) + '</b> voice, recorded ' + E(showWhen(v.recordedAt)) + (v.recordedBy ? ' by ' + E(v.recordedBy) : '') + '.</p>' : '<p class="lede">The walkthroughs use the built-in voice. Record them once in a natural, welcoming voice and every phone and computer plays that instead.</p>') +
+      (v.ready ? '<label class="fld"><b>Voice</b><select id="cnVoice">' + v.voices.map(x => '<option' + (x === (v.voice || "coral") ? " selected" : "") + '>' + E(x) + '</option>').join("") + '</select></label>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" data-cn-vsample>Hear a sample</button><button class="btn" data-cn-vrec>Record both tours</button>' + (v.take ? '<button class="btn ghost" data-cn-vbuiltin>Use the built-in voice</button>' : '') + '</div>' +
+        '<div id="cnVprog" class="sm" style="margin-top:8px"></div>'
+      : '<div class="state wait">Needs OPENAI_API_KEY in Netlify, from an OpenAI account at platform.openai.com. Recording both tours once costs well under a dollar.</div>') + '</div>';
     h += '</div>';
     return h;
   }
 };
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-cn-vsample],[data-cn-vrec],[data-cn-vbuiltin]"); if(!t) return;
+  const vcall = body => fetch("/api/voice", { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) });
+  const voice = ($("cnVoice") || {}).value || "coral", prog = $("cnVprog");
+  if(t.dataset.cnVsample !== undefined){
+    t.classList.add("is-busy");
+    vcall({ action:"sample", voice }).then(async r => { t.classList.remove("is-busy"); if(!r.ok){ const b = await r.json().catch(() => ({})); throw new Error(b.message || "No sample came back."); } const a = new Audio(URL.createObjectURL(await r.blob())); a.play(); })
+      .catch(e => { t.classList.remove("is-busy"); toast(e.message, "bad"); });
+    return;
+  }
+  if(t.dataset.cnVbuiltin !== undefined){ vcall({ action:"builtin" }).then(() => { window.AMVOICE = null; CN.voice.take = null; toast("The tours are back on the built-in voice."); render(); }); return; }
+  if(t.dataset.cnVrec !== undefined){
+    t.disabled = true; t.classList.add("is-busy");
+    (async () => {
+      try{
+        const b = await (await vcall({ action:"begin", voice })).json(); if(!b.clips) throw new Error(b.message || "Could not start.");
+        for(let k = 0; k < b.clips.length; k++){
+          if(prog) prog.innerHTML = '<div class="track" style="height:6px;background:var(--rule-soft);border-radius:3px;overflow:hidden;margin-bottom:4px"><span class="fill" style="display:block;height:100%;background:var(--cyan);width:' + Math.round(k / b.clips.length * 100) + '%;transition:width .3s"></span></div>Recording line ' + (k + 1) + ' of ' + b.clips.length + '…';
+          let ok = false;
+          for(let tries = 0; tries < 3 && !ok; tries++){ const r = await vcall({ action:"record", take:b.take, clip:b.clips[k] }); if(r.ok) ok = true; else if(tries === 2){ const e = await r.json().catch(() => ({})); throw new Error(e.message || "A line did not record."); } }
+        }
+        const p = await vcall({ action:"publish", take:b.take }); if(!p.ok){ const e = await p.json().catch(() => ({})); throw new Error(e.message || "Could not switch over."); }
+        window.AMVOICE = b.take; CN.voice = Object.assign({}, CN.voice, { take:b.take, voice, recordedAt:new Date().toISOString(), recordedBy:ME.name });
+        toast("Both tours now use the " + voice + " voice. Press Tour to hear it."); render();
+      }catch(e){ toast(e.message, "bad"); t.disabled = false; t.classList.remove("is-busy"); if(prog) prog.textContent = ""; }
+    })();
+  }
+});
 document.addEventListener("click", ev => {
   const t = ev.target.closest && ev.target.closest("[data-cn-jt],[data-cn-jtforget],[data-cn-qb],[data-cn-qbforget]"); if(!t) return;
   if(t.dataset.cnJt !== undefined){
@@ -3444,58 +3494,58 @@ const CCTOUR = (function(){
     return [
       { id:"welcome", bookend:true, at:"overview", clips:["welcome"],
         title:"The whole company on one screen",
-        body: name + " is the A&M Office Command Centre. It reads JobTread, QuickBooks and the shop, and puts what needs a decision in one place. I will take you round it in about three minutes. I am talking as we go and the words are on screen too, so turn the sound off if you need to. Press Stop the voice once and I stay quiet." },
+        body: "Hi" + (S.meName ? " " + S.meName : "") + ", and welcome" + " to the A&M Office Command Centre! I'm really glad you're here. This is where JobTread, QuickBooks and the shop come together, so everything that needs a decision is in one place. Let's take a quick look around. It only takes about three minutes. I'll talk as we go, and the words are on screen too, so if you'd rather read, just press Stop the voice." },
       { id:"sections", target:"#secs", at:"overview",
         title:"Sections across the top",
         clips:["sections"].concat(has("Office") ? ["sections-office"] : [], has("Field") ? ["sections-field"] : [], has("Assistants") ? ["sections-assistants"] : [], has("Admin") ? ["sections-admin"] : [], ["sections-red", has("Field") ? "press-field" : "press-office"]),
-        body:"These big buttons are the sections of the business." + (has("Office") ? " Office is estimating, dispatch, money, payroll, buying and records." : "") + (has("Field") ? " Field is projects, sites, closeout, equipment and the shop." : "") + (has("Assistants") ? " Assistants is the emails the AI assistants have written for you." : "") + (has("Admin") ? " Admin is where you add people and set what they see and can do." : "") + " A red number on a button means something in that section needs a decision. Press " + fieldOrOffice + " now.",
+        body:"These big buttons across the top are the sections of the business." + (has("Office") ? " " + "Office has estimating, dispatch, money, payroll, buying and records." : "") + (has("Field") ? " " + "Field has projects, sites, closeout, equipment and the shop." : "") + (has("Assistants") ? " " + "Assistants holds the emails the AI assistants have written for you." : "") + (has("Admin") ? " " + "And Admin is where you add people, and choose what they can see and do." : "") + " " + "If you see a red number on a button, something in that section needs you." + " Go ahead and press " + fieldOrOffice + ".",
         gate:{ click:"#secs .sec" } },
       { id:"pages", clips:["pages"], target:"#tabs",
         title:"The pages in that section",
-        body:"The row underneath holds the pages of the section you are in. Each page carries its own number when something on it needs you. Each section remembers the page you were last on, so coming back puts you where you left off." },
+        body:"Nice! The row underneath shows the pages in that section. Each page gets its own number when something on it needs you. And each section remembers where you were, so you'll always pick up right where you left off." },
       { id:"shop", clips:["shop"], target:'[data-tour="shop"]', at:"projects",
         title:"The shop is part of Field",
-        body:"Shop opens the shop screens: gear going out to a job and coming back, transfers between sites, the shelf, ordering and filter certificates. It is the same app, with its own sign-in: your name and four-digit PIN, as always. The Command centre button on those screens brings you straight back here." },
+        body:"Shop opens the shop screens: gear going out to a job and coming back, transfers between sites, the shelf, ordering and filter certificates. It's the same app, and you sign in there with your name and four-digit PIN, just like always. The Command centre button brings you right back here." },
       { id:"postmortem", clips:["postmortem"], target:'[data-tour="page"]', at:"postmortem",
         title:"Post mortems",
-        body:"When a job is finished, Craig, Jen or Amir runs a post mortem here with everyone who worked on it. Four perspectives, financial, operational, client, and employees and subcontractors, each scored 1 to 10. The plan and the actual figures come from JobTread and QuickBooks, and every commitment gets an owner and a date." },
+        body:"When a job wraps up, Craig, Jen or Amir runs a post mortem here with everyone who worked on it. We look at it four ways: financial, operational, the client, and our employees and subcontractors, each scored from 1 to 10. The plan and the actual numbers come straight from JobTread and QuickBooks, and every commitment gets an owner and a date." },
       { id:"decisions", clips:["decisions"], target:'[data-tour="decisions"]', at:"overview",
         title:"What needs a decision",
-        body:"This list is the reason the command centre exists. Every line is worked out live from the systems, worst first. Now means today, Soon means this week. Fix the cause in JobTread or QuickBooks and the line clears itself. The button on the right of each line takes you to the page behind it." },
+        body:"This list is really the heart of the command centre. Every line is worked out live, with the most urgent at the top. Now means today, and Soon means this week. Once the cause is fixed in JobTread or QuickBooks, the line clears itself. The button on the right takes you straight to the page behind it." },
       { id:"numbers", clips:["numbers"], target:'[data-tour="numbers"]',
         title:"The numbers that matter",
-        body:"These are the few numbers worth knowing every morning. Press any one of them to go to the page that explains it. All money is Canadian dollars, read from QuickBooks." },
+        body:"These are the handful of numbers worth a glance every morning. Press any one to see the page that explains it. All the money is in Canadian dollars, read from QuickBooks." },
       { id:"flow", clips:["flow"], target:'[data-tour="flow"]',
         title:"Every job, left to right",
-        body:"A job moves through these seven steps, from new lead to closing out. Each number is how many jobs are sitting at that step right now. Press one of the steps to see the jobs behind it.",
+        body:"Every job moves through these seven steps, from new lead all the way to closing out. Each number shows how many jobs are sitting at that step right now. Try pressing one of the steps to see the jobs behind it.",
         gate:{ click:'[data-tour="flow"] [data-list]' } },
       { id:"drawer", clips:["drawer"], target:"#drawer", keepDrawer:true,
         title:"The jobs open at the side",
-        body:"The list opens over here. Press any job to see everything on it, what is missing in JobTread, and the button that opens it in JobTread. If your account can make changes, you can change the status, project manager, start date and notice dates right here, and it saves to JobTread under your name." },
+        body:"There you go, the list opens right here at the side. Press any job to see everything about it, what's missing in JobTread, and a button to open it there. If your account can make changes, you can update the status, project manager, start date and notice dates right here, and it saves to JobTread under your name." },
       { id:"find", clips:["find"], target:'[data-tour="find"]',
         title:"Find any job",
-        body:"Type a job number, a client, a name or part of an address and the job comes up as you type. Press it to open it at the side." },
+        body:"Looking for a particular job? Just start typing a job number, a client, a name or part of an address, and it pops up as you type. Press it to open it at the side." },
       { id:"tosend", clips:["tosend"], target:'[data-tour="page"]', at:"drafts",
         title:"Emails waiting for a person",
-        body:"The AI assistants check the inboxes, JobTread and QuickBooks every morning and write the emails that need to go: quote follow-ups, payment reminders, requests for missing paperwork. They never send anything themselves. Open one, read it, then press Send or Discard. A client who replies gets estimating at A&M, not a robot." },
+        body:"Every morning the AI assistants check the inboxes, JobTread and QuickBooks, and write the emails that need to go out: quote follow-ups, payment reminders and requests for missing paperwork. They never send anything on their own. Just open one, read it over, and press Send or Discard. If a client replies, it goes to estimating at A&M, not to a robot." },
       { id:"people", clips:["people"], target:'[data-tour="people"]', at:"people",
         title:"People and access",
-        body:"You are an admin, so this page is yours. Each person gets an account with their work email, what they are responsible for, the areas they see, and whether they can only look, make changes, or also manage people. Adding someone makes a temporary password that works once; they choose their own the first time they sign in. Switch someone off and they are out at their next click." },
+        body:"Since you're an admin, this page is yours. Everyone gets an account with their work email, what they look after, the areas they can see, and whether they can just look, make changes, or manage people too. When you add someone, they get a temporary password that works once, and they choose their own the first time they sign in. If you switch someone off, they're signed out at their very next click." },
       { id:"payroll", clips:["payroll"], target:'[data-tour="page"]', at:"payroll",
         title:"Payroll",
-        body:"Payroll splits each person's hours into the cost of sales buckets the bookkeeper posts to, each service line in Edmonton or Calgary, and keeps shop and office time in general payroll. Download the report for her, or type the pay costs and post the journal entry to QuickBooks once the period is closed." },
+        body:"Payroll takes everyone's hours and splits them into the buckets the bookkeeper posts to, each service line in Edmonton or Calgary, while shop and office time stays in general payroll. You can download the report for her, or type in the pay costs and post the journal entry to QuickBooks once the period closes." },
       { id:"connections", clips:["connections"], target:'[data-tour="page"]', at:"connections",
         title:"Connections",
-        body:"Settings brings you here. This is where JobTread and QuickBooks are connected for the whole company. Paste a JobTread key and the app tests it before it saves. Connect QuickBooks takes you to Intuit to sign in, and brings you straight back." },
+        body:"Settings brings you here. This is where JobTread and QuickBooks are connected for the whole company. Paste in a JobTread key and the app checks it before saving. Press Connect QuickBooks, sign in with Intuit, and you'll land right back here." },
       { id:"claude", clips:["claude"], target:"#cBub",
         title:"Ask Claude",
-        body:"This round button is Claude. Press it and ask about whatever page you have open: what a number means, what to deal with first, or where to fix it. Drag it anywhere on the screen and it stays there. If you have your own Claude account, Continue in my own Claude carries the question over." },
+        body:"And this little round button is Claude. Press it any time to ask about the page you're on: what a number means, what to tackle first, or where to fix something. You can drag it anywhere on the screen and it'll stay put. And if you have your own Claude account, Continue in my own Claude carries the conversation over." },
       { id:"tools", clips:["tools"], target:'[data-tour="tools"]', at:"overview",
         title:"Live, Refresh, My account and Sign out",
-        body:"The dot tells you the numbers are live and when they were last read. They update every few minutes on their own, and Refresh reads them again now. My account shows what you can see and do, and is where you change your password. Sign out signs you out of the command centre on this device. If it sits unused for a while, it asks for your password again." },
+        body:"Up here, the dot shows the numbers are live and when they were last read. They refresh on their own every few minutes, and Refresh reads them again right now. My account shows what you can see and do, and it's where you change your password. Sign out signs you out on this device, and if it sits unused for a while, it'll ask for your password again." },
       { id:"done", clips:["done"], bookend:true, at:"overview",
-        title:"That is the whole of it",
-        body:"That is the command centre. Sections across the top, pages underneath, what needs a decision first. Nothing here sends an email or changes a job unless a person presses the button. You can run this tour again any time with the Tour button at the top." }
+        title:"That's the tour",
+        body:"And that's the whole tour! Sections across the top, pages underneath, and what needs a decision first. Nothing here sends an email or changes a job unless a person presses the button. You can take this tour again any time with the Tour button at the top. Enjoy!" }
     ];
   }
 
@@ -3530,9 +3580,11 @@ const CCTOUR = (function(){
   function playNext(fallbackText){
     if(muted || !queue.length) return;
     const clip = queue[0];
-    player = new Audio("tour/cc/" + clip + ".mp3");
+    const custom = window.AMVOICE && !playNext.noCustom;
+    player = new Audio(custom ? "/api/voice?clip=cc/" + clip + "&v=" + window.AMVOICE : "tour/cc/" + clip + ".mp3");
     player.onended = () => { queue.shift(); playNext(fallbackText); };
-    player.onerror = () => { queue = []; player = null; sayWithDevice(fallbackText); };
+    /* A recorded clip that will not load falls back to the built-in clip, then to the device's voice. */
+    player.onerror = () => { if(custom){ playNext.noCustom = true; playNext(fallbackText); playNext.noCustom = false; return; } queue = []; player = null; sayWithDevice(fallbackText); };
     const p = player.play();
     if(p && p.catch) p.catch(err => {
       if(err && err.name === "NotAllowedError"){
