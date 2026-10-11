@@ -336,9 +336,9 @@ async function readField(s) {
   do {
     const args = { size: 100, where: ["startedAt", ">=", since] }; if (page) args.page = page;
     const res = await pave({ organization: { $: { id: c.organizationId }, timeEntries: { $: args, nextPage: {}, nodes: {
-      minutes: {}, startedAt: {}, endedAt: {}, type: {}, user: { name: {} }, job: { id: {} }, costItem: { name: {} } } } } }, c.grantKey);
+      minutes: {}, startedAt: {}, endedAt: {}, type: {}, isApproved: {}, user: { name: {} }, job: { id: {} }, costItem: { name: {} } } } } }, c.grantKey);
     const te = res.organization && res.organization.timeEntries; if (!te) break;
-    for (const n of te.nodes || []) entries.push({ m: n.minutes || 0, at: n.startedAt, end: n.endedAt, type: n.type || "", who: n.user && n.user.name, job: n.job && n.job.id, item: n.costItem && n.costItem.name });
+    for (const n of te.nodes || []) entries.push({ m: n.minutes || 0, at: n.startedAt, end: n.endedAt, type: n.type || "", ok: !!n.isApproved, who: n.user && n.user.name, job: n.job && n.job.id, item: n.costItem && n.costItem.name });
     page = te.nextPage || null;
   } while (page && ++guard < 40 && Date.now() - t0 < 7000);
   const logs = []; let lp = null; guard = 0;
