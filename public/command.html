@@ -4110,71 +4110,257 @@ VIEWS.clients = {
   }
 };
 
-/* ---------- scorecards (admins) ---------- */
-/* The numbers in each position profile's Key Performance Indicators that the
-   systems can measure today, for the monthly performance reviews agreed on
-   2026-10-09. The review conversation itself stays in the HR system. */
 function median(a){ if(!a.length) return null; const s = a.slice().sort((x, y) => x - y), m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
-function scoreRow(label, value, means, lvl){ return '<tr><td>' + E(label) + '</td><td class="r num">' + (lvl ? '<span class="tag ' + lvl + '">' + value + '</span>' : value) + '</td><td class="sm">' + E(means) + '</td></tr>'; }
-function scoreCard(title, sub, rows){ return '<div class="card" data-nofold><h2>' + E(title) + '</h2><p class="lede">' + E(sub) + '</p><div class="scroll"><table><thead><tr><th>Measure</th><th class="r">Now</th><th>From the position profile</th></tr></thead><tbody>' + rows.join("") + '</tbody></table></div></div>'; }
+/* ---------- scorecards, one per position profile (rebuilt 2026-10-10) ----------
+   Each card is one "Your Role at A&M" profile: its own KPIs, word for word,
+   with the profile's target and the live number beside it. Every KPI says
+   which kind it is, so nobody mistakes an estimate for a measurement:
+     measured  worked out from the systems against the exact target
+     estimate  a close stand-in, labelled as such
+     missing   nothing records it yet; the line names what would
+     review    belongs to the conversation and the HR system, not a dashboard */
+const SC = {
+  bizDays(a, b){ if(!a || !b) return null; let d = new Date(a), n = 0, g = 0; const e = new Date(b); while(d < e && g++ < 400){ d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); if(d.getDay() && d.getDay() !== 6) n++; } return n; },
+  pct: (a, b) => b ? Math.round(a / b * 100) : null,
+  monthsSinceApril(){ const n = new Date(), y = n.getMonth() >= 3 ? n.getFullYear() : n.getFullYear() - 1; return Math.max(1, (n - new Date(y, 3, 1)) / (30.44 * 86400000)); }
+};
+function scWinRate(){ const d90 = Date.now() - 90 * 86400000; const L = (S.orders || []).filter(o => o.issueDate && dOnly(o.issueDate) > d90 && ["approved","denied"].includes(o.status)); return L.length ? { v: SC.pct(L.filter(o => o.status === "approved").length, L.length), n: L.length } : null; }
+function scTurnaround(){ const d90 = Date.now() - 90 * 86400000, by = {};
+  (S.orders || []).filter(o => o.issueDate && o.job && dOnly(o.issueDate) > d90).forEach(o => { if(!by[o.job.id] || o.issueDate < by[o.job.id]) by[o.job.id] = o.issueDate; });
+  const v = Object.entries(by).map(([id, q]) => { const j = jobById(id), sv = j && F(j["Site Visit Date and Time"]); return sv ? SC.bizDays(dOnly(sv), dOnly(q)) : null; }).filter(x => x !== null && x >= 0);
+  return v.length ? { v: median(v), n: v.length } : null; }
+function scPipeline(){ if(!S.M || !S.M.pl) return null; const pend = (S.orders || []).filter(o => o.status === "pending").reduce((s, o) => s + (+o.price || 0), 0); const month = S.M.pl.income / SC.monthsSinceApril(); return month > 0 ? { v: Math.round(pend / month * 10) / 10, pend, month } : null; }
+function scRepeat(){ if(!S.jobs) return null; const since = Date.now() - 180 * 86400000; const J = S.jobs.filter(j => !isSpecial(j) && (j._custId || j._cust));
+  const recent = J.filter(j => new Date(j._created) > since); if(!recent.length) return null;
+  const rep = recent.filter(j => J.some(k => k !== j && (k._custId || k._cust) === (j._custId || j._cust) && new Date(k._created) < new Date(j._created)));
+  return { v: SC.pct(rep.length, recent.length), n: recent.length }; }
+function scLeadData(){ const L = live().filter(j => ["lead","est"].includes(stageOf(st(j))) && (daysSince(j._created) || 0) <= 45); if(!L.length) return null;
+  const ok = L.filter(j => types(j).length && F(j["Estimating branch"]) && F(j["Bid Type"])); return { v: SC.pct(ok.length, L.length), n: L.length }; }
+function scLogRate(filter){ if(!fieldOn()) return null; const since = Date.now() - 14 * 86400000, days = {};
+  S.field.entries.filter(e => e.m > 0 && new Date(e.at) > since).forEach(e => { const j = jobById(e.job); if(!j || isOverhead(j) || (filter && !filter(j))) return; days[e.job + "|" + dkey(e.at)] = 1; });
+  const k = Object.keys(days); if(!k.length) return null;
+  const logged = k.filter(x => { const [jb, dy] = x.split("|"); return S.field.logs.some(l => l.job === jb && l.date === dy); }).length;
+  return { v: SC.pct(logged, k.length), n: k.length, logged }; }
+function scOnSchedule(filter){ const L = live().filter(j => stageOf(st(j)) === "site" && startOf(j) && dur(j) !== null && (!filter || filter(j))); if(!L.length) return null;
+  const ok = L.filter(j => workDaysBetween(dOnly(startOf(j)), today()) <= Math.ceil(dur(j)) + 1); return { v: SC.pct(ok.length, L.length), n: L.length }; }
+function scDSO(){ if(!S.M || !S.M.ar) return null; const t = S.M.ar.tot, mid = { Current:15, "1-30":45, "31-60":75, "61-90":105, "91+":135 };
+  const all = BK.reduce((s, k) => s + Math.max(0, t[k]), 0); if(all <= 0) return null; return { v: Math.round(BK.reduce((s, k) => s + Math.max(0, t[k]) * mid[k], 0) / all) }; }
+function scPostMortems(name){ if(!S.jobs || !PM.list) return null; const since = Date.now() - 120 * 86400000;
+  const J = S.jobs.filter(j => (!name || pm(j) === name) && (st(j) === "Job Post Mortem" || (st(j) === "Closed Won" && j._closed && dOnly(j._closed) > since)));
+  if(!J.length) return null; const done = new Set((PM.list || []).filter(r => r.status === "finished").map(r => r.jobId));
+  return { v: SC.pct(J.filter(j => done.has(j._id)).length, J.length), n: J.length }; }
+function scSiteVisits(){ if(!fieldOn() || !S.people) return null; const sup = (S.people.people || []).filter(p => /superintendent/i.test(p.role)).map(p => p.name); if(!sup.length) return null;
+  const L = live().filter(j => stageOf(st(j)) === "site" && !isOverhead(j)); if(!L.length) return null; const wk = Date.now() - 7 * 86400000;
+  const ok = L.filter(j => S.field.entries.some(e => e.job === j._id && sup.includes(e.who) && new Date(e.at) > wk)); return { v: SC.pct(ok.length, L.length), n: L.length, who: sup.join(", ") }; }
+function scGearBack(){ if(!S.inv) return null; const c = (S.inv.jobs || []).filter(j => j.closed); if(!c.length) return null; const out = c.filter(j => j.machinesOut || j.shelfLinesOut).length; return { v: out, n: c.length }; }
+
+/* One KPI line. k: kind; r: result {v,...} or null; fmt: how to show v; good: v => true/false. */
+function kpiLine(name, target, kind, r, fmt, good, note){
+  let now = "", tag = "";
+  if(kind === "review"){ now = "In the review"; tag = '<span class="tag mute">Review and HR system</span>'; }
+  else if(kind === "missing"){ now = ""; tag = '<span class="tag mute">Not measured yet</span>'; }
+  else if(!r){ now = "n/a"; tag = '<span class="tag mute">No data yet</span>'; }
+  else { now = fmt(r); const g = good ? good(r.v) : null; tag = '<span class="tag ' + (g === null ? "mute" : g ? "clear" : "caution") + '">' + (g === null ? "" : g ? "On target" : "Off target") + (kind === "estimate" ? (g === null ? "Estimate" : ", estimate") : "") + '</span>'; }
+  return '<tr><td><b>' + E(name) + '</b><span class="sm">' + E(target) + '</span>' + (note ? '<span class="sm" style="color:var(--ink-3)">' + E(note) + '</span>' : '') + '</td><td class="r num">' + now + '</td><td>' + tag + '</td></tr>';
+}
+function profileCard(title, sub, lines){
+  return '<div class="card" data-nofold><h2>' + E(title) + '</h2><p class="lede">' + E(sub) + '</p><div class="scroll"><table><thead><tr><th>KPI and target, from the Mission Playbook</th><th class="r">Now</th><th></th></tr></thead><tbody>' + lines.join("") + '</tbody></table></div></div>';
+}
+const P = v => v + "%";
+/* ---------- Mission Playbook scorecards (2026-10-11) ----------
+   One card per person, from their own Mission Playbook (9 to 11 October 2026):
+   their KPIs and targets word for word, the live number beside each where the
+   systems can measure it. The nine site supervisors share one playbook table,
+   so they share one card with a line each. Vacant seats are listed at the end.
+   Kinds: measured, estimate (labelled), missing (names what would make it
+   measurable), review (the conversation and the HR system). */
+const firstTok = s => String(s || "").trim().toLowerCase().split(/\s+/)[0] || "";
+const lastTok = s => { const t = String(s || "").trim().toLowerCase().split(/\s+/); return t.length > 1 ? t[t.length - 1] : ""; };
+function samePerson(a, b){ if(!a || !b) return false; const fa = firstTok(a), fb = firstTok(b), la = lastTok(a), lb = lastTok(b); return fa === fb || (la && la.length > 3 && la === lb); }
+function clockName(full){ if(!fieldOn()) return null; const n = [...new Set(S.field.entries.map(e => e.who).filter(Boolean))]; return n.find(x => samePerson(full, x)) || null; }
+function pmJob(key){ return j => String(pm(j) || "").toLowerCase() === key.toLowerCase(); }
+function scToBill(filter){ return readyToBill().filter(j => !filter || filter(j)).length; }
+function scApproved(filter){ if(!fieldOn()) return null; const y = Date.now() - 86400000;
+  const L = S.field.entries.filter(e => e.m > 0 && new Date(e.at) < y && (!filter || (j => j && filter(j))(jobById(e.job)))); if(!L.length) return null;
+  return { v: SC.pct(L.filter(e => e.ok).length, L.length), n: L.length }; }
+function scCoded(){ if(!fieldOn()) return null; const L = S.field.entries.filter(e => e.m > 0); if(!L.length) return null; return { v: SC.pct(L.filter(e => e.job && e.item).length, L.length), n: L.length }; }
+function scOvertime(){ if(!fieldOn()) return null; const wk = Date.now() - 7 * 86400000; const ot = S.field.entries.filter(e => /over/i.test(e.type) && new Date(e.at) > wk).reduce((s, e) => s + e.m, 0); return { v: hrs(ot) }; }
+function scPMbig(filter){ if(!S.jobs || !PM.list) return null; const since = Date.now() - 120 * 86400000;
+  const J = S.jobs.filter(j => (!filter || filter(j)) && approvedFor(j._id) >= 10000 && (st(j) === "Job Post Mortem" || (st(j) === "Closed Won" && j._closed && dOnly(j._closed) > since)));
+  if(!J.length) return null; const done = new Set((PM.list || []).filter(r => r.status === "finished").map(r => r.jobId)); return { v: SC.pct(J.filter(j => done.has(j._id)).length, J.length), n: J.length }; }
+function scSiteVisitWithin(branch){ const L = (S.jobs || []).filter(j => !isSpecial(j) && (daysSince(j._created) || 999) <= 90 && F(j["Site Visit Date and Time"]) && (!branch || branch(j))); if(!L.length) return null;
+  const ok = L.filter(j => { const b = SC.bizDays(new Date(j._created), dOnly(F(j["Site Visit Date and Time"]))); return b !== null && b <= 5; }); return { v: SC.pct(ok.length, L.length), n: L.length }; }
+function scTurnaroundBranch(branch){ const d90 = Date.now() - 90 * 86400000, by = {};
+  (S.orders || []).filter(o => o.issueDate && o.job && dOnly(o.issueDate) > d90).forEach(o => { if(!by[o.job.id] || o.issueDate < by[o.job.id]) by[o.job.id] = o.issueDate; });
+  const v = Object.entries(by).map(([id, q]) => { const j = jobById(id); if(!j || (branch && !branch(j))) return null; const sv = F(j["Site Visit Date and Time"]); return sv ? SC.bizDays(dOnly(sv), dOnly(q)) : null; }).filter(x => x !== null && x >= 0);
+  return v.length ? { v: median(v), n: v.length } : null; }
+function scWinBranch(branch){ const d90 = Date.now() - 90 * 86400000; const L = (S.orders || []).filter(o => o.issueDate && dOnly(o.issueDate) > d90 && ["approved","denied"].includes(o.status) && (!branch || (j => j && branch(j))(jobById(o.job && o.job.id))));
+  return L.length ? { v: SC.pct(L.filter(o => o.status === "approved").length, L.length), n: L.length } : null; }
+function scNOP(){ const L = (S.jobs || []).filter(j => types(j).some(t => /asbestos/i.test(t)) && startOf(j) && (d => d !== null && d <= 0 && d > -60)(daysTo(startOf(j)))); if(!L.length) return null;
+  const ok = L.filter(j => { const f = F(j["NOP Filed Date and Time"]); return f && (dOnly(startOf(j)) - new Date(f)) >= 72 * 3600000; }); return { v: SC.pct(ok.length, L.length), n: L.length }; }
+const calgary = j => /calgary/i.test(F(j["Estimating branch"]) || ""), edmonton = j => !calgary(j);
+function supLogs(full){ const who = clockName(full); if(!who) return null; const since = Date.now() - 14 * 86400000, days = {};
+  S.field.entries.filter(e => e.who === who && e.m > 0 && new Date(e.at) > since).forEach(e => { const j = jobById(e.job); if(j && !isOverhead(j)) days[e.job + "|" + dkey(e.at)] = 1; });
+  const k = Object.keys(days); if(!k.length) return { v: null, n: 0, who };
+  const logged = k.filter(x => { const [jb, dy] = x.split("|"); return S.field.logs.some(l => l.job === jb && l.date === dy); }).length;
+  return { v: SC.pct(logged, k.length), n: k.length, logged, who }; }
+const R = (n, t) => kpiLine(n, t, "review");
+const Mi = (n, t, why) => kpiLine(n, t, "missing", null, null, null, why);
+const COST = "Needs job costing filled in JobTread";
 VIEWS.scorecards = {
   alerts(){ return []; },
   render(){
     const nr = jobsReady(); if(nr) return head("Scorecards", "") + nr;
-    let h = head("Scorecards", "The KPIs from each position profile that JobTread, QuickBooks and the shop can measure today. For the monthly reviews. Numbers only; the conversation stays with the person.");
+    if(!PM.list && !PM.listErr && !PM.loading && typeof loadPM === "function"){ PM.loading = 1; loadPM().then(() => { PM.loading = 0; }); }
+    if(!S.people && !S.peopleErr && !SC.askedPeople){ SC.askedPeople = 1; api("people").then(d => { S.people = d; render(); }).catch(e => { S.peopleErr = e; }); }
+    let h = head("Scorecards", "Each person's KPIs and targets from their Mission Playbook, with the live number beside each. For the monthly reviews.");
     h += '<div class="grid">';
-    const O = S.orders || [], d30 = Date.now() - 30 * 86400000, d90 = Date.now() - 90 * 86400000;
-    const issued30 = O.filter(o => o.issueDate && dOnly(o.issueDate) > d30);
-    const dec90 = O.filter(o => o.issueDate && dOnly(o.issueDate) > d90 && ["approved","denied"].includes(o.status));
-    const rate = dec90.length ? Math.round(dec90.filter(o => o.status === "approved").length / dec90.length * 100) : null;
-    const turn = median(O.filter(o => o.issueDate && dOnly(o.issueDate) > d90).map(o => { const j = jobById(o.job && o.job.id); return j && j._created ? (dOnly(o.issueDate) - new Date(j._created)) / 86400000 : null; }).filter(x => x !== null && x >= 0));
-    const stale = O.filter(o => o.status === "pending" && daysSince(o.issueDate || o.createdAt) > 14);
-    const lc = leadClock().filter(x => x.flag);
-    h += scoreCard("Estimating", "Estimating manager and estimators. JobTread quotes and leads.", [
-      scoreRow("Quotes sent, last 30 days", issued30.length, "Pipeline value and quote volume"),
-      scoreRow("Win rate, last 90 days", rate === null ? "n/a" : rate + "%", "Conversion rate: approved out of approved and lost", rate !== null && rate < 30 ? "caution" : ""),
-      scoreRow("Days from lead to quote (median)", turn === null ? "n/a" : Math.round(turn), "Quote turnaround", turn !== null && turn > 10 ? "caution" : ""),
-      scoreRow("Quotes waiting over 14 days", stale.length, "Follow-up compliance", stale.length ? "caution" : ""),
-      scoreRow("Leads over the SOP clock", lc.length, "Lead capture and qualification speed (administrator)", lc.length ? "caution" : "")]);
-    const pmNames = [...new Set(live().map(pm).filter(Boolean))].sort();
-    const since14 = Date.now() - 14 * 86400000;
-    pmNames.concat([""]).forEach(name => {
-      const J = live().filter(j => pm(j) === name && !isOverhead(j)); if(!J.length) return;
-      const site = J.filter(j => stageOf(st(j)) === "site"), late = J.filter(j => ["won","sched"].includes(stageOf(st(j))) && (d => d !== null && d < 0)(daysTo(startOf(j))));
-      const slow = J.filter(j => CLOSE.includes(st(j)) && (d => d !== null && d > 30)(daysSince(startOf(j) || j._created))), pmw = J.filter(j => st(j) === "Job Post Mortem");
-      let worked = 0, logged = 0;
-      if(fieldOn()){ const ids = new Set(J.map(j => j._id)); const days = {}; S.field.entries.filter(e => ids.has(e.job) && e.m > 0 && new Date(e.at) > since14).forEach(e => { days[e.job + "|" + dkey(e.at)] = 1; });
-        worked = Object.keys(days).length; logged = Object.keys(days).filter(k => { const [jb, dy] = k.split("|"); return S.field.logs.some(l => l.job === jb && l.date === dy); }).length; }
-      const lr = worked ? Math.round(logged / worked * 100) : null;
-      h += scoreCard(name ? "Project manager: " + name : "Won jobs with no PM", name ? "Jobs where JobTread names " + name + " as Project Manager." : "Nobody owns these.", [
-        scoreRow("On site now", site.length, "Workload"),
-        scoreRow("Past the start date, not on site", late.length, "Schedule", late.length ? "caution" : ""),
-        scoreRow("In closeout over 30 days", slow.length, "Closeout turnaround: money spent and not collected", slow.length ? "caution" : ""),
-        scoreRow("Waiting for a post mortem", pmw.length, "Post-mortems completed", pmw.length ? "caution" : ""),
-        scoreRow("Days worked with a daily log, 14 days", lr === null ? "n/a" : lr + "% (" + logged + " of " + worked + ")", "Documentation and daily communication (SOP Phase 5)", lr !== null && lr < 80 ? "caution" : "")]);
+    const pl = scPipeline(), rp = scRepeat(), sched = scOnSchedule(), stale = (S.orders || []).filter(o => o.status === "pending" && daysSince(o.issueDate || o.createdAt) > 14).length;
+    const apAge = S.M && S.M.ap ? S.M.ap.tot["61-90"] + S.M.ap.tot["91+"] : null, ot = scOvertime(), coded = scCoded(), lc = leadClock().filter(x => x.flag && /picked/.test(x.flag.t)).length;
+    const tom = live().filter(j => st(j) === "Turnover Meeting Required").length, inv = live().filter(j => st(j) === "Invoicing").length;
+    /* Amir */
+    h += profileCard("Amir Faiz, General Manager and Director, Field Operations", "Sites, equipment, buying and job cost, company-wide.", [
+      Mi("Jobs closing at or above sold markup", "Every job", COST), Mi("Weekly job cost review", "Every active job", COST),
+      kpiLine("Finished jobs and extras good to bill", "By the next Thursday, or a named reason and a date", "estimate", { v: scToBill() }, r => r.v + " finished, not invoiced", v => v === 0, "When each job finished is not recorded, so this counts all of them"),
+      Mi("Subcontractor and supplier invoices approved or rejected", "Within five business days of reaching the PM", "Needs bill approval dates from QuickBooks"),
+      kpiLine("Payables past the 45 to 60 day cycle without a dated plan", "Zero", "estimate", apAge === null ? null : { v: apAge }, r => MK(r.v) + " over 60 days", v => v <= 0, "From QuickBooks; whether a plan exists is not recorded"),
+      Mi("Suppliers in your line waiting on an answer", "Zero", "Needs supplier questions logged"),
+      kpiLine("Post-mortem within one week", "Every completed job over $10,000", "measured", scPMbig(), r => P(r.v), v => v >= 100, "Done at all, not yet timed to the week"),
+      kpiLine("Field hours coded to a job", "100%", "measured", coded, r => P(r.v), v => v >= 100, coded ? coded.n + " time entries, three weeks" : ""),
+      Mi("QC walk within 24 hours of the supervisor's call", "Every job", "Needs QC walks logged in JobTread"),
+      R("FLHA and sign-in on every site", "Every day"), R("Lost-time incidents", "Zero")]);
+    /* Jen */
+    h += profileCard("Jen Garrison, Director, Operations and Administration", "Estimating, scheduling, admin, finance and safety.", [
+      kpiLine("Lead response and assignment", "2 hours / 4 hours", "estimate", { v: lc }, r => r.v + " leads over the clock", v => v === 0, "Timed from when the job was opened in JobTread"),
+      Mi("Estimate review on quotes of $10,000 or more", "100%, pass mark 85/100", "Needs the review score saved on the job"),
+      Mi("Quotes below markup range without joint sign-off", "Zero", "Needs cost on each JobTread quote"),
+      R("Week-ahead plan sent by Thursday", "Every week. Schedule current every working day."),
+      kpiLine("Weekly overtime hours", "Down from September baseline", "measured", ot, r => r.v + " h last 7 days", null, "September baseline still to be set"),
+      kpiLine("Completed jobs invoiced within 48 hours", "100%", "estimate", { v: inv }, r => r.v + " waiting at Invoicing", v => v === 0),
+      kpiLine("Invoices past day 35 escalated", "100%", "estimate", S.M && S.M.ar ? { v: S.M.ar.list.filter(c => c.late > 0).length } : null, r => r.v + " clients with late invoices", null, "Whether each was escalated is not recorded"),
+      R("Payroll runs with zero corrections", "Every run"),
+      kpiLine("Working capital ratio (shared with Craig)", "0.75 now, toward 1.5", "measured", S.M && S.M.bs && S.M.bs.ratio != null ? { v: S.M.bs.ratio } : null, r => r.v.toFixed(2), v => v >= 1.5, "Current assets over current liabilities, from QuickBooks")]);
+    /* David */
+    const dav = pmJob("David");
+    h += profileCard("David Hanna, Business Development Manager", "Subcontractor. Pipeline, accounts and the jobs he runs.", [
+      kpiLine("Lead generation", "Monthly lead target, set with Craig", "measured", S.jobs ? { v: S.jobs.filter(j => !isSpecial(j) && (daysSince(j._created) || 99) <= 30).length } : null, r => r.v + " in 30 days", null, "Target still to be set"),
+      Mi("Client contacts", "25 or more meaningful contacts a week", "Needs a contact log"),
+      kpiLine("Pipeline value", "At least three times the monthly revenue target", "estimate", pl, r => r.v + "x", v => v >= 3, "Against average monthly sales since 1 April until a target is set"),
+      R("Strategic proposals", "Delivered within the agreed timelines"),
+      kpiLine("Repeat business", "80% or more from managed accounts", "estimate", rp, r => P(r.v), v => v >= 80, "All clients; managed accounts are not marked in JobTread"),
+      R("Commitments on dates, crews or price checked with dispatch and the estimator first", "Every one"),
+      kpiLine("Jobs you run: finished work and extras good to bill", "By the next Thursday, or a named reason and a date", "estimate", { v: scToBill(dav) }, r => r.v + " waiting", v => v === 0),
+      Mi("Jobs you run: invoices approved or rejected", "Within five business days of reaching you", "Needs bill approval dates from QuickBooks"),
+      R("Jobs you run: crew, equipment and overtime requests through dispatch", "Every one")]);
+    /* Dennis and George, estimating */
+    const est = (who, br, extra) => profileCard(who, extra, [
+      Mi("Lead acknowledged", "Within 1 hour of assignment", "Needs the time a lead is assigned"),
+      kpiLine("Site visit", "Within 48 hours for urgent work, 5 business days for planned work", "estimate", scSiteVisitWithin(br), r => P(r.v) + " within 5 days", v => v >= 100, "Urgent and planned are not marked, so this checks 5 business days"),
+      kpiLine("Quote turnaround", "5 business days or less from site visit to quote sent", "measured", scTurnaroundBranch(br), r => r.v + " days", v => v <= 5),
+      Mi("Estimate review", "Every quote of $10,000 or more reviewed; pass mark 85 of 100", "Needs the review score saved on the job"),
+      Mi("Markup gate", "Zero quotes below range without a director's approval", "Needs cost on each JobTread quote"),
+      kpiLine("Follow-up", "100% of follow-ups made on schedule", "estimate", { v: stale }, r => r.v + " gone quiet over 14 days", v => v === 0, "Company-wide; follow-up dates are not recorded"),
+      kpiLine("Conversion", "30% or more of quotes awarded", "measured", scWinBranch(br), r => P(r.v), v => v >= 30),
+      kpiLine("Pipeline value", "3 times the monthly revenue target or more", "estimate", pl, r => r.v + "x", v => v >= 3, "Company-wide"),
+      Mi("Estimate accuracy", "Within 5% of actual job cost at the post-mortem", COST),
+      kpiLine("Turnover meeting", "Every awarded job, in person, within 48 hours of the contract", "estimate", { v: tom }, r => r.v + " waiting at Turnover Meeting Required", v => v === 0)]);
+    h += est("Dennis Vries, Estimator", edmonton, "Edmonton jobs (Estimating branch), until JobTread records which estimator owns a job.");
+    const geo = pmJob("George");
+    h += profileCard("George Kang, Estimator and Project Manager, Calgary", "Subcontractor. Calgary jobs for estimating; jobs naming George as PM.", [
+      kpiLine("Site visit", "Within 48 hours for urgent work, 5 business days for planned work", "estimate", scSiteVisitWithin(calgary), r => P(r.v) + " within 5 days", v => v >= 100),
+      Mi("Estimate review", "Every quote of $10,000 or more reviewed; pass mark 85 of 100", "Needs the review score saved on the job"),
+      Mi("Markup gate", "Zero quotes below range without a director's approval", "Needs cost on each JobTread quote"),
+      kpiLine("Turnover", "Every awarded job, within 48 hours of the contract being signed", "estimate", { v: live().filter(j => calgary(j) && st(j) === "Turnover Meeting Required").length }, r => r.v + " waiting", v => v === 0),
+      Mi("Jobs closing at or above sold markup", "Every job", COST), Mi("Budget", "Jobs within 5% of estimated cost", COST),
+      R("Daily record on subcontracted sites: FLHA, sign-in sheet, end-of-day report, photos", "Every site, every day"),
+      R("Safety", "Zero recordable incidents on your jobs"),
+      kpiLine("Finished jobs and extras good to bill", "By the next Thursday, or a named reason and a date", "estimate", { v: scToBill(geo) }, r => r.v + " waiting", v => v === 0),
+      Mi("Subcontractor and supplier invoices approved or rejected", "Within five business days of reaching you", "Needs bill approval dates from QuickBooks")]);
+    /* PMs */
+    [["Ryan Mirandilla", "Ryan"], ["Patrick Brost", "Pat"]].forEach(([full, key]) => {
+      const f = pmJob(key);
+      h += profileCard(full + ", Project Manager", "Jobs where JobTread names " + key + " as Project Manager.", [
+        Mi("Jobs closing at or above sold markup", "Every job", COST), Mi("Budget", "Jobs within 5% of estimated cost", COST),
+        kpiLine("Schedule", "90% or more of jobs completed on or ahead of schedule", "estimate", scOnSchedule(f), r => P(r.v), v => v >= 90, "Jobs on site, against Estimated Days of Work"),
+        kpiLine("Time entries approved in JobTread", "Daily", "measured", scApproved(f), r => P(r.v) + " approved", v => v >= 100, "Entries older than a day, three weeks"),
+        kpiLine("Finished jobs and extras good to bill", "By the next Thursday, or a named reason and a date", "estimate", { v: scToBill(f) }, r => r.v + " waiting", v => v === 0),
+        Mi("Subcontractor and supplier invoices approved or rejected", "Within five business days of reaching you", "Needs bill approval dates from QuickBooks"),
+        Mi("Payables on your jobs past the 45 to 60 day cycle without a dated plan", "Zero", "Needs bills tied to jobs in QuickBooks"),
+        Mi("Suppliers on your jobs waiting on an answer", "Zero", "Needs supplier questions logged"),
+        R("Crew and equipment requests through dispatch", "Every one"), R("Safety", "Zero recordable incidents on your jobs"),
+        R("Client satisfaction", "90% or more positive close-out feedback")]);
     });
+    /* Brenda */
+    h += profileCard("Brenda Williams, Accounting and Payroll Clerk", "Payables, receivables entry and payroll hours.", [
+      Mi("Subcontractor and supplier invoices sent to the person who ran the job", "Same day: the day each one arrives", "Needs bill arrival dates"),
+      Mi("Bills entered without a job", "Zero", "Coming: a check of QuickBooks bills for a job"),
+      R("Decision recorded on each subcontractor and supplier invoice", "Every one"),
+      R("Customer invoices and receipts entered in QuickBooks Online", "Every one"),
+      kpiLine("Payroll hours taken from approved JobTread time", "Every hour, by person and by job", "measured", scApproved(), r => P(r.v) + " of hours approved", v => v >= 100, "The Payroll page splits only approved time"),
+      R("Payroll hours keyed for the pay period", "In time for Tuesday processing, every two weeks"),
+      Mi("Finance documents named and filed under the naming policy", "Every one", "Coming: a Drive naming check")]);
+    /* Carlos */
+    const visits = scSiteVisits(), teamLogs = scLogRate();
+    h += profileCard("Carlos Roldan Lomeli, Site Superintendent", "All supervised sites.", [
+      R("Safety", "Zero recordable incidents on your sites"), R("FLHA and sign-in before work", "Every site, every day"),
+      kpiLine("Daily log and crew hours in JobTread", "The same day, every site", "measured", teamLogs, r => P(r.v), v => v >= 100, teamLogs ? teamLogs.logged + " of " + teamLogs.n + " worked days, 14 days" : ""),
+      Mi("Containment photographed and approved before disturbance", "Every job", "Photos are in Encircle, not connected"),
+      Mi("Site Supervisor briefed before day one", "Every job, at least 48 hours ahead", "Needs briefings logged"),
+      kpiLine("Site visits", "Every active site at least once a week", "measured", visits, r => P(r.v), v => v >= 100, "From the superintendent's timesheets, 7 days"),
+      Mi("Field problems resolved", "Within 4 hours", "Needs problems logged"),
+      Mi("Quality", "First-time clearance pass rate of 95% or more", "Needs clearance results recorded in JobTread"),
+      kpiLine("Schedule", "90% or more of jobs on or ahead of schedule", "estimate", sched, r => P(r.v), v => v >= 90),
+      R("Final sweep and return count against the Mobilization List", "Every job"),
+      kpiLine("Crews or equipment moved outside dispatch", "Zero", "estimate", { v: [...new Set(Object.keys(clashes(boardJobs())).map(k => k.split("|")[0]))].length }, r => r.v + " people double-booked", v => v === 0, "Double-bookings on the crew board"),
+      R("Team development", "At least one Site Supervisor promoted or ready each year")]);
+    /* Site supervisors, one card */
+    const SUPS = ["Bryan Jacalne", "Ericneil Carpio", "Jerry Abache", "Nico Hallares", "Nicollace Lomibao", "Reynald Camarador", "Richard Woniala", "Zach Sikora"];
+    const supRows = SUPS.map(n => { const r = fieldOn() ? supLogs(n) : null; return '<tr><td><b>' + E(n) + '</b>' + (n === "Nicollace Lomibao" ? '<span class="sm">Site Supervisor and Crew Chief</span>' : '') + '</td><td class="r num">' + (r && r.n ? r.n : 0) + '</td><td class="r num">' + (r && r.v !== null ? P(r.v) : "n/a") + '</td><td>' + (r && r.v !== null ? '<span class="tag ' + (r.v >= 100 ? "clear" : "caution") + '">' + (r.v >= 100 ? "On target" : "Off target") + '</span>' : '<span class="tag mute">' + (r ? "No site days" : "Not on the clock") + '</span>') + '</td></tr>'; });
+    h += '<div class="card wide" data-nofold><h2>Site Supervisors</h2><p class="lede">All eight share one playbook table. Measured: a daily log in JobTread for every day they worked a site, last 14 days.</p>' +
+      '<div class="scroll"><table><thead><tr><th>Person</th><th class="r">Site days</th><th class="r">With a daily log</th><th></th></tr></thead><tbody>' + supRows.join("") + '</tbody></table></div>' +
+      '<div class="scroll" style="margin-top:12px"><table><thead><tr><th>Their other KPIs and targets</th><th class="r">Now</th><th></th></tr></thead><tbody>' + [
+        R("Safety", "Zero recordable incidents on your sites"), R("FLHA and sign-in sheet", "Every site, every day, before work starts"),
+        Mi("Photos in JobTread the same day", "Same day, before you leave site", "Photos are in Encircle, not connected"),
+        Mi("Containment photographed and approved before material is disturbed", "Every job", "Photos are in Encircle, not connected"),
+        kpiLine("Schedule", "90% or more of jobs completed on or ahead of schedule", "estimate", sched, r => P(r.v), v => v >= 90, "All supervisors together"),
+        Mi("First-time air clearance pass", "95% or more", "Needs clearance results recorded in JobTread"),
+        R("Quality", "Zero client-reported deficiencies after completion"),
+        R("Crew and equipment changes raised with the PM", "Every one, before the 2:00 PM cut-off for dispatch"),
+        Mi("Daily usage and waste bag count recorded", "Every day", "Coming: from the shop screens"),
+        R("Final sweep of the whole building", "Every job, before the crew leaves"),
+        kpiLine("Equipment counted back against the Mobilization List", "Within 24 hours of the job ending, in good condition", "estimate", scGearBack(), r => r.v + " closed jobs with gear out", v => v === 0, "All supervisors together")].join("") + '</tbody></table></div></div>';
+    /* Maxim */
+    const shelf = S.inv && S.inv.shelf, gb = scGearBack();
+    h += profileCard("Maxim Hahn, Material and Salvage Lead", "The shop screens.", [
+      Mi("Equipment ready for mobilization", "Staged 24 hours ahead, every mobilization", "Coming: gear-out time against each start date"),
+      R("Items leaving the shop unlogged", "Zero"), R("Sign-outs with a named person, date, job number and expected return date", "Every one"),
+      Mi("Units out on Type 2 or Type 3 work without a current filter certificate", "Zero", "Coming: from the shop's certificate records"),
+      kpiLine("Returns confirmed item by item against the Mobilization List", "Every load, within 24 hours of demobilization", "estimate", gb, r => r.v + " closed jobs with gear out", v => v === 0),
+      R("Missing, broken or used-up items recorded against the job", "Every one"), R("Transfers between jobs recorded the day they happen", "Every one"), R("Rental returns with written confirmation", "Every one"),
+      kpiLine("Stock at or below its minimum left unordered", "Zero", "estimate", shelf ? { v: (shelf.low || []).length } : null, r => r.v + " lines at or below minimum", v => v === 0, "Whether each is on order is not recorded"),
+      kpiLine("Monthly count against the record", "Within 2%", "estimate", shelf && shelf.items ? { v: SC.pct(shelf.counted || 0, shelf.items) } : null, r => P(r.v) + " of lines counted", null, "Accuracy needs counts first"),
+      Mi("Unplanned equipment failures on site", "Zero", "Needs repairs logged on the shop screens")]);
+    /* Project Coordinator and Dispatcher, vacant */
+    const dbl = [...new Set(Object.keys(clashes(boardJobs())).map(k => k.split("|")[0]))].length, nop = scNOP(), emr = emergencies().filter(x => x.resp !== null);
+    h += profileCard("Project Coordinator and Dispatcher (vacant, hiring)", "The seat's numbers, so whoever covers it now can see them.", [
+      R("Resource register", "100% of crew, temps and subcontractors listed; reviewed weekly"),
+      R("Crews sent without the right ticket or clearance", "Zero"),
+      R("Schedule kept current", "Every change in JobTread the working day it is made"),
+      R("Week-ahead plan", "Sent every Thursday to the PMs, Site Supervisors and temp agencies"),
+      kpiLine("Emergency dispatch", "Every call in office hours crewed the same working day", "estimate", emr.length ? { v: Math.round(median(emr.map(x => x.resp)) * 10) / 10 } : null, r => r.v + " h to first crew (median)", v => v <= 8, "From opening the job to first time on the clock"),
+      kpiLine("Double-booked crews", "Zero", "measured", { v: dbl }, r => r.v + " people", v => v === 0, "From the crew board"),
+      kpiLine("Notice of Project", "100% filed at least 72 hours before Type 3 work", "estimate", nop, r => P(r.v), v => v >= 100, "Asbestos jobs started in 60 days; Type 3 is not marked separately"),
+      R("Starts delayed for a missing truck, bin, consultant, security clearance or site booking", "Zero"),
+      kpiLine("Overtime", "Weekly hours below the September baseline", "measured", ot, r => r.v + " h last 7 days", null, "September baseline still to be set")]);
+    h += '<div class="card wide" data-nofold><h2>Seats not yet filled</h2><p class="lede">From the org chart of 9 October 2026: Estimator, Estimator Administrator, Shop and Logistics Lead, Sales Rep, Site Supervisor, Health and Safety Officer. Their cards appear here once someone is in the seat and their Mission Playbook is written. Safety and training records will come from the HR system.</p></div>';
     if(fieldOn()){
-      const P = {}; S.field.entries.filter(e => e.m > 0 && new Date(e.at) > since14).forEach(e => { const p = P[e.who] = P[e.who] || { days:{}, m:0 }; p.days[dkey(e.at)] = 1; p.m += e.m; });
-      const L = {}; S.field.logs.filter(l => dOnly(l.date) > since14).forEach(l => { L[l.who] = (L[l.who] || 0) + 1; });
-      const rows = Object.entries(P).filter(([w]) => w && !/\(aces\)/i.test(w)).sort((a, b) => b[1].m - a[1].m).map(([w, p]) => '<tr><td>' + E(w) + '</td><td class="r num">' + Object.keys(p.days).length + '</td><td class="r num">' + hrs(p.m) + '</td><td class="r num">' + (L[w] || 0) + '</td></tr>');
-      h += '<div class="card" data-nofold><h2>Field: last 14 days</h2><p class="lede">From JobTread timesheets and daily logs. ACES temps left out.</p>' +
-        tbl('<th>Person</th><th class="r">Days on the clock</th><th class="r">Hours</th><th class="r">Daily logs written</th>', rows, "Nobody on the clock in 14 days.", 20) + '</div>';
-    } else h += '<div class="card"><h2>Field: last 14 days</h2>' + fieldWait() + '</div>';
-    const tb = readyToBill(), near = tb.map(j => billPlan(j)).filter(p => p && p.days !== null && p.days <= 5).length, nopo = tb.map(j => billPlan(j)).filter(p => p && p.flags.some(f => f.lvl === "stop")).length;
-    const ar = S.M && S.M.ar ? S.M.ar.tot["61-90"] + S.M.ar.tot["91+"] : null;
-    h += scoreCard("Office and billing", "Admin manager and estimating administrator. JobTread and QuickBooks.", [
-      scoreRow("Finished, not invoiced", tb.length, "Invoice turnaround", tb.length > 10 ? "caution" : ""),
-      scoreRow("Client cut-offs in the next 5 days", near, "Invoice turnaround", near ? "caution" : ""),
-      scoreRow("Ready to bill, PO missing", nopo, "PO compliance (project coordinator)", nopo ? "caution" : ""),
-      scoreRow("Owed to A&M over 60 days", ar === null ? "n/a" : MK(ar), "AR aging", ar > 100000 ? "stop" : ar > 0 ? "caution" : "")]);
-    if(S.inv){
-      const closedOut = (S.inv.jobs || []).filter(j => j.closed && (j.machinesOut || j.shelfLinesOut)).length, overdue = (S.inv.jobs || []).filter(j => j.overdueReturn).length;
-      h += scoreCard("Shop and logistics", "Shop foreman and logistics lead. The shop screens.", [
-        scoreRow("Closed jobs with gear still out", closedOut, "Return processing", closedOut ? "caution" : ""),
-        scoreRow("Jobs past their return date", overdue, "Equipment readiness", overdue ? "caution" : ""),
-        scoreRow("Machines lost or unaccounted for", (S.inv.lost || []).length, "Inventory accuracy", (S.inv.lost || []).length ? "caution" : "")]);
+      const since14 = Date.now() - 14 * 86400000, Pp = {}, Lg = {};
+      S.field.entries.filter(e => e.m > 0 && new Date(e.at) > since14).forEach(e => { const p = Pp[e.who] = Pp[e.who] || { days:{}, m:0 }; p.days[dkey(e.at)] = 1; p.m += e.m; });
+      S.field.logs.filter(l => dOnly(l.date) > since14).forEach(l => { Lg[l.who] = (Lg[l.who] || 0) + 1; });
+      const rows = Object.entries(Pp).filter(([w]) => w && !/\(aces\)/i.test(w)).sort((a, b) => b[1].m - a[1].m).map(([w, p]) => '<tr><td>' + E(w) + '</td><td class="r num">' + Object.keys(p.days).length + '</td><td class="r num">' + hrs(p.m) + '</td><td class="r num">' + (Lg[w] || 0) + '</td></tr>');
+      h += '<div class="card wide" data-nofold><h2>Everyone on the clock, last 14 days</h2><p class="lede">From JobTread timesheets and daily logs. ACES temps left out.</p>' +
+        tbl('<th>Person</th><th class="r">Days on the clock</th><th class="r">Hours</th><th class="r">Daily logs written</th>', rows, "Nobody on the clock in 14 days.", 30) + '</div>';
     }
-    h += '<div class="card wide"><p class="sm" style="margin:0">Not measured here: safety, training, client satisfaction and team development. Those belong to the review and the HR system.</p></div>';
     return shortWarn() + h + '</div>';
   }
 };
