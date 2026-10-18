@@ -138,7 +138,9 @@ export function publicAccount(a) {
     id: a.id, email: a.email, name: a.name, title: a.title || "", areas: a.areas || [], level: a.level,
     responsibility: presetOf(a.areas), responsibilityLabel: presetLabel(a.areas),
     active: a.active !== false, mustChange: !!a.mustChange, createdAt: a.createdAt || "", createdBy: a.createdBy || "",
-    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || "", claude: !!a.claude
+    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || "", claude: !!a.claude,
+    /* The invite's dates only. The link itself is never stored, only a scramble of it. */
+    invite: a.invite ? { sentAt: a.invite.at || "", expires: a.invite.exp || "", by: a.invite.by || "", emailed: !!a.invite.emailed } : null
   };
 }
 export const activeAdmins = accounts => Object.values(accounts).filter(a => a.active !== false && a.level === "admin");

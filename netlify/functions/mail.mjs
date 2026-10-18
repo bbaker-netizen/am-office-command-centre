@@ -102,6 +102,41 @@ async function setReplyTo(s, id) {
   await gmail(s, `/drafts/${id}`, { method: "PUT", body: JSON.stringify({ id, message }) });
 }
 
+/* Sends one email straight from the robots' mailbox, for the app's own
+   messages (account invites). The robots' drafts still wait for a person.
+   Throws NOT_CONNECTED when the mailbox is not connected, so the caller can
+   offer another way. */
+const encWord = s => /^[\x20-\x7e]*$/.test(s) ? s : "=?UTF-8?B?" + Buffer.from(s, "utf8").toString("base64") + "?=";
+export async function sendEmail({ to, subject, text, html, replyTo: rt, by }) {
+  const s = store();
+  const boundary = "am-" + globalThis.crypto.randomUUID();
+  const b64body = v => Buffer.from(String(v || ""), "utf8").toString("base64").replace(/(.{76})/g, "$1\r\n");
+  const lines = [
+    "From: " + encWord("A&M Abatement") + " <" + mailbox() + ">",
+    "To: " + to,
+    ...(rt ? ["Reply-To: " + rt] : []),
+    "Subject: " + encWord(subject),
+    "MIME-Version: 1.0",
+    "Content-Type: multipart/alternative; boundary=\"" + boundary + "\"",
+    "",
+    "--" + boundary,
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64body(text),
+    "--" + boundary,
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64body(html),
+    "--" + boundary + "--",
+    ""
+  ];
+  const sent = await gmail(s, "/messages/send", { method: "POST", body: JSON.stringify({ raw: toB64url(lines.join("\r\n")) }) });
+  await log(s, { action: "app-send", by: by || "the app", subject, to });
+  return { id: sent.id || "" };
+}
+
 async function log(s, entry) {
   try {
     const d = (await s.get(LOG, { type: "json" })) || { entries: [] };
