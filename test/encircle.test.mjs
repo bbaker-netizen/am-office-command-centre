@@ -122,8 +122,11 @@ await t('fallback link used when Encircle gives none', async () => {
   assert.match(f.log.comments[0], /enc\.example\/claims\/Y1/);
 });
 await t('webhook job id found in several shapes', async () => {
+  // The real shape JobTread sent on 2026-10-18.
+  const live = { _type: 'root', createdEvent: { _type: 'event', id: '22PgVzcqTnw2', account: { _type: 'account', id: '22Pf7Cwq6QcT' }, createdByUser: { _type: 'user', id: '22Pg6gtfF4uj' }, data: { next: { custom: { Status: 'Bid Accepted' } }, previous: { custom: { Status: 'New Lead' } } }, job: { _type: 'job', id: '22PfLAwMzfAn' } } };
+  assert.equal(jobIdFromWebhook(live), '22PfLAwMzfAn');
+  assert.equal(jobIdFromWebhook({ createdEvent: { id: 'EVT', job: null, account: { id: 'ACC' } } }), null);
   assert.equal(jobIdFromWebhook({ job: { id: '22PfLAwMzfAn' } }), '22PfLAwMzfAn');
-  assert.equal(jobIdFromWebhook({ data: { id: '22PfLAwMzfAn' } }), '22PfLAwMzfAn');
   assert.equal(jobIdFromWebhook({ nothing: 1 }), null);
   assert.equal(jobIdFromWebhook(null), null);
 });

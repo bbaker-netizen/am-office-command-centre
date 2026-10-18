@@ -272,11 +272,12 @@ export async function syncJob(jobId, { s, jt, enc }) {
   return out('created', 'Encircle job made and comment posted.', { ...base, claimId });
 }
 
-// Pull a JobTread job id out of a webhook body, whatever shape it arrives in.
-// The body is only a hint: syncJob always re-reads the job from JobTread.
+// Pull a JobTread job id out of a webhook body. JobTread sends
+// { createdEvent: { job: { id }, data: { previous, next }, ... } } (seen live
+// 2026-10-18). The body is only a hint: syncJob always re-reads the job.
 export function jobIdFromWebhook(body) {
   if (!body || typeof body !== 'object') return null;
-  const tries = [body.job?.id, body.data?.job?.id, body.data?.id, body.record?.id, body.targetId, body.id];
+  const tries = [body.createdEvent?.job?.id, body.job?.id, body.data?.job?.id];
   const hit = tries.find((v) => typeof v === 'string' && v.length > 5);
   return hit || null;
 }
