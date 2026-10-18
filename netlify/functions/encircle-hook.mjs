@@ -19,7 +19,12 @@ function sameKey(a, b) {
 export default async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
   const key = new URL(req.url).searchParams.get("key");
-  if (!sameKey(key, process.env.ENCIRCLE_HOOK_KEY)) return new Response("Not allowed", { status: 403 });
+  if (!sameKey(key, process.env.ENCIRCLE_HOOK_KEY)) {
+    /* Says why, never the key. A mismatch usually means ENCIRCLE_HOOK_KEY was
+       changed in Netlify without a redeploy, or JobTread holds an older one. */
+    console.log("encircle-hook: refused, " + (!process.env.ENCIRCLE_HOOK_KEY ? "ENCIRCLE_HOOK_KEY is not set in this deploy" : !key ? "the call carried no key" : "the key does not match ENCIRCLE_HOOK_KEY in this deploy"));
+    return new Response("Not allowed", { status: 403 });
+  }
 
   let body = null;
   try { body = await req.json(); } catch (e) { body = null; }
@@ -34,7 +39,8 @@ export default async (req) => {
   const s = await loadSettings(store);
   try {
     const r = await syncJob(jobId, { s, jt: jobtreadClient(s), enc: encircleClient(s) });
-    if (r.result !== "skip" && r.result !== "off") console.log("encircle-hook:", JSON.stringify(r));
+    /* Every outcome is logged, so a quiet run never looks like a broken one. */
+    console.log("encircle-hook:", JSON.stringify({ mode: s.mode, ...r }));
     return Response.json(r);
   } catch (e) {
     console.error("encircle-hook error:", jobId, e.message);
