@@ -1314,6 +1314,7 @@ function appLoad(fresh){
     .catch(e => { S.invErr = e; render(); }));
   if(CFG.tabs.some(t => ["dispatch","closeout","money","overview"].includes(t))) waits.push(api("billing", fresh).then(d => { S.billing = d; S.billingErr = null; render(); }).catch(e => { S.billingErr = e; render(); }));
   if(CFG.tabs.some(t => ["sites","dispatch","tm","scorecards"].includes(t))) waits.push(api("field", fresh).then(d => { S.field = d; S.fieldErr = null; render(); }).catch(e => { S.fieldErr = e; render(); }));
+  if(CFG.tabs.includes("sites")) waits.push(api("encircle", fresh).then(d => { S.enc = d; S.encErr = null; render(); }).catch(e => { S.encErr = e; render(); }));
   if(CFG.tabs.includes("dispatch") && CAN_EDIT) waits.push(api("people", fresh).then(d => { S.people = d; S.peopleErr = null; render(); }).catch(e => { S.peopleErr = e; render(); }));
   if(CFG.tabs.includes("drafts")) waits.push(loadMail());
   if(CFG.tabs.includes("postmortem")) waits.push(loadPM());
@@ -1996,6 +1997,9 @@ VIEWS.sites = {
     else if(ex.length) a.push({ lvl:"caution", text: plural(ex.length, "notice of project runs", "notices of project run") + " out within a week.", meta:"Extend it or finish before it lapses." });
     const over = live().filter(j => stageOf(st(j)) === "site" && startOf(j) && dur(j) !== null && workDaysBetween(dOnly(startOf(j)), today()) > Math.ceil(dur(j)) + 1);
     if(over.length) a.push({ lvl:"caution", text: plural(over.length, "job is", "jobs are") + " on site longer than planned.", meta:"Over the Estimated Days of Work. Either the plan was wrong or the job is costing more than quoted." });
+    const ep = encNoPhotos();
+    if(ep.length) a.push({ lvl:"caution", text: plural(ep.length, "job is", "jobs are") + " on site with no photos in Encircle.", meta: ep.map(j => j._number).join(", ") + ". Containment is approved from photos before material is disturbed." });
+    if(S.enc && S.enc.mode !== "off" && S.enc.sweep && S.enc.sweep.error) a.push({ lvl:"caution", text:"The Encircle morning check did not finish.", meta: S.enc.sweep.error });
     return a.concat(logAlerts());
   },
   render(){
@@ -2034,10 +2038,46 @@ VIEWS.sites = {
           '<td>' + (F(j["Site Access Notes"]) ? '<span class="tag clear">Yes</span>' : '<span class="tag mute">None</span>') + '</td>' +
           '<td class="r"><span class="tag ' + (x.d <= 2 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span></td></tr>';
       }), "Nothing starts this week.", 20) + '</div>';
+    h += encircleCard();
     h += logCard();
     return shortWarn() + h + '</div>';
   }
 };
+
+/* ================= ENCIRCLE ================= */
+/* Site photos live in Encircle. The app makes the Encircle job when a job is
+   awarded, with our job number in it, and checks every weekday morning. This
+   shows what that check found. Photo counts are from the morning check, not
+   live. */
+function encLive(){ return !!(S.enc && S.enc.mode !== "off" && S.enc.sweep && !S.enc.sweep.error); }
+function encNoPhotos(){
+  if(!S.jobs || !encLive()) return [];
+  const p = S.enc.sweep.photos || {};
+  return live().filter(j => stageOf(st(j)) === "site" && p[j._number] === 0);
+}
+function encircleCard(){
+  let h = '<div class="card wide"><h2>Site photos in Encircle</h2><p class="lede">Photos stay in Encircle. The app makes the Encircle job when a job is awarded and checks every weekday morning. Counts are from that check.</p>';
+  if(S.encErr) return h + '<div class="state">' + E(S.encErr.message || "Could not read the Encircle check.") + '</div></div>';
+  if(!S.enc) return h + wait("Encircle") + '</div>';
+  if(S.enc.mode === "off") return h + '<div class="state">The Encircle link is switched off. It goes on after it is tested on the TEST job 99-00001.</div></div>';
+  const sw = S.enc.sweep;
+  if(!sw) return h + '<div class="state">The morning check has not run yet. It runs weekdays at 6:00 am (7:00 am in summer).</div></div>';
+  const at = sw.finished ? new Date(sw.finished).toLocaleString("en-CA", { dateStyle:"medium", timeStyle:"short" }).replace(/\.$/, "") : "";
+  const c = sw.counts || {};
+  h += '<p class="sub">' + (S.enc.mode === "test" ? '<span class="tag caution">Test mode: TEST job only</span> ' : '') + 'Last checked ' + E(at) + '. ' +
+    plural(sw.checked || 0, "awarded job") + ' looked at: ' + (c.created || 0) + ' made in Encircle, ' + (c.linked || 0) + ' already linked, ' + ((c.problem || 0) + (c["match-by-hand"] || 0)) + ' need a person.</p>';
+  if(sw.error) h += '<div class="state">The check stopped: ' + E(sw.error) + '</div>';
+  const p = sw.photos || {};
+  const on = live().filter(j => stageOf(st(j)) === "site");
+  h += tbl('<th>Job</th><th>PM</th><th class="r">Photos</th>', on.map(j => {
+    const n = p[j._number];
+    const tag = n === undefined ? '<span class="tag mute">Not linked</span>' : n === null ? '<span class="tag mute">Could not count</span>' : n === 0 ? '<span class="tag caution">None</span>' : '<span class="tag clear">' + (n >= 100 ? "100+" : n) + '</span>';
+    return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td class="r">' + tag + '</td></tr>';
+  }), "Nobody is on site according to JobTread.", 15);
+  const need = sw.needsAPerson || [];
+  if(need.length) h += '<h3>Needs a person</h3>' + tbl('<th>Job</th><th>What to do</th>', need.map(x => '<tr><td class="num">' + E(x.number || x.jobId) + '</td><td>' + E(x.why) + '</td></tr>'), "", 15);
+  return h + '</div>';
+}
 
 /* ================= CLOSEOUT ================= */
 const CLOSE = STAGES.find(s => s.key === "close").statuses;
