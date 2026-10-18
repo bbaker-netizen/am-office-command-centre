@@ -476,7 +476,9 @@ button,input,select,textarea,optgroup{font-family:inherit}
 .fold-chev{margin-left:auto;width:18px;height:18px;color:var(--ink-3);transition:transform .25s ease}
 .card.fold.open .fold-chev{transform:rotate(180deg)}
 .card.fold .fold-body{display:none}
-.card.fold.open .fold-body{display:block;animation:am-up .28s cubic-bezier(.2,.8,.2,1)}
+.card.fold.open .fold-body{display:block}
+/* The slide-in plays only when a person opens the card, not every time the page redraws. */
+.card.fold.opening .fold-body{animation:am-up .28s cubic-bezier(.2,.8,.2,1)}
 .card.fold:not(.open){padding-bottom:14px}
 .card.fold-all:not(.open){padding-bottom:10px}
 .card.fold-all>h2{margin-bottom:0}
@@ -3378,6 +3380,7 @@ function uxFold(){
 function uxFoldToggle(h2){
   const card = h2.closest(".card"); const open = !card.classList.contains("open");
   card.classList.toggle("open", open); h2.setAttribute("aria-expanded", open ? "true" : "false"); FOLD[h2.dataset.foldKey] = open;
+  if(open){ card.classList.add("opening"); setTimeout(() => card.classList.remove("opening"), 320); }
 }
 document.addEventListener("click", ev => { const h = ev.target.closest && ev.target.closest(".card.fold > h2"); if(h) uxFoldToggle(h); });
 document.addEventListener("keydown", ev => { const h = ev.target.closest && ev.target.closest(".card.fold > h2"); if(h && (ev.key === "Enter" || ev.key === " ")){ ev.preventDefault(); uxFoldToggle(h); } });
@@ -3675,13 +3678,19 @@ var CLAUDE = (function(){
 })();
 
 /* ---------- Admin, Connections ---------- */
-const CN = { data:null, err:null, msg:"", mail:null, claude:null };
+/* Each card on this page fetches what it shows while the page draws. Every
+   answer redraws the page, so without the loading flags below every redraw
+   sent the same requests again and the page flickered for seconds on end
+   (Bruce, 2026-10-18). One request at a time per card. */
+const CN = { data:null, err:null, msg:"", mail:null, claude:null, loading:false };
 function cnCall(body){
   const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
   return fetch("/api/connections", opts).then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || ("The app answered " + r.status + ".") }; return b; });
 }
 function loadCN(){
-  cnCall().then(d => { CN.data = d; CN.err = null; render(); }).catch(e => { CN.err = e; render(); });
+  if(CN.loading) return;
+  CN.loading = true;
+  cnCall().then(d => { CN.data = d; CN.err = null; }).catch(e => { CN.err = e; }).then(() => { CN.loading = false; render(); });
   if(ME.areas.includes("assistants")) fetch("/api/mail?action=status", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(m => { CN.mail = m; render(); }).catch(() => {});
   if(ME.claude) fetch("/api/claude", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(c => { CN.claude = c; render(); }).catch(() => {});
 }
@@ -3702,7 +3711,7 @@ VIEWS.connections = {
     h += '<div class="conn" style="margin-top:16px">';
     h += '<div class="card" data-cn-form><h2><span class="lamp' + (j.working ? " on" : "") + '"></span>JobTread</h2>' +
       (j.connected && !j.working ? '<div class="state err" style="margin-bottom:10px">A key is saved but JobTread did not accept it just now. ' + E(j.problem || "") + '</div>' : '') +
-      (j.working ? '<p class="lede">Connected and working, checked just now. Company: <b>' + E(j.organizationName || j.organizationId) + '</b>' + (j.grantUser ? ', through ' + E(j.grantUser) + '\'s key' : '') + '. Saved ' + E(showWhen(j.savedAt)) + (j.savedBy ? ' by ' + E(j.savedBy) : '') + '.</p>' : '<p class="lede">Not connected. In JobTread, open Settings, then API, create a key, and paste it here. The app tests it before saving.</p>') +
+      (j.working ? '<p class="lede">Connected and working, checked just now. Company: <b>' + E(j.organizationName || j.organizationId) + '</b>' + (j.grantUser ? ', through ' + E(j.grantUser) + '\'s key' : '') + '. Saved ' + E(String(showWhen(j.savedAt)).replace(/\.$/, "")) + (j.savedBy ? ' by ' + E(j.savedBy) : '') + '.</p>' : '<p class="lede">Not connected. In JobTread, open Settings, then API, create a key, and paste it here. The app tests it before saving.</p>') +
       '<label class="fld"><b>' + (j.connected ? "Replace the key" : "JobTread key") + '</b><input type="password" id="cnKey" autocomplete="off" placeholder="Paste the key"></label>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-cn-jt>Test and save</button>' + (j.connected ? '<button class="btn ghost" data-cn-jtforget>Disconnect</button>' : '') + '</div>' +
       '<p class="sm" style="margin-top:8px">Use a key made under an A&amp;M account, not a person\'s own login, so it keeps working when people change.</p></div>';
@@ -3934,13 +3943,13 @@ function workOrder(id){
 }
 
 /* ---------- Settings, Connections: the one-time JobTread set-up (admins) ---------- */
-const SU = { data:null, err:null, last:null };
+const SU = { data:null, err:null, last:null, loading:false };
 function suCall(body){
   return fetch("/api/setup", body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
     .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || "The app answered " + r.status + "." }; return b; });
 }
 function setupCard(){
-  if(!SU.data && !SU.err){ suCall().then(d => { SU.data = d; render(); }).catch(e => { SU.err = e; render(); }); }
+  if(!SU.data && !SU.err && !SU.loading){ SU.loading = true; suCall().then(d => { SU.data = d; }).catch(e => { SU.err = e; }).then(() => { SU.loading = false; render(); }); }
   let h = '<div class="card"><h2><span class="lamp' + (SU.data && !SU.data.missing ? " on" : "") + '"></span>JobTread set-up</h2>';
   if(SU.err) return h + '<div class="state err">' + E(errCopy(SU.err)) + '</div></div>';
   if(!SU.data) return h + wait("JobTread's fields") + '</div>';
@@ -3958,7 +3967,7 @@ function setupCard(){
 document.addEventListener("click", ev => {
   const t = ev.target.closest && ev.target.closest("[data-su]"); if(!t) return;
   const act = t.dataset.su;
-  if(act === "check"){ SU.data = null; SU.last = null; render(); return; }
+  if(act === "check"){ SU.data = null; SU.err = null; SU.last = null; render(); return; }
   t.classList.add("is-busy");
   suCall({ action: act }).then(r => {
     SU.last = r;
@@ -4490,7 +4499,7 @@ function nextStepPanel(j){
 }
 
 /* ---------- Google Drive, read as each person ---------- */
-const DRV = { st:null, err:null, job:{} };
+const DRV = { st:null, err:null, job:{}, pending:null };
 function driveCall(body){
   return fetch("/api/drive" + (body && body.get ? "?action=" + body.get : ""), body && !body.get ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
     .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || "The app answered " + r.status + "." }; return b; });
@@ -4498,7 +4507,10 @@ function driveCall(body){
 function driveStatus(force){
   if(PLATFORM !== "app") return Promise.resolve(null);
   if(DRV.st && !force) return Promise.resolve(DRV.st);
-  return driveCall().then(d => { DRV.st = d; return d; }).catch(e => { DRV.err = e; return null; });
+  /* Everyone asking at once shares the one request already on its way. */
+  if(DRV.pending && !force) return DRV.pending;
+  DRV.pending = driveCall().then(d => { DRV.st = d; DRV.err = null; return d; }).catch(e => { DRV.err = e; return null; }).then(d => { DRV.pending = null; return d; });
+  return DRV.pending;
 }
 function driveBlock(){
   const d = DRV.st;
@@ -4536,7 +4548,9 @@ document.addEventListener("click", ev => {
   }catch(e){}
 })();
 function driveAdminCard(){
-  driveStatus();
+  /* Ask once. Redraw once when the answer is in, so the card does not stay on
+     its first guess. A failed check is not retried on every redraw. */
+  if(!DRV.st && !DRV.err && !DRV.pending) driveStatus().then(() => { if(current === "connections") render(); });
   const d = DRV.st;
   return '<div class="card"><h2><span class="lamp' + (d && d.ready ? " on" : "") + '"></span>Google Drive</h2><p class="lede">' +
     (d && d.ready ? 'Ready. Each person connects their own A&amp;M Google account under My account, read only. Claude and the job panel then read Drive as that person, so nobody sees a file they could not open in Drive.' :
