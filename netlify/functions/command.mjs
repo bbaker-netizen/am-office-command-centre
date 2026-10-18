@@ -21,6 +21,7 @@ import { CUSTOMER_FIELDS, fieldIds } from "./_jtfields.mjs";
 import { qboGet } from "./_qbo.mjs";
 import { readAging, readBalanceSheet, readProfitAndLoss, readPayableDetail, readVendorSpend } from "./_qboreports.mjs";
 import { buildFeed, localDay } from "./_derive.mjs";
+import { SWEEP_KEY as ENCIRCLE_SWEEP } from "./_encircle.mjs";
 
 const STORE = "am-inventory";
 const PAVE = "https://api.jobtread.com/pave";
@@ -40,7 +41,8 @@ const ACCESS = {
   people: u => sees(u, "office", "field"),
   crew: u => sees(u, "office", "field"),
   field: u => sees(u, "office", "field", "money"),
-  billing: u => sees(u, "office", "field", "money")
+  billing: u => sees(u, "office", "field", "money"),
+  encircle: u => sees(u, "office", "field")
 };
 const TTL = { jobs: 120000, money: 300000, inventory: 60000, buying: 300000, people: 3600000, billing: 1800000, field: 300000 };
 
@@ -448,6 +450,7 @@ export default async (req) => {
     if (part === "crew") return json(await readCrew(s, url.searchParams.get("ids")));
     if (part === "field") return json(await cached(s, "field", () => readField(s), fresh));
     if (part === "billing") return json(await cached(s, "billing", () => readBilling(s), fresh));
+    if (part === "encircle") return json({ mode: String(process.env.ENCIRCLE_MODE || "off").toLowerCase(), sweep: (await s.get(ENCIRCLE_SWEEP, { type: "json" })) || null });
   } catch (e) {
     const notConnected = e.code === "NOT_CONNECTED" || e.status === 409;
     return json({ error: notConnected ? "not_connected" : "upstream", message: e.message }, notConnected ? 409 : 502);
