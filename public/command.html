@@ -2811,7 +2811,9 @@ VIEWS.people = {
     const out = [];
     if(!ADM.list) return out;
     const waiting = ADM.list.filter(a => a.active && a.mustChange && !a.lastSignIn);
-    if(waiting.length) out.push({ lvl:"info", text: plural(waiting.length, "person has", "people have") + " not signed in yet.", meta: waiting.map(a => a.name).join(", ") + ". Give them their temporary password." });
+    if(waiting.length) out.push({ lvl:"info", text: plural(waiting.length, "person has", "people have") + " not signed in yet.", meta: waiting.map(a => a.name).join(", ") + ". Send them an invite, or give them their temporary password." });
+    const lapsed = ADM.list.filter(a => a.active && a.invite && Date.parse(a.invite.expires) < Date.now());
+    if(lapsed.length) out.push({ lvl:"caution", text: plural(lapsed.length, "invite has", "invites have") + " run out without being used.", meta: lapsed.map(a => a.name).join(", ") + ". Open the person and send a new one." });
     return out;
   },
   render(){
@@ -2824,11 +2826,11 @@ VIEWS.people = {
       E(admins < 2 ? "Make a second person an admin, so somebody can still let people in if one admin is away or locked out." : "Two or more admins, so nobody is stuck if one is away.") + '</div></div>';
     h += '<div class="grid">';
     h += '<div class="card wide" data-tour="people"><div class="ac-head"><h2>Everyone with an account</h2><button class="btn" data-ac-new>Add a person</button></div>' +
-      '<p class="lede">Press a name to change what they see or can do, give them a new password, or switch them off. Changes apply at their next click; they do not have to sign in again.</p>' +
+      '<p class="lede">Press a name to change what they see or can do, send them a link to set their password, or switch them off. Changes apply at their next click; they do not have to sign in again.</p>' +
       tbl('<th>Person</th><th>Responsible for</th><th>Sees</th><th>Can do</th><th>Last signed in</th><th></th>', on.concat(off).map(a =>
         '<tr class="' + (a.active ? "" : "ac-off") + '" data-ac-edit="' + E(a.id) + '" tabindex="0" style="cursor:pointer"><td><span class="nm">' + E(a.name) + (a.id === ADM.me ? ' <span class="tag clear">You</span>' : '') + '</span><span class="sm">' + E(a.email) + (a.title ? ' · ' + E(a.title) : '') + '</span></td>' +
         '<td>' + E(respLabel(a.areas)) + '</td><td class="ac-chips">' + areaChips(a.areas) + '</td><td>' + E(LEVEL_INFO[a.level] ? LEVEL_INFO[a.level].label : a.level) + '</td>' +
-        '<td>' + E(whenSeen(a.lastSignIn)) + '</td><td>' + (!a.active ? '<span class="tag stop">Switched off</span>' : a.mustChange ? '<span class="tag caution">' + (a.lastSignIn ? "Temporary password" : "Not signed in yet") + '</span>' : '') + '</td></tr>'), "Nobody yet.", 60) + '</div>';
+        '<td>' + E(whenSeen(a.lastSignIn)) + '</td><td>' + acStatus(a) + '</td></tr>'), "Nobody yet.", 60) + '</div>';
 
     h += '<div class="card"><h2>What each responsibility sees</h2><p class="lede">A shortcut for a set of areas. Tick the areas yourself for anything in between; that shows as Custom.</p><p class="ac-sub">Responsibilities</p><dl class="facts">' +
       RESP.filter(r => r[0] !== "custom").map(r => '<dt>' + E(r[1]) + '</dt><dd>' + RESP_AREAS[r[0]].map(k => AREA_INFO[k].label).join(", ") + '</dd>').join("") + '</dl>' +
@@ -2854,6 +2856,9 @@ function logWords(l){
   if(l.action === "create") return "Added " + l.who + " (" + (l.detail || "") + ")";
   if(l.action === "reset") return who + "new temporary password, signed out everywhere";
   if(l.action === "remove") return "Removed " + l.who + " before they ever signed in";
+  if(l.action === "invite") return who + (l.detail || "invite sent").replace(/^Invite/, "invite");
+  if(l.action === "cancelInvite") return who + "invite cancelled";
+  if(l.action === "acceptInvite") return who + "chose their password from the invite";
   if(l.action === "password") return who + (l.detail || "changed their password").toLowerCase();
   return who + (l.detail || l.action);
 }
@@ -2872,9 +2877,10 @@ function acForm(a){
     '<fieldset class="ac-set"><legend>Can do</legend>' + ["view", "edit", "admin"].map(k => '<label class="ac-check"><input type="radio" name="level" value="' + k + '"' + (a.level === k ? " checked" : "") + (me && k !== "admin" ? " disabled" : "") + '><span><b>' + E(LEVEL_INFO[k].label) + '</b> ' + E(LEVEL_INFO[k].what) + '</span></label>').join("") +
     (me ? '<p class="sub">You cannot take admin away from yourself. Another admin can.</p>' : '') + '</fieldset>' +
     '<fieldset class="ac-set"><legend>Claude</legend><label class="ac-check"><input type="checkbox" name="claude"' + (a.claude ? " checked" : "") + '><span><b>Can ask Claude</b> Opens the Ask Claude panel on every page, which answers from what that person can already see. For people with a Claude account, it also hands the question over to their own Claude.</span></label></fieldset>' +
-    '<div class="actions"><button type="button" class="btn" data-ac-save>' + (isNew ? "Add and make a temporary password" : "Save the changes") + '</button></div><p class="sub" id="acMsg" role="status"></p></form>';
+    '<div class="actions">' + (isNew ? '<button type="button" class="btn" data-ac-save="invite">Add and send an invite</button><button type="button" class="btn ghost" data-ac-save="temp">Add with a temporary password</button>' : '<button type="button" class="btn" data-ac-save>Save the changes</button>') + '</div>' +
+    (isNew ? '<p class="sub">An invite emails them a link that works once, for seven days, to choose their own password. No password is ever emailed.</p>' : '') + '<p class="sub" id="acMsg" role="status"></p></form>';
   if(!isNew && !me){
-    h += '<div class="ac-more"><h3>Password</h3><p class="sub">Forgotten it, or a phone went missing? A new temporary password signs them out on every device straight away.</p>' +
+    h += '<div class="ac-more">' + acInviteBlock(a) + '<h3>Password</h3><p class="sub">Forgotten it, or a phone went missing? A new temporary password signs them out on every device straight away.</p>' +
       '<div class="actions"><button type="button" class="btn ghost" data-ac-reset>Give a new temporary password</button></div>' +
       '<h3>' + (a.active ? "Switch off" : "Switch back on") + '</h3><p class="sub">' + (a.active ? "Someone who has left, or is away for a long time. They are signed out at their next click and cannot sign in. Their name stays on everything they did." : "They can sign in again with the password they had.") + '</p>' +
       '<div class="actions"><button type="button" class="btn ghost" data-ac-active="' + (a.active ? "0" : "1") + '">' + (a.active ? "Switch off " + E(a.name.split(" ")[0]) : "Switch " + E(a.name.split(" ")[0]) + " back on") + '</button>' +
@@ -2902,6 +2908,36 @@ function acTemp(a, temp, why){
     '<div class="actions"><button type="button" class="btn" data-ac-done>Done</button></div>';
 }
 function acMsg(t){ const m = $("acMsg"); if(m) m.textContent = t; }
+function longDay(iso){ return new Date(iso).toLocaleDateString("en-CA", { weekday:"long", month:"long", day:"numeric" }); }
+function acStatus(a){
+  if(!a.active) return '<span class="tag stop">Switched off</span>';
+  if(a.invite) return Date.parse(a.invite.expires) < Date.now() ? '<span class="tag caution">Invite ran out</span>' : '<span class="tag mute">Invited</span>';
+  if(a.mustChange) return '<span class="tag caution">' + (a.lastSignIn ? "Temporary password" : "Not signed in yet") + '</span>';
+  return "";
+}
+function acInviteBlock(a){
+  if(!a.active) return "";
+  const first = E(a.name.split(" ")[0]);
+  if(a.invite){
+    const gone = Date.parse(a.invite.expires) < Date.now();
+    return '<h3>Invite</h3><p class="sub">' + (gone ? "The invite sent " + E(showDate(a.invite.sentAt)) + " ran out on " + E(longDay(a.invite.expires)) + " without being used."
+      : (a.invite.emailed ? "Emailed " : "Link made ") + E(showDate(a.invite.sentAt)) + (a.invite.by ? " by " + E(a.invite.by) : "") + ". It works until " + E(longDay(a.invite.expires)) + ". A new one stops this one working.") + '</p>' +
+      '<div class="actions"><button type="button" class="btn' + (gone ? '' : ' ghost') + '" data-ac-invite>Send a new invite</button>' + (gone ? '' : '<button type="button" class="btn ghost" data-ac-uninvite>Cancel the invite</button>') + '</div>';
+  }
+  return '<h3>' + (a.lastSignIn ? "Link to set a new password" : "Invite") + '</h3><p class="sub">' + (a.lastSignIn ? "Emails " + first + " a link that works once, for seven days, to choose a new password. Their current password keeps working until they do." : "Emails " + first + " a link that works once, for seven days, to choose their own password.") + '</p>' +
+    '<div class="actions"><button type="button" class="btn ghost" data-ac-invite>' + (a.lastSignIn ? "Send the link" : "Send an invite") + '</button></div>';
+}
+function acInviteShow(a, inv){
+  const first = a.name.split(" ")[0];
+  let h = '<div class="state ok" style="margin-bottom:14px">' + E(inv.emailed ? "Invite emailed to " + a.email + "." : a.name + " is ready, but nothing was emailed.") + '</div>';
+  if(!inv.emailed){
+    h += '<p class="sub">' + E(inv.mailProblem || "") + ' Send ' + E(first) + ' this link by text or message instead. It works once, until ' + E(longDay(inv.expires)) + '.</p>' +
+      '<div class="ac-temp"><span class="k">Invite link for ' + E(a.name) + '</span><code id="acTempPw" style="font-size:13px;letter-spacing:0;word-break:break-all">' + E(inv.link) + '</code><button type="button" class="btn ghost" data-ac-copy>Copy</button></div>';
+  } else {
+    h += '<p class="sub">' + E(first) + ' opens the email, presses Choose your password, and is signed in. The link works once, until ' + E(longDay(inv.expires)) + '. If it does not arrive, open ' + E(first) + ' here and send a new one.</p>';
+  }
+  $("dbody").innerHTML = h + '<div class="actions"><button type="button" class="btn" data-ac-done>Done</button></div>';
+}
 document.addEventListener("change", ev => {
   const f = ev.target.closest && ev.target.closest("#acForm"); if(!f) return;
   if(ev.target.name === "resp" && ev.target.value !== "custom"){
@@ -2914,7 +2950,7 @@ document.addEventListener("change", ev => {
   }
 });
 document.addEventListener("click", ev => {
-  const t = ev.target.closest && ev.target.closest("[data-ac-new],[data-ac-edit],[data-ac-save],[data-ac-reset],[data-ac-active],[data-ac-remove],[data-ac-copy],[data-ac-done],[data-ac-idle],[data-ac-yes],[data-me-open],[data-me-save]");
+  const t = ev.target.closest && ev.target.closest("[data-ac-new],[data-ac-edit],[data-ac-save],[data-ac-reset],[data-ac-active],[data-ac-remove],[data-ac-copy],[data-ac-done],[data-ac-idle],[data-ac-yes],[data-ac-invite],[data-ac-uninvite],[data-me-open],[data-me-save]");
   if(!t) return;
   if(t.dataset.acNew !== undefined) return acOpen("");
   if(t.dataset.acEdit) return acOpen(t.dataset.acEdit);
@@ -2943,15 +2979,29 @@ document.addEventListener("click", ev => {
     if(!body.areas.some(x => ["office","money","field"].includes(x))) return acMsg("Tick at least one of Office, Money or Field.");
     if(!body.level) return acMsg("Choose what they can do.");
     t.disabled = true; acMsg("Saving…");
-    const call = id ? acctCall("", { action:"update", id, ...body }) : acctCall("", { action:"create", ...body });
+    const invite = !id && t.dataset.acSave === "invite";
+    const call = id ? acctCall("", { action:"update", id, ...body }) : acctCall("", { action:"create", ...body, sendInvite: invite });
     call.then(r => {
-      if(!id){ acTemp(r.account, r.temp, r.account.name + " is added. Nothing has been sent to them."); drawerState = { kind:"account", id: r.account.id }; }
+      if(!id && invite){ acInviteShow(r.account, r.invite); drawerState = { kind:"account", id: r.account.id }; }
+      else if(!id){ acTemp(r.account, r.temp, r.account.name + " is added. Nothing has been sent to them."); drawerState = { kind:"account", id: r.account.id }; }
       else { acMsg("Saved. It applies at " + r.account.name.split(" ")[0] + "'s next click."); t.disabled = false; }
       loadAccounts();
     }).catch(e => { acMsg(errCopy(e)); t.disabled = false; });
     return;
   }
   if(!a) return;
+  if(t.dataset.acInvite !== undefined){
+    t.disabled = true; t.textContent = "Sending…";
+    acctCall("", { action:"invite", id }).then(r => { acInviteShow(r.account, r.invite); loadAccounts(); })
+      .catch(e => { t.disabled = false; t.textContent = "Try again"; t.insertAdjacentHTML("afterend", '<p class="sub">' + E(errCopy(e)) + '</p>'); });
+    return;
+  }
+  if(t.dataset.acUninvite !== undefined){
+    t.disabled = true;
+    acctCall("", { action:"cancelInvite", id }).then(r => { ADM.list = ADM.list.map(x => x.id === id ? r.account : x); acOpen(id); acMsg("Invite cancelled. The link no longer works."); loadAccounts(); })
+      .catch(e => { t.disabled = false; t.insertAdjacentHTML("afterend", '<p class="sub">' + E(errCopy(e)) + '</p>'); });
+    return;
+  }
   if(t.dataset.acReset !== undefined){
     t.outerHTML = '<button type="button" class="btn" data-ac-yes="reset">Yes, sign ' + E(a.name.split(" ")[0]) + ' out and make a new one</button>'; return;
   }

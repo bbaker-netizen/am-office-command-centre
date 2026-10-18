@@ -22,7 +22,11 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const params = new URLSearchParams(location.search);
   const NEXT = params.get('next') || '';                 // "command" (or an old "shop") : where they were sent from
-  const AFTER = params.get('h') || location.hash || '';  // the page they were on, for example #money
+  /* An invite link: /#invite=<key>. Read once, then taken out of the address bar
+     so it is not left in the browser's history or sent on anywhere. */
+  const INVITE = (location.hash.match(/^#invite=([A-Za-z0-9_-]{40,60})$/) || [])[1] || '';
+  if (INVITE) { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+  const AFTER = params.get('h') || (INVITE ? '' : location.hash) || '';  // the page they were on, for example #money
   const OUT = params.has('out');
   const MIN_PW = 10;
 
@@ -102,7 +106,7 @@
         <button class="btn big" type="submit" id="go">Sign in</button>
         <p class="msg" id="msg" role="status"></p>
       </form>
-      <p class="small">Forgot your password? An admin gives you a new one from Admin, People and access in the command centre.</p>
+      <p class="small">Forgot your password? Ask an admin to send you a new link from Admin, People and access in the command centre.</p>
       ${shopDoor()}`);
     wireShow();
     (last && last.email ? $('#pw') : $('#em')).focus();
@@ -154,6 +158,45 @@
     };
   }
 
+  /* ------------------------------------------------------ an invite link */
+  async function drawInvite(token) {
+    card(`<h1>Welcome</h1><p class="lede">Checking your invite…</p>`);
+    let r;
+    try { r = await call({ action: 'inviteCheck', token }); }
+    catch (e) { return drawSignIn('No connection. Open the invite link again with a bar of signal.', 'bad'); }
+    if (!r.ok) return drawSignIn(r.b.message || 'That invite link does not work. Ask an admin for a new one.', 'bad');
+    const first = String(r.b.name || '').split(' ')[0];
+    const until = new Date(r.b.expires).toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' });
+    card(`
+      <h1>Welcome${first ? ', ' + esc(first) : ''}</h1>
+      <p class="lede">Choose the password you will use to sign in to the A&amp;M app. At least ${MIN_PW} characters. A short sentence you will remember works well. This link works until ${esc(until)}.</p>
+      <form id="f" novalidate>
+        <label class="fld"><span>Your work email</span><input id="em" type="email" autocomplete="username" value="${esc(r.b.email || '')}" readonly></label>
+        ${pwField('n1', 'Choose a password', 'new-password', 'minlength="' + MIN_PW + '"')}
+        ${pwField('n2', 'Type it again', 'new-password')}
+        <button class="btn big" type="submit" id="go">Save and sign in</button>
+        <p class="msg" id="msg" role="status"></p>
+      </form>`);
+    wireShow(); $('#n1').focus();
+    $('#f').onsubmit = async ev => {
+      ev.preventDefault();
+      const a = $('#n1').value, b = $('#n2').value, btn = $('#go');
+      if (a.length < MIN_PW) return note(`Use at least ${MIN_PW} characters.`, 'bad');
+      if (a !== b) return note('The two do not match. Type them again.', 'bad');
+      busy(btn, true, 'Saving…'); note('');
+      let x;
+      try { x = await call({ action: 'acceptInvite', token, password: a }); }
+      catch (e) { busy(btn, false, 'Save and sign in'); return note('No connection. Try again with a bar of signal.', 'bad'); }
+      if (!x.ok) {
+        busy(btn, false, 'Save and sign in');
+        if (/invite_/.test(x.b.error || '')) return drawSignIn(x.b.message, 'bad');
+        return note(x.b.message || 'That did not save.', 'bad');
+      }
+      await keep(x.b);
+      goOn();
+    };
+  }
+
   /* ------------------------------------------------- the very first account */
   async function drawSetup() {
     let names = [];
@@ -198,6 +241,8 @@
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
     /* An old link from the shop. The shop signs its own people in now. */
     if (NEXT === 'shop') return location.replace('/shop.html' + shopScreen());
+    /* An invite comes first, even on a device someone else signed in on. */
+    if (INVITE) return drawInvite(INVITE);
     if (OUT) { await set('acctToken', null); await set('acctSession', null); }
     const [token, session, idleH, ever, shopToken, shopRole] = await Promise.all([get('acctToken'), get('acctSession'), get('acctIdle'), get('acctEver'), get('token'), get('role')]);
     /* Signed in here and used recently: straight through. Idle too long, and

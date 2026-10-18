@@ -6,9 +6,23 @@
                                         the very first account only, see below
    GET  /api/account?action=me          who this browser is signed in as
    POST {action:"password", current, next}
+   POST {action:"inviteCheck", token}    who an invite link is for (anyone)
+   POST {action:"acceptInvite", token, password}
+                                        choose a password from an invite link
    Admins only:
    GET  /api/account?action=list
    POST {action:"create" | "update" | "reset" | "remove" | "settings", ...}
+   POST {action:"create", ..., sendInvite:true}  add and invite in one go
+   POST {action:"invite" | "cancelInvite", id}
+
+   INVITES
+   An admin adds a person and sends an invite. The person gets a link to the
+   app that works once, for INVITE_DAYS (7), and chooses their own password
+   with it. No password is ever emailed. The link carries a random key; only a
+   scramble of that key is kept, so a copy of the data cannot be turned back
+   into a working link. A new invite, a cancelled invite or a used one makes
+   the old link worthless. The email goes from the robots' mailbox when it is
+   connected; when it is not, the admin is shown the link to pass on.
 
    THE FIRST ACCOUNT
    Nobody can be given an account until an admin exists, and nobody is an admin
@@ -19,6 +33,7 @@
    good. There is no code or secret to leave lying around. */
 
 import { authStore, roleOf } from "./_auth.mjs";
+import { sendEmail } from "./mail.mjs";
 import { readFails, addFail, clearFails, lockedFor, ipKey, ipBlocked, ipFail, checkShopPin } from "./_pin.mjs";
 import {
   AREAS, LEVELS, PRESETS, IDLE_CHOICES, ACCOUNTS_LOG, normEmail, okEmail, hashPassword, checkPassword, needsRehash,
@@ -45,6 +60,76 @@ function cleanAreas(list) {
   const a = [...new Set((Array.isArray(list) ? list : []).filter(x => AREAS.includes(x)))];
   if (!a.some(x => ["office", "money", "field"].includes(x))) return null;
   return AREAS.filter(x => a.includes(x));
+}
+
+/* ---------------------------------------------------------------- invites */
+const INVITE_DAYS = Number(process.env.INVITE_DAYS || 7);
+const b64u = bytes => Buffer.from(bytes).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function inviteHash(token) {
+  const d = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode("invite:" + token));
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+const okToken = t => typeof t === "string" && /^[A-Za-z0-9_-]{40,60}$/.test(t);
+async function findInvite(accounts, token) {
+  if (!okToken(token)) return null;
+  const h = await inviteHash(token);
+  return Object.values(accounts).find(a => a.invite && a.invite.h === h) || null;
+}
+const siteUrl = req => String(process.env.URL || new URL(req.url).origin).replace(/\/+$/, "");
+const longDate = iso => new Date(iso).toLocaleDateString("en-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/Edmonton" });
+const escHtml = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* Make a fresh invite for one account and try to email it. The old link, if
+   any, stops working the moment this saves. */
+async function issueInvite(s, req, id, me) {
+  const token = b64u(globalThis.crypto.getRandomValues(new Uint8Array(32)));
+  const h = await inviteHash(token);
+  const now = new Date();
+  const exp = new Date(now.getTime() + INVITE_DAYS * 86400000).toISOString();
+  const acc = await changeAccounts(s, doc => {
+    const x = doc.accounts[id]; if (!x) return null;
+    x.invite = { h, exp, at: now.toISOString(), by: me.name, emailed: false };
+    return x;
+  });
+  if (!acc) return { err: bad("That account is not there any more.", 404, "not_found") };
+  const site = siteUrl(req), link = site + "/#invite=" + token;
+  const first = String(acc.name || "").split(" ")[0] || "there";
+  const until = longDate(exp);
+  const text = [
+    "Hi " + first + ",", "",
+    me.name + " has set up your account for the A&M app.", "",
+    "Open this link to choose your password:", link, "",
+    "The link works once and runs out on " + until + ".",
+    "After that, sign in at " + site + " with " + acc.email + " and the password you chose.", "",
+    "If you were not expecting this, ignore it and let " + me.name + " know.", "",
+    "A&M Abatement Services Ltd."
+  ].join("\n");
+  const html = '<!doctype html><html><body style="margin:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#1a1917">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 16px">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">' +
+    '<tr><td style="background:#1a1917;padding:18px 24px"><img src="' + escHtml(site) + '/am-logo.png" alt="A&amp;M Abatement" height="36" style="display:block;height:36px"></td></tr>' +
+    '<tr><td style="padding:24px;font-size:15px;line-height:1.5">' +
+    '<p style="margin:0 0 14px">Hi ' + escHtml(first) + ',</p>' +
+    '<p style="margin:0 0 18px">' + escHtml(me.name) + ' has set up your account for the A&amp;M app.</p>' +
+    '<p style="margin:0 0 22px"><a href="' + escHtml(link) + '" style="display:inline-block;background:#329dbb;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:3px">Choose your password</a></p>' +
+    '<p style="margin:0 0 14px">The link works once and runs out on ' + escHtml(until) + '. After that, sign in at <a href="' + escHtml(site) + '" style="color:#329dbb">' + escHtml(site.replace(/^https?:\/\//, "")) + '</a> with ' + escHtml(acc.email) + ' and the password you chose.</p>' +
+    '<p style="margin:0 0 14px;color:#5a5853;font-size:13px">If the button does not work, copy this into your browser:<br><span style="word-break:break-all">' + escHtml(link) + '</span></p>' +
+    '<p style="margin:0;color:#5a5853;font-size:13px">If you were not expecting this, ignore it and let ' + escHtml(me.name) + ' know.</p>' +
+    '</td></tr><tr><td style="border-top:3px solid #329dbb;padding:12px 24px;font-size:12px;color:#5a5853">A&amp;M Abatement Services Ltd. &middot; Edmonton and Calgary</td></tr>' +
+    '</table></td></tr></table></body></html>';
+  let emailed = false, mailProblem = "";
+  try {
+    await sendEmail({ to: acc.email, subject: "Your A&M app account", text, html, replyTo: me.email, by: me.name });
+    emailed = true;
+  } catch (e) {
+    mailProblem = e && e.code === "NOT_CONNECTED"
+      ? "The robots' mailbox is not connected yet, so nothing was emailed."
+      : "The email did not go: " + ((e && e.message) || "unknown problem") + ".";
+  }
+  let saved = acc;
+  if (emailed) saved = await changeAccounts(s, doc => { const x = doc.accounts[id]; if (x && x.invite && x.invite.h === h) x.invite.emailed = true; return x; }) || acc;
+  await logAccount(s, { by: me.name, action: "invite", who: acc.name, detail: emailed ? "Invite emailed to " + acc.email + ", works until " + exp.slice(0, 10) : "Invite link made, not emailed, works until " + exp.slice(0, 10) });
+  return { account: publicAccount(saved), invite: { link, emailed, mailProblem, expires: exp } };
 }
 
 /* A scramble of nothing, so a wrong email takes as long to refuse as a wrong
@@ -118,6 +203,33 @@ export default async (req) => {
       return json({ token: await accountToken(s, made), account: publicAccount(made), mustChange: false, idleHours: 8 });
     }
 
+    /* ------------------------------------------------------- invite links */
+    if (action === "inviteCheck" || action === "acceptInvite") {
+      const ik = await ipKey(req);
+      if (await ipBlocked(s, ik)) return bad("Too many tries from this connection. Wait an hour, or ask an admin.", 429, "locked");
+      const token = String(body.token || "");
+      const { accounts, settings } = await readAccounts(s);
+      const a = await findInvite(accounts, token);
+      if (!a) { await ipFail(s, ik); return bad("This invite link does not work. It may have been used already, or replaced by a newer one. Ask an admin to send a new invite.", 404, "invite_gone"); }
+      if (Date.parse(a.invite.exp) < Date.now()) return bad("This invite link ran out on " + longDate(a.invite.exp) + ". Ask an admin to send a new one.", 410, "invite_expired");
+      if (a.active === false) return bad("This account has been switched off. Ask an admin.", 403, "off");
+      if (action === "inviteCheck") return json({ ok: true, name: a.name, email: a.email, expires: a.invite.exp });
+      const pw = String(body.password || "");
+      const prob = passwordProblem(pw, a); if (prob) return bad(prob);
+      const pwRec = await hashPassword(pw), h = a.invite.h;
+      const saved = await changeAccounts(s, doc => {
+        const x = doc.accounts[a.id];
+        if (!x || !x.invite || x.invite.h !== h) return null;
+        const now = new Date().toISOString();
+        x.pw = pwRec; x.pwv = now; x.mustChange = false; x.lastSignIn = now; delete x.invite;
+        return x;
+      });
+      if (!saved) return bad("This invite link was just replaced or used. Ask an admin to send a new one.", 409, "invite_gone");
+      try { await clearFails(s, await emailKey(saved.email)); } catch (e) {}
+      await logAccount(s, { by: saved.name, action: "acceptInvite", who: saved.name, detail: "Chose their password from an invite" });
+      return json({ token: await accountToken(s, saved), account: publicAccount(saved), mustChange: false, idleHours: settings.idleHours });
+    }
+
     /* Everything below needs a signed-in account. */
     const denied = await accountGate(req, s, { allowMustChange: action === "me" || action === "password" });
     if (denied) return denied;
@@ -177,6 +289,13 @@ export default async (req) => {
       });
       if (!made) return bad("Somebody already has an account with that email.", 409, "taken");
       await logAccount(s, { by: me.name, action: "create", who: made.name, detail: publicAccount(made).responsibilityLabel + ", " + levelWord(level) });
+      /* Invited instead: the temporary password is never shown to anyone, so
+         the only way in is the link. */
+      if (body.sendInvite) {
+        const out = await issueInvite(s, req, made.id, me);
+        if (out.err) return out.err;
+        return json({ ok: true, ...out });
+      }
       return json({ ok: true, account: publicAccount(made), temp });
     }
 
@@ -211,6 +330,26 @@ export default async (req) => {
       if (out.err) return out.err;
       await logAccount(s, { by: me.name, action: "update", who: out.now.name, detail: changeWords(out.was, out.now) });
       return json({ ok: true, account: out.now });
+    }
+
+    if (action === "invite") {
+      const id = String(body.id || "");
+      if (id === me.id) return bad("To change your own password, use Change my password.", 400, "self");
+      const { accounts } = await readAccounts(s);
+      const x = accounts[id];
+      if (!x) return bad("That account is not there any more.", 404, "not_found");
+      if (x.active === false) return bad("This account is switched off. Switch it back on first.", 400, "off");
+      const out = await issueInvite(s, req, id, me);
+      if (out.err) return out.err;
+      return json({ ok: true, ...out });
+    }
+
+    if (action === "cancelInvite") {
+      const id = String(body.id || "");
+      const out = await changeAccounts(s, doc => { const x = doc.accounts[id]; if (!x) return null; delete x.invite; return x; });
+      if (!out) return bad("That account is not there any more.", 404, "not_found");
+      await logAccount(s, { by: me.name, action: "cancelInvite", who: out.name, detail: "Invite cancelled; the link no longer works" });
+      return json({ ok: true, account: publicAccount(out) });
     }
 
     if (action === "reset") {
