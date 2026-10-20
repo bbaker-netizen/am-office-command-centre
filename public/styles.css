@@ -871,3 +871,10 @@ textarea.paste { width: 100%; font-family: var(--font); font-variant-numeric: ta
 .cc-back[hidden] { display: none; }
 .cc-back .cc-short { display: none; }
 @media (max-width: 640px) { .cc-back { margin-left: 8px; padding: 6px 10px; } .cc-back .cc-long { display: none; } .cc-back .cc-short { display: inline; } }
+
+/* Labels: the pick list scrolls inside its own box, so ticking the four you
+   want does not mean scrolling past them to reach Build and Print. */
+.lb-pick { max-height: 420px; overflow-y: auto; }
+.lb-pick input[type="checkbox"] { width: 22px; height: 22px; }
+.nowrap { white-space: nowrap; }
+.clear-note.bad { color: var(--bad); }

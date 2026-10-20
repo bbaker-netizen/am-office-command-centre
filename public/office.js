@@ -645,6 +645,8 @@
      was the crew's Find screen, which is built for answering "where is that
      one" on a phone, not for working down 548 of them at a desk. */
 
+  const gearOpen = new Set();   // groups left open, so a save does not fold them shut
+
   AM.screens['#/gear'] = function () {
     const d = AM.derive();
     const groups = [...new Set(S.catalog.units.map(u => u.group))].sort();
@@ -677,7 +679,7 @@
         ${groups.map(g => {
           const inG = S.catalog.units.filter(u => u.group === g);
           const missing = inG.filter(u => !u.serial).length;
-          return `<details class="grp-fold">
+          return `<details class="grp-fold" data-g="${esc(g)}" ${gearOpen.has(g) ? 'open' : ''}>
             <summary><span class="grp">${esc(g)}</span>
               <span class="grp-tally">${inG.length} machine${inG.length === 1 ? '' : 's'}${missing ? ' · <b class="warn-text">' + missing + ' with no serial</b>' : ''}</span>
             </summary>
@@ -686,13 +688,14 @@
             </tr></thead><tbody>
             ${inG.map(u => {
               const w = where(u);
-              return `<tr data-name="${esc((u.name + ' ' + (u.unitNo || '') + ' ' + u.id + ' ' + (u.serial || '') + ' ' + (u.model || '')).toLowerCase())}">
+              return `<tr data-name="${esc((u.name + ' ' + (u.unitNo || '') + ' ' + u.id + ' ' + (u.serial || '') + ' ' + (u.model || '') + ' ' + g).toLowerCase())}">
                 <td><strong>${esc(u.name)}</strong><div class="line-id">${esc(u.id)}</div></td>
                 <td class="small">${esc(u.unitNo || '—')}</td>
                 <td class="small ${u.serial ? '' : 'warn-text'}">${esc(u.serial || 'not on file')}</td>
                 <td class="small">${esc(u.model || '—')}</td>
                 <td class="small ${w.c}">${esc(w.t)}</td>
-                <td><a class="btn-ghost" href="#/labels?ids=${encodeURIComponent(u.id)}&kind=unit&from=gear">Sticker</a></td>
+                <td class="nowrap"><button class="btn-ghost gEdit" data-id="${esc(u.id)}">Edit</button>
+                  <a class="btn-ghost" href="#/labels?ids=${encodeURIComponent(u.id)}&kind=unit&from=gear">Sticker</a></td>
               </tr>`;
             }).join('')}
             </tbody></table>
@@ -702,7 +705,100 @@
     </div>`;
   };
 
+  /* Has this machine ever been scanned, moved, tested or written off? If not,
+     nothing anywhere points at its tag yet, so the tag can still be changed
+     and a machine added by mistake can still be taken off the list. Once it
+     has a history, the tag is the history's key and stays. */
+  function everMoved(id) {
+    const hit = e => e && (e.itemId === id || e.unitId === id);
+    if ((S.events || []).some(hit) || (S.outbox || []).some(hit)) return true;
+    return (S.catalog.kits || []).some(k => JSON.stringify(k).includes('"' + id + '"'));
+  }
+  AM.everMoved = everMoved;
+
+  function editMachine(id) {
+    const u = S.catalog.units.find(x => x.id === id);
+    if (!u) return;
+    const fresh = !everMoved(id);
+    const groups = [...new Set(S.catalog.units.map(x => x.group))].sort();
+    AM.modal(`
+      <h3>Edit ${esc(u.id)}</h3>
+      <div class="grid2">
+        <label class="fld">Group<select id="eGroup">${groups.map(g => `<option ${g === u.group ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></label>
+        <label class="fld">Name<input id="eName" value="${esc(u.name || '')}" autocomplete="off"></label>
+        <label class="fld">Unit number<input id="eNo" value="${esc(u.unitNo || '')}" autocomplete="off"></label>
+        <label class="fld">Serial<input id="eSer" value="${esc(u.serial || '')}" autocomplete="off"></label>
+        <label class="fld">Make and model<input id="eModel" value="${esc(u.model || '')}" autocomplete="off"></label>
+        <label class="fld">Tag<input id="eTag" value="${esc(u.id)}" autocomplete="off" ${fresh ? '' : 'disabled'}></label>
+      </div>
+      <p class="muted small" id="eTagNote">${fresh
+        ? 'Nothing has been scanned against this tag yet, so it can still change. If you change it, print a new sticker and throw the old one away.'
+        : 'This machine has history against its tag, so the tag stays as it is.'}</p>
+      ${fresh ? '<button class="btn-ghost" id="eSuggest">Use the right tag for this group</button>' : ''}
+      <p class="bad small" id="eWarn"></p>
+      <div class="row">
+        <button class="btn" id="eSave">Save</button>
+        <button class="btn-ghost" onclick="AM.closeModal()">Cancel</button>
+        ${fresh ? '<button class="btn-ghost bad" id="eRemove">Take it off the list</button>' : ''}
+      </div>`, el => {
+      const v = k => $('#' + k, el).value.trim();
+      const sug = $('#eSuggest', el);
+      if (sug) sug.onclick = () => {
+        const taken = takenIds(); taken.delete(u.id);
+        $('#eTag', el).value = nextTag(v('eGroup'), 'unit', { name: v('eName'), taken });
+      };
+      $('#eSave', el).onclick = async () => {
+        const group = v('eGroup'), name = v('eName');
+        const tag = fresh ? v('eTag').toUpperCase() : u.id;
+        const warn = $('#eWarn', el);
+        if (!name) { warn.textContent = 'It needs a name.'; return; }
+        if (!/^[A-Z0-9]+(-[A-Z0-9]+)*$/.test(tag)) { warn.textContent = 'A tag is letters and numbers with a hyphen, like HVAC-02.'; return; }
+        if (tag !== u.id && takenIds().has(tag)) { warn.textContent = tag + ' is already taken, or was used once and removed. Pick another.'; return; }
+        const dup = alreadyOnList(group, name, v('eNo'), v('eSer'), u.id);
+        if (dup) { warn.textContent = dup; return; }
+        const changes = { group, name, unitNo: v('eNo'), serial: v('eSer'), model: v('eModel'),
+          dop: u.dop || /negative air|vacuum|scrubber|hepa/i.test(group + ' ' + name),
+          editedBy: S.me || '', editedAt: AM.nowISO() };
+        if (tag === u.id) {
+          Object.assign(u, changes);
+        } else {
+          /* The tag is the record's key, so a new tag is a new row and the old
+             tag is written down as removed, which keeps it gone on every phone. */
+          const moved = { ...u, ...changes, id: tag, retaggedFrom: u.id };
+          S.catalog.units = S.catalog.units.filter(x => x.id !== u.id);
+          S.catalog.units.push(moved);
+          AM.markDeleted('units', u.id);
+        }
+        await AM.saveCatalog();
+        AM.closeModal();
+        AM.toast(tag === u.id ? `${u.id} updated.` : `${u.id} is now ${tag}. Print its new sticker.`);
+        AM.render();
+      };
+      const rm = $('#eRemove', el);
+      if (rm) rm.onclick = async () => {
+        if (rm.dataset.sure !== '1') {
+          rm.dataset.sure = '1';
+          rm.textContent = `Yes, take ${u.id} off the list`;
+          $('#eWarn', el).textContent = 'Only for a machine added by mistake, like a double entry. Tap again to confirm.';
+          return;
+        }
+        S.catalog.units = S.catalog.units.filter(x => x.id !== u.id);
+        AM.markDeleted('units', u.id);
+        await AM.saveCatalog();
+        AM.closeModal();
+        AM.toast(`${u.id} is off the list.`);
+        AM.render();
+      };
+    });
+  }
+  AM.editMachine = editMachine;
+
   AM.after['#/gear'] = function () {
+    $$('.gEdit').forEach(b => b.onclick = () => editMachine(b.dataset.id));
+    $$('.grp-fold[data-g]').forEach(f => f.addEventListener('toggle', () => {
+      if ($('#gq') && $('#gq').value.trim()) return;   // the filter opens groups itself
+      if (f.open) gearOpen.add(f.dataset.g); else gearOpen.delete(f.dataset.g);
+    }));
     const dl = $('#gDl'); if (dl) dl.onclick = () => {
       const blob = new Blob(['﻿' + gearCSV()], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
@@ -1412,14 +1508,111 @@
      one where they highlight the rows they already typed and drop them here.
      Nothing is written until the office has looked at the table underneath. */
 
-  const PREFIXES = { 'Dehumidifiers': 'DEH', 'Negative Air': 'NEG', 'Air Movers': 'AFM', 'Vacuums': 'VAC',
-    'Air Scrubbers': 'AFD', 'Ladders': 'LAD', 'Showers': 'SHW', 'Bins': 'BIN', 'Hand tools': 'TLS' };
+  /* Used only when a group has nothing in it yet to learn from. These used to
+     be the only rule, and two of them were wrong for the list the shop really
+     has: Air Movers are AMV on every machine, not AFM, and the scrubber group
+     is called "Air Scrubbers & Hydroxyl", so its entry never matched. */
+  const PREFIXES = { 'Dehumidifiers': 'DEH', 'Negative Air': 'NEG', 'Air Movers': 'AMV', 'Vacuums': 'VAC',
+    'Air Scrubbers & Hydroxyl': 'SCRB', 'Air Scrubbers': 'SCRB', 'Ladders & Scaffold': 'LAD', 'Ladders': 'LAD',
+    'Showers, Heat & Water': 'SHWR', 'Showers': 'SHW', 'Bins, Carts & Dollies': 'BIN', 'Bins': 'BIN', 'Hand tools': 'TLS' };
 
   let addParsed = { units: [], stock: [], problems: [] };
+  /* What the one-at-a-time form is set to. Kept here rather than read off the
+     screen, because the screen is redrawn whenever the phone syncs, and a
+     redraw used to put the group back to the first one in the list. */
+  let addDraft = { kind: 'unit', group: '' };
+  let addedNow = [];   // tags added on this visit, so they can be printed together
+
+  const wordsIn = t => String(t || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).map(w => w.length > 3 ? w.replace(/s$/, '') : w);
+  const prefixOf = id => (/^([A-Z]+)-/.exec(String(id)) || [])[1] || '';
+
+  /* Every tag that is taken, including ones deliberately removed. A removed
+     tag stays removed on every phone, so it must never be handed out again. */
+  function takenIds() {
+    const t = new Set([...S.catalog.units.map(u => String(u.id)), ...S.catalog.stock.map(x => String(x.id))]);
+    const dead = S.catalog.deleted || {};
+    ['units', 'stock'].forEach(k => Object.keys(dead[k] || {}).forEach(id => t.add(String(id))));
+    return t;
+  }
+
+  /* Which letters a new tag starts with. The machines already in the group
+     are the best guide: a new Tiger Vacuum is TVAC like the other Tiger
+     Vacuums, and a HEPA vacuum is HVAC like the HEPA vacuum already on file.
+     Words the group name already says ("vacuum" in Vacuums) do not count,
+     or every vacuum would match every other vacuum. */
+  function suggestPrefix(group, name, kind) {
+    const list = kind === 'stock' ? S.catalog.stock : S.catalog.units;
+    const inGroup = list.filter(x => x.group === group && prefixOf(x.id));
+    const nm = String(name || '').trim().toLowerCase();
+    if (nm) {
+      const same = inGroup.find(x => String(x.name || '').trim().toLowerCase() === nm);
+      if (same) return prefixOf(same.id);
+      const gw = new Set(wordsIn(group));
+      const mine = new Set(wordsIn(name).filter(w => !gw.has(w) && w.length > 1));
+      let best = null, score = 0;
+      for (const x of inGroup) {
+        const hit = wordsIn(x.name).filter(w => mine.has(w)).length;
+        if (hit > score) { score = hit; best = x; }
+      }
+      if (best) return prefixOf(best.id);
+    }
+    if (PREFIXES[group]) return PREFIXES[group];
+    const counts = {};
+    inGroup.forEach(x => { const p = prefixOf(x.id); counts[p] = (counts[p] || 0) + 1; });
+    const top = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+    return top || (String(group).replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'ITM');
+  }
+
+  /* The next tag, carried on from the highest number with those letters
+     anywhere on the list, so nobody ends up with two DEH-804 on two machines. */
+  function nextTag(group, kind, opts = {}) {
+    const prefix = String(opts.prefix || suggestPrefix(group, opts.name, kind)).toUpperCase().replace(/[^A-Z]/g, '') || 'ITM';
+    const taken = opts.taken || takenIds();
+    let max = 0;
+    taken.forEach(id => { const m = /^([A-Z]+)-(\d+)$/.exec(id); if (m && m[1] === prefix) max = Math.max(max, parseInt(m[2], 10)); });
+    let n = max + 1;
+    let id = `${prefix}-${String(n).padStart(2, '0')}`;
+    while (taken.has(id)) { n++; id = `${prefix}-${String(n).padStart(2, '0')}`; }
+    return id;
+  }
+  AM.nextTag = nextTag;
+
+  /* A name that says one thing and a group that says another is how four HEPA
+     vacuums ended up filed as air movers. Said before saving, not after. */
+  function groupMismatch(group, name, kind) {
+    const list = kind === 'stock' ? S.catalog.stock : S.catalog.units;
+    const groups = [...new Set(list.map(x => x.group))];
+    const mine = new Set(wordsIn(name).filter(w => w.length >= 5));
+    if (!group || !mine.size || wordsIn(group).some(w => mine.has(w))) return '';
+    const other = groups.find(g => g !== group && wordsIn(g).some(w => w.length >= 5 && mine.has(w)));
+    return other ? `The name sounds like ${other}, but the group is ${group}. Check the group before adding.` : '';
+  }
+
+  /* Is this machine already on the list? The same serial is never two
+     machines. The same unit number on the same kind of machine almost never
+     is either. */
+  function alreadyOnList(group, name, unitNo, serial, exceptId) {
+    const ser = String(serial || '').trim().toUpperCase();
+    if (ser) {
+      const hit = S.catalog.units.find(u => u.id !== exceptId && String(u.serial || '').trim().toUpperCase() === ser);
+      if (hit) return `Serial ${serial} is already on ${hit.id} (${hit.name}${hit.unitNo ? ' ' + hit.unitNo : ''}).`;
+    }
+    const no = String(unitNo || '').trim().toLowerCase().replace(/^#/, '');
+    if (no) {
+      const hit = S.catalog.units.find(u => u.id !== exceptId && u.group === group &&
+        String(u.name || '').trim().toLowerCase() === String(name || '').trim().toLowerCase() &&
+        String(u.unitNo || '').trim().toLowerCase().replace(/^#/, '') === no);
+      if (hit) return `${hit.name} ${hit.unitNo} is already on the list as ${hit.id}.`;
+    }
+    return '';
+  }
+  AM.alreadyOnList = alreadyOnList;
 
   AM.screens['#/add'] = function () {
-    const groupsU = [...new Set(S.catalog.units.map(u => u.group))].sort();
-    const groupsS = [...new Set(S.catalog.stock.map(x => x.group))].sort();
+    const unitKind = addDraft.kind !== 'stock';
+    const gs = [...new Set((unitKind ? S.catalog.units : S.catalog.stock).map(x => x.group))].sort();
+    if (addDraft.group && !gs.includes(addDraft.group)) addDraft.group = '';
+    const justAdded = addedNow.filter(id => S.catalog.units.some(u => u.id === id) || S.catalog.stock.some(x => x.id === id));
     return `
     <div class="wrap wide">
       <div class="panel">
@@ -1432,16 +1625,23 @@
         <h2>One at a time</h2>
         <div class="grid2">
           <label class="fld">What is it
-            <select id="a1Kind"><option value="unit">A machine</option><option value="stock">A material off the shelf</option></select></label>
+            <select id="a1Kind"><option value="unit" ${unitKind ? 'selected' : ''}>A machine</option><option value="stock" ${unitKind ? '' : 'selected'}>A material off the shelf</option></select></label>
           <label class="fld">Group
-            <select id="a1Group">${groupsU.map(g => `<option>${esc(g)}</option>`).join('')}</select></label>
-          <label class="fld">Name<input id="a1Name" placeholder="Dehumidifier - Large" autocomplete="off"></label>
-          <label class="fld">Unit number<input id="a1No" placeholder="#812" autocomplete="off"></label>
+            <select id="a1Group"><option value="" ${addDraft.group ? '' : 'selected'}>Pick a group</option>${gs.map(g => `<option ${g === addDraft.group ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></label>
+          <label class="fld">Name<input id="a1Name" placeholder="HEPA Vacuum" autocomplete="off"></label>
+          <label class="fld">Unit number<input id="a1No" placeholder="#4" autocomplete="off"></label>
           <label class="fld">Serial<input id="a1Ser" placeholder="off the plate" autocomplete="off"></label>
-          <label class="fld">Make and model<input id="a1Model" placeholder="Actuvate OLR190B" autocomplete="off"></label>
+          <label class="fld">Make and model<input id="a1Model" placeholder="Pullman Ermator S26" autocomplete="off"></label>
+          <label class="fld">Tag starts with<input id="a1Pre" placeholder="worked out for you" autocomplete="off" maxlength="6"></label>
         </div>
+        <p class="clear-note" id="a1Tag">Pick a group and a name, and the tag it will get shows here before anything is saved.</p>
         <div class="row"><button class="btn" id="a1Go">Add it</button>
-          <span class="muted small">The tag is worked out from the group, carrying on from the last one, and the sticker is ready to print straight after.</span></div>
+          <span class="muted small">The name, group and model stay filled in after each one, so a run of the same machine is just the unit number and the serial each time.</span></div>
+        ${justAdded.length ? `<div class="panel note">
+          <h2>Added just now: ${justAdded.length}</h2>
+          <p class="small">${justAdded.map(esc).join(', ')}</p>
+          <div class="row"><a class="btn" href="#/labels?ids=${encodeURIComponent(justAdded.join(','))}&kind=${unitKind ? 'unit' : 'shelf'}">Print stickers for these ${justAdded.length}</a>
+          <button class="btn-ghost" id="a1Done">Clear this list</button></div></div>` : ''}
       </div>
 
       <div class="panel">
@@ -1452,54 +1652,73 @@
           <button class="btn-ghost" id="apRead">Read it</button>
         </div>
         <p class="muted small" id="apHint">Machines: group, name, unit number, serial, make and model. One row each, in that order, headers or not. A tag is worked out for anything without one.</p>
-        <textarea id="apText" class="paste" rows="8" placeholder="Dehumidifiers&#9;Dehumidifier - Large&#9;#812&#9;230784094770013&#9;Actuvate OLR190B"></textarea>
+        <textarea id="apText" class="paste" rows="8" placeholder="Vacuums&#9;HEPA Vacuum&#9;#4&#9;230784094770013&#9;Pullman Ermator S26"></textarea>
         <div id="apOut"></div>
       </div>
     </div>`;
   };
 
-  /* The next tag in a group, carried on from whatever is already there rather
-     than restarted, so nobody ends up with two DEH-804 on two machines. */
-  function nextTag(group, kind) {
-    const list = kind === 'unit' ? S.catalog.units : S.catalog.stock;
-    const inGroup = list.filter(x => x.group === group);
-    const counts = {};
-    inGroup.forEach(x => { const m = /^([A-Z]+)-(\d+)$/.exec(String(x.id)); if (m) counts[m[1]] = Math.max(counts[m[1]] || 0, parseInt(m[2], 10)); });
-    let prefix = PREFIXES[group] || Object.keys(counts)[0];
-    if (!prefix) prefix = group.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'ITM';
-    let n = (counts[prefix] || 0) + 1;
-    const used = new Set(list.map(x => String(x.id)));
-    let id = `${prefix}-${String(n).padStart(2, '0')}`;
-    while (used.has(id)) { n++; id = `${prefix}-${String(n).padStart(2, '0')}`; }
-    return id;
-  }
-
   AM.after['#/add'] = function () {
     const kindSel = $('#a1Kind'), groupSel = $('#a1Group');
-    const fillGroups = () => {
+    const preview = () => {
+      const unit = kindSel.value === 'unit';
+      const group = groupSel.value, name = $('#a1Name').value.trim();
+      const out = $('#a1Tag');
+      if (!group) { out.className = 'clear-note'; out.textContent = 'Pick a group and a name, and the tag it will get shows here before anything is saved.'; return; }
+      const pre = $('#a1Pre').value.trim();
+      const id = nextTag(group, unit ? 'unit' : 'stock', { name, prefix: pre });
+      if (!pre) $('#a1Pre').placeholder = prefixOf(id) + ' (worked out for you)';
+      const warns = [groupMismatch(group, name, unit ? 'unit' : 'stock'),
+        unit ? alreadyOnList(group, name, $('#a1No').value, $('#a1Ser').value) : ''].filter(Boolean);
+      out.className = warns.length ? 'clear-note bad' : 'clear-note';
+      out.innerHTML = `This one will be tagged <b>${esc(id)}</b> in <b>${esc(group)}</b>.` + warns.map(w => `<br><b class="bad">${esc(w)}</b>`).join('');
+    };
+    kindSel.onchange = () => {
+      addDraft = { kind: kindSel.value, group: '' };
       const unit = kindSel.value === 'unit';
       const gs = [...new Set((unit ? S.catalog.units : S.catalog.stock).map(x => x.group))].sort();
-      groupSel.innerHTML = gs.map(g => `<option>${esc(g)}</option>`).join('');
+      groupSel.innerHTML = '<option value="">Pick a group</option>' + gs.map(g => `<option>${esc(g)}</option>`).join('');
+      preview();
     };
-    kindSel.onchange = fillGroups;
+    groupSel.onchange = () => { addDraft.group = groupSel.value; preview(); };
+    ['a1Name', 'a1No', 'a1Ser', 'a1Pre'].forEach(k => { const el = $('#' + k); if (el) el.addEventListener('input', preview); });
+    preview();
+    const done = $('#a1Done'); if (done) done.onclick = () => { addedNow = []; AM.render(); };
 
-    $('#a1Go').onclick = async () => {
+    const go = $('#a1Go');
+    go.onclick = async () => {
+      if (go.disabled) return;   // a second tap while the first is saving made AFM-05
       const unit = kindSel.value === 'unit';
       const name = $('#a1Name').value.trim();
-      if (!name) { AM.toast('It needs a name.', 'warn'); return; }
       const group = groupSel.value;
-      const id = nextTag(group, unit ? 'unit' : 'stock');
+      if (!group) { AM.toast('Pick a group first. It decides where it is filed and what its tag is.', 'warn'); groupSel.focus(); return; }
+      if (!name) { AM.toast('It needs a name.', 'warn'); return; }
+      const unitNo = $('#a1No').value.trim(), serial = $('#a1Ser').value.trim(), model = $('#a1Model').value.trim();
       if (unit) {
-        S.catalog.units.push({ id, kind: 'unit', group, name, unitNo: $('#a1No').value.trim(),
-          serial: $('#a1Ser').value.trim(), model: $('#a1Model').value.trim(), status: 'Active',
-          dop: /negative air|vacuum|scrubber/i.test(group + ' ' + name), home: 'SHOP', addedBy: S.me || '', addedAt: AM.nowISO() });
-      } else {
-        S.catalog.stock.push({ id, kind: 'stock', group, name, cls: 'consumed', uom: 'EA',
-          increments: [], onHand: null, min: null, addedBy: S.me || '', addedAt: AM.nowISO() });
+        const dup = alreadyOnList(group, name, unitNo, serial);
+        if (dup) { AM.toast(dup + ' It was not added again.', 'bad'); return; }
       }
-      await AM.saveCatalog();
-      AM.toast(`${name} is on the list as ${id}.`);
-      AM.go('#/labels?ids=' + encodeURIComponent(id));
+      const id = nextTag(group, unit ? 'unit' : 'stock', { name, prefix: $('#a1Pre').value.trim() });
+      go.disabled = true; go.textContent = 'Saving…';
+      try {
+        if (unit) {
+          S.catalog.units.push({ id, kind: 'unit', group, name, unitNo, serial, model, status: 'Active',
+            dop: /negative air|vacuum|scrubber|hepa/i.test(group + ' ' + name), home: 'SHOP', addedBy: S.me || '', addedAt: AM.nowISO() });
+        } else {
+          S.catalog.stock.push({ id, kind: 'stock', group, name, cls: 'consumed', uom: 'EA',
+            increments: [], onHand: null, min: null, addedBy: S.me || '', addedAt: AM.nowISO() });
+        }
+        addDraft = { kind: unit ? 'unit' : 'stock', group };
+        addedNow.push(id);
+        await AM.saveCatalog({ quiet: true });
+        AM.toast(`${name}${unitNo ? ' ' + unitNo : ''} is on the list as ${id}.`);
+      } finally {
+        go.disabled = false; go.textContent = 'Add it';
+      }
+      // Ready for the next one of the same: only the unit number and serial clear.
+      ['a1No', 'a1Ser'].forEach(k => AM.clearTyped($('#' + k)));
+      AM.render();
+      const no = $('#a1No'); if (no) no.focus();
     };
 
     const hint = $('#apHint');
@@ -1518,7 +1737,7 @@
          "Serial", which is exactly the thing that happens otherwise. */
       if (rowsIn.length && /group|item|name|description/i.test(rowsIn[0][0] || '')) rowsIn.shift();
 
-      const seenId = new Set([...S.catalog.units.map(u => String(u.id)), ...S.catalog.stock.map(x => String(x.id))]);
+      const seenId = takenIds();
       const seenSerial = new Set(S.catalog.units.filter(u => u.serial).map(u => String(u.serial).toUpperCase()));
       const out = []; const problems = [];
 
@@ -1531,13 +1750,13 @@
           const serial = (r[3] || '').trim();
           if (serial && seenSerial.has(serial.toUpperCase())) { problems.push(`${name}: serial ${serial} is already on a machine, so it was left out.`); return; }
           if (serial) seenSerial.add(serial.toUpperCase());
-          const id = nextTagAvoiding(group, 'unit', seenId);
+          const id = nextTagAvoiding(group, 'unit', seenId, name);
           out.push({ id, kind: 'unit', group, name, unitNo: (r[2] || '').trim(), serial,
             model: (r[4] || '').trim(), status: 'Active',
             dop: /negative air|vacuum|scrubber/i.test(group + ' ' + name), home: 'SHOP',
             addedBy: S.me || '', addedAt: AM.nowISO() });
         } else {
-          const id = nextTagAvoiding(group, 'stock', seenId);
+          const id = nextTagAvoiding(group, 'stock', seenId, name);
           const min = parseFloat(r[3]); const price = parseFloat(r[4]);
           out.push({ id, kind: 'stock', group, name, cls: 'consumed', uom: (r[2] || 'EA').trim().toUpperCase(),
             increments: [], onHand: null, min: isFinite(min) ? min : null,
@@ -1549,14 +1768,8 @@
       drawParsed();
     };
 
-    function nextTagAvoiding(group, kind, seen) {
-      let id = nextTag(group, kind);
-      let n = 1;
-      while (seen.has(id)) {
-        const m = /^([A-Z]+)-(\d+)$/.exec(id);
-        id = `${m[1]}-${String(parseInt(m[2], 10) + n).padStart(2, '0')}`;
-        n++;
-      }
+    function nextTagAvoiding(group, kind, seen, name) {
+      const id = nextTag(group, kind, { name, taken: seen });
       seen.add(id);
       return id;
     }
@@ -1615,7 +1828,12 @@
   ];
   const sheetById = k => (SHEETS.find(x => x[0] === k) || SHEETS[0])[1];
 
-  let lbSelection = null;   // set when the office has just added gear and wants those labels
+  /* Which stickers are ticked to print. Ticks survive the filter box and the
+     background redraw, so "these four, on one sheet, tonight" works: tick
+     them, build, print. Nothing ticked means everything the filter shows. */
+  let lbTicked = new Set();
+  let lbTickedFor = '';     // the address the ticks were set up for
+  let lbTickedKind = '';
 
   /* --------------------------------------------------------------- sheet ---
      The shelf, as a spreadsheet, out and back in again.
@@ -1944,7 +2162,7 @@
       if (rec.warn || !rec.acts.length) continue;
       let u = rec.item;
       if (rec.mode === 'new') {
-        const id = rec.id || nextTag(rec.group, 'unit');
+        const id = rec.id || nextTag(rec.group, 'unit', { name: rec.name });
         u = {
           id, kind: 'unit', group: rec.group, name: rec.name,
           unitNo: rec.unitNo || '', serial: rec.serial || '', model: rec.model || '',
@@ -1993,7 +2211,7 @@
       if (rec.warn || !rec.acts.length) continue;
       let s = rec.item;
       if (rec.mode === 'new') {
-        const id = rec.id || nextTag(rec.group, 'stock');
+        const id = rec.id || nextTag(rec.group, 'stock', { name: rec.name });
         s = {
           id, kind: 'stock', group: rec.group, name: rec.name,
           cls: 'consumed', uom: rec.uom || 'EA', increments: [],
@@ -2190,7 +2408,11 @@
 
   AM.screens['#/labels'] = function () {
     const pre = /[?&]ids=([^&]+)/.exec(location.hash);
-    lbSelection = pre ? decodeURIComponent(pre[1]).split(',').filter(Boolean) : null;
+    if (lbTickedFor !== location.hash) {
+      lbTickedFor = location.hash;
+      lbTicked = new Set(pre ? decodeURIComponent(pre[1]).split(',').filter(Boolean) : []);
+      lbTickedKind = '';
+    }
     // Arriving from the shelf or from Find, already knowing what is being
     // printed, so it should not have to be picked again.
     const kindPre = (/[?&]kind=([a-z]+)/.exec(location.hash) || [])[1] || '';
@@ -2203,7 +2425,6 @@
         <h2>Labels</h2>
         <p class="muted">Pick what you are printing, pick the sheet you buy, build it, print it.</p>
         ${AM.why('The code carries the tag and nothing else. A short code means a coarse pattern, and a coarse pattern is what still reads after spray glue, grit and a scratched face. The serial is printed underneath on purpose, so that when a tag is unreadable somebody can still read the number out over the radio.', 'Why the stickers look like that')}
-        ${lbSelection ? `<p class="clear-note">Set to the ${lbSelection.length} you have just added. Clear the filter box to print everything.</p>` : ''}
         <div class="lbl-controls">
           <label class="fld">What are you printing
             <select id="lbKind">
@@ -2222,6 +2443,20 @@
         </div>
         <p class="muted small" id="lbCount"></p>
         <p class="muted small"><b>Print at 100%, page scaling off</b>, or nothing lines up.</p>
+      </div>
+      <div class="panel no-print" id="lbPickPanel">
+        <div class="panel-head">
+          <div><h2>Pick which ones</h2>
+          <p class="muted small">Tick the ones you want on the sheet. Nothing ticked prints everything the filter shows.</p></div>
+        </div>
+        <div class="row list-acts">
+          <button class="btn-ghost" id="lbToday">Added today</button>
+          <button class="btn-ghost" id="lbWeek">Added this week</button>
+          <button class="btn-ghost" id="lbAllShown">Tick all shown</button>
+          <button class="btn-ghost" id="lbNone">Untick all</button>
+        </div>
+        <p class="clear-note" id="lbTickNote"></p>
+        <div id="lbPick" class="lb-pick"></div>
         ${AM.why('First sheet on plain paper held over the label stock against a window tells you in five seconds whether the printer is honest. Polyester face with a polycarbonate overlaminate, permanent 3M adhesive on the powder-coated housings, applied on a degreased flat face away from the handle, with clear tape over the top. Anything you had to scan twice gets replaced, not left.', 'How to stick them on so they last')}
       </div>
       <div id="lbOut"></div>
@@ -2235,6 +2470,8 @@
       const skip = Math.max(0, (parseInt($('#lbStart').value, 10) || 1) - 1);
       const f = $('#lbFilter').value.trim().toLowerCase();
       const out = $('#lbOut');
+      const pickPanel = $('#lbPickPanel');
+      if (pickPanel) pickPanel.style.display = kind === 'book' ? 'none' : '';
 
       /* The book is a different animal: it is a page somebody flips through at
          the shelf, not a die cut sheet, so it keeps the flowing layout. */
@@ -2251,14 +2488,13 @@
         return;
       }
 
-      const pick = (rows, idField) => rows.filter(x => {
-        if (lbSelection && !f) return lbSelection.includes(String(x.id));
-        return !f || (x.id + ' ' + x.name + ' ' + (x.group || '')).toLowerCase().includes(f);
-      });
-
-      const list = kind === 'unit'
-        ? pick(S.catalog.units)
-        : pick(S.catalog.stock);
+      const pool = kind === 'unit' ? S.catalog.units : S.catalog.stock;
+      if (lbTickedKind && lbTickedKind !== kind) lbTicked.clear();
+      lbTickedKind = kind;
+      const shown = pool.filter(x => !f || (x.id + ' ' + x.name + ' ' + (x.unitNo || '') + ' ' + (x.serial || '') + ' ' + (x.group || '')).toLowerCase().includes(f));
+      const ticked = pool.filter(x => lbTicked.has(String(x.id)));
+      const list = ticked.length ? ticked : shown;
+      drawPick(shown, ticked.length);
 
       const cell = sheet.size === 'xs' ? 2 : sheet.size === 'lg' ? 5 : 3;
       const face = x => {
@@ -2303,13 +2539,53 @@
         (skip ? `, starting at number ${skip + 1} so the rest of a part-used sheet is not wasted.` : '.');
     };
 
+    /* The pick list. Built from what the filter shows, newest first, so the
+       ones just added are at the top without anybody scrolling a hundred pages. */
+    function drawPick(shown, nTicked) {
+      const box = $('#lbPick'), note = $('#lbTickNote');
+      if (!box) return;
+      const rows = shown.slice().sort((a, b) => String(b.addedAt || '').localeCompare(String(a.addedAt || '')));
+      const cap = 200;
+      box.innerHTML = rows.length ? `<table class="tbl"><thead><tr><th></th><th>Tag</th><th>Name</th><th>Group</th><th>Added</th></tr></thead><tbody>
+        ${rows.slice(0, cap).map(x => `<tr>
+          <td><input type="checkbox" class="lbTick" data-id="${esc(x.id)}" ${lbTicked.has(String(x.id)) ? 'checked' : ''} aria-label="Print ${esc(x.id)}"></td>
+          <td class="line-id">${esc(x.id)}</td>
+          <td><strong>${esc(x.name)}</strong>${x.unitNo ? ' ' + esc(x.unitNo) : ''}${x.serial ? `<div class="muted small">${esc(x.serial)}</div>` : ''}</td>
+          <td class="small">${esc(x.group || '')}</td>
+          <td class="small">${x.addedAt ? esc(AM.dayISO(x.addedAt)) : ''}</td></tr>`).join('')}
+        </tbody></table>${rows.length > cap ? `<p class="muted small">Showing the newest ${cap} of ${rows.length}. Type in Filter to narrow it down.</p>` : ''}`
+        : '<p class="muted">Nothing matches the filter.</p>';
+      note.textContent = nTicked
+        ? `${nTicked} ticked. Only the ticked ones go on the sheet.`
+        : 'Nothing ticked, so the sheet has everything the filter shows.';
+      $$('.lbTick', box).forEach(cb => cb.onchange = () => {
+        if (cb.checked) lbTicked.add(cb.dataset.id); else lbTicked.delete(cb.dataset.id);
+        draw();
+      });
+    }
+
+    const tickAdded = days => {
+      const kind = $('#lbKind').value;
+      const pool = kind === 'unit' ? S.catalog.units : S.catalog.stock;
+      const since = new Date(Date.now() - days * 86400000);
+      const from = days <= 1 ? AM.dayISO() : AM.dayISO(since);
+      const hit = pool.filter(x => x.addedAt && AM.dayISO(x.addedAt) >= from);
+      lbTicked = new Set(hit.map(x => String(x.id)));
+      $('#lbFilter').value = ''; AM.clearTyped($('#lbFilter'));
+      if (!hit.length) AM.toast(days <= 1 ? 'Nothing was added today.' : 'Nothing was added in the last seven days.', 'warn');
+      draw();
+    };
+    $('#lbToday').onclick = () => tickAdded(1);
+    $('#lbWeek').onclick = () => tickAdded(7);
+    $('#lbAllShown').onclick = () => { $$('.lbTick').forEach(cb => lbTicked.add(cb.dataset.id)); draw(); };
+    $('#lbNone').onclick = () => { lbTicked.clear(); draw(); };
+
     ['lbKind', 'lbSheet', 'lbStart', 'lbFilter'].forEach(id => {
       const el = $('#' + id);
       if (el) el.oninput = draw;
     });
     $('#lbGo').onclick = draw;
     $('#lbPrint').onclick = () => window.print();
-    if (lbSelection) $('#lbFilter').value = '';
     draw();
   };
 
