@@ -1855,10 +1855,16 @@ function render() {
     return;
   }
   S.renderHeld = false;
+  const sameRoute = S.renderRoute === r;
   S.renderRoute = r;
 
   const keep = new Map();
   for (const el of typedInputs(view)) keep.set(el.id, el.value);
+  /* Drop-downs too. Only text boxes used to be put back, so a group picked
+     on Add snapped back to the first one in the list (Air Movers) on the next
+     background redraw, and four HEPA vacuums were saved as AFM air movers. */
+  const keepPick = new Map();
+  if (sameRoute) for (const el of view.querySelectorAll('select[id]')) if (el.dataset.picked === '1') keepPick.set(el.id, el.value);
 
   const fn = AM.screens[r] || AM.screens['#/'];
   try {
@@ -1870,6 +1876,10 @@ function render() {
         el.value = v;
         el.dataset.typed = '1';
       }
+    }
+    for (const [id, v] of keepPick) {
+      const el = view.querySelector('select[id="' + id.replace(/"/g, '\\"') + '"]');
+      if (el && [...el.options].some(o => o.value === v)) { el.value = v; el.dataset.picked = '1'; }
     }
     const after = AM.after[r];
     if (after) after();
@@ -2392,6 +2402,10 @@ AM.boot = async function boot() {
     viewEl.addEventListener('input', e => {
       const t = e.target;
       if (t && t.id && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) t.dataset.typed = '1';
+    }, true);
+    viewEl.addEventListener('change', e => {
+      const t = e.target;
+      if (t && t.id && t.tagName === 'SELECT') t.dataset.picked = '1';
     }, true);
     viewEl.addEventListener('focusout', () => {
       if (!S.renderHeld) return;
