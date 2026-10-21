@@ -9,7 +9,8 @@
         With post:true: posts it to QuickBooks, once per pay period.
    POST /api/payroll { action:"forget", start }       clears the posted record, after the entry was deleted in QuickBooks
 
-   Accounts that see Money only, because it shows what people are paid.
+   Accounts with Payroll ticked only, because it shows what people are paid.
+   Payroll is its own area from v71. Money no longer opens it.
    Saving settings and posting need an account that can make changes.
 
    Reads JobTread with A&M's key, the same one the command centre uses. Writes
@@ -109,7 +110,7 @@ export default async (req) => {
   const denied = await accountGate(req, s);
   if (denied) return denied;
   const u = req.amUser;
-  if (!sees(u, "money")) return json({ error: "role", message: "Payroll is for accounts that see Money. Ask an admin if you need it." }, 403);
+  if (!sees(u, "payroll")) return json({ error: "role", message: "Payroll is for accounts that have Payroll ticked. Ask an admin if you need it." }, 403);
 
   try {
     if (req.method === "GET") {

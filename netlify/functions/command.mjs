@@ -12,6 +12,7 @@
    (set by an admin on People and access):
      jobs, inventory   anyone who sees Office, Field or Money
      money, buying     anyone who sees Money
+     payroll           its own door, /api/payroll, for anyone who sees Payroll
    Changing a job needs an account that can make changes. The shop's PINs do
    not open any of this; see _accounts.mjs. */
 

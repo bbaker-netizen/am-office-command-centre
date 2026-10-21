@@ -1367,7 +1367,9 @@ async function startApp(){
   CAN_EDIT = !!me.edit;
   const tabs = ["overview"];
   if(has("office")) tabs.push("estimating", "dispatch", "tm");
-  if(has("money")) tabs.push("money", "payroll", "buying");
+  if(has("money")) tabs.push("money");
+  if(has("payroll")) tabs.push("payroll");
+  if(has("money")) tabs.push("buying");
   if(has("office")) tabs.push("clients", "records");
   if(has("field")) tabs.push("projects", "sites", "closeout");
   /* Post mortems: in Field beside Closeout, or in Office for people with no Field section. */
@@ -2767,18 +2769,19 @@ document.addEventListener("keydown", ev => { if(ev.key === "Enter" && ev.target.
    on every request. The shop's names and PINs are separate and unchanged. */
 const AREA_INFO = {
   office:     { label:"Office",     what:"Estimating, dispatch and records" },
-  money:      { label:"Money",      what:"Money, buying and payroll, from QuickBooks and JobTread" },
+  money:      { label:"Money",      what:"Money and buying, from QuickBooks and JobTread" },
+  payroll:    { label:"Payroll",    what:"The payroll split and journal entry. Shows what people are paid" },
   field:      { label:"Field",      what:"Projects, sites, closeout, post mortems and equipment" },
   assistants: { label:"Assistants", what:"The robots' emails waiting to be sent" }
 };
-const AREA_KEYS = ["office", "money", "field", "assistants"];
+const AREA_KEYS = ["office", "money", "payroll", "field", "assistants"];
 const LEVEL_INFO = {
   view:  { label:"View only",    what:"Reads everything in their areas. Changes nothing." },
   edit:  { label:"Make changes", what:"Also saves job details to JobTread, runs post mortems and sends the assistants' emails." },
   admin: { label:"Admin",        what:"Also adds people, sets their access, gives new passwords and connects the robots' mailbox." }
 };
 const RESP = [["company", "Whole company"], ["office", "Office"], ["estimating", "Estimating"], ["field", "Field"], ["custom", "Custom"]];
-const RESP_AREAS = { company:["office","money","field","assistants"], office:["office","money","assistants"], estimating:["office","assistants"], field:["field"] };
+const RESP_AREAS = { company:["office","money","payroll","field","assistants"], office:["office","money","payroll","assistants"], estimating:["office","assistants"], field:["field"] };
 const ADM = { list:null, err:null, settings:{ idleHours:8 }, log:[], me:"", idleChoices:[1,4,8,12], loading:false };
 let ME = { id:"", name:"", email:"", title:"", areas:[], level:"view", admin:false, edit:false, idleHours:8 };
 
@@ -3065,7 +3068,7 @@ function meSave(btn){
   }).catch(e => { btn.disabled = false; m.textContent = errCopy(e); });
 }
 
-/* ---------- payroll split (accounts that see Money) ----------
+/* ---------- payroll split (accounts that see Payroll) ----------
    Danielle's report: each employee's hours split into the cost of sales
    buckets (service line, Edmonton or Calgary), with shop and office time kept
    in general payroll. Worked out on the server from JobTread timesheets

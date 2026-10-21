@@ -8,7 +8,9 @@
    email and a password, one per person, created by an admin inside the app.
 
    Each account has:
-     areas   what the person sees: office, money, field, assistants
+     areas   what the person sees: office, money, payroll, field, assistants
+             (payroll is its own area from v71, separate from money, so a
+             person can run payroll without seeing the company's numbers)
      level   what the person can do: view, edit (make changes), admin (also
              manage people and access)
    The responsibility names on the People and access page (Whole company,
@@ -33,11 +35,11 @@ import { withLock } from "./_lock.mjs";
 
 export const ACCOUNTS = "app-accounts";
 export const ACCOUNTS_LOG = "app-accounts-log";
-export const AREAS = ["office", "money", "field", "assistants"];
+export const AREAS = ["office", "money", "payroll", "field", "assistants"];
 export const LEVELS = ["view", "edit", "admin"];
 export const PRESETS = {
-  company:    { label: "Whole company", areas: ["office", "money", "field", "assistants"] },
-  office:     { label: "Office",        areas: ["office", "money", "assistants"] },
+  company:    { label: "Whole company", areas: ["office", "money", "payroll", "field", "assistants"] },
+  office:     { label: "Office",        areas: ["office", "money", "payroll", "assistants"] },
   estimating: { label: "Estimating",    areas: ["office", "assistants"] },
   field:      { label: "Field",         areas: ["field"] }
 };
@@ -111,7 +113,20 @@ export function tempPassword() {
 export const accountsStore = authStore;
 export async function readAccounts(s) {
   const d = (await s.get(ACCOUNTS, { type: "json" })) || {};
-  return { accounts: d.accounts || {}, settings: { idleHours: 8, ...(d.settings || {}) } };
+  return splitPayroll({ accounts: d.accounts || {}, settings: { idleHours: 8, ...(d.settings || {}) } });
+}
+/* Before v71, payroll came with Money. So nobody loses it on the day it splits,
+   every account that saw Money is given Payroll too, once. The flag in settings
+   stops it running again, so an admin can then untick Payroll for a Money
+   person and it stays unticked. It is saved with the next change to accounts. */
+export function splitPayroll(doc) {
+  if (doc.settings.payrollSplit) return doc;
+  for (const a of Object.values(doc.accounts)) {
+    const areas = Array.isArray(a.areas) ? a.areas : [];
+    if (areas.includes("money") && !areas.includes("payroll")) a.areas = AREAS.filter(x => areas.includes(x) || x === "payroll");
+  }
+  doc.settings.payrollSplit = true;
+  return doc;
 }
 /* Every change goes through here, one writer at a time. */
 export async function changeAccounts(s, fn) {
