@@ -27,6 +27,14 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 const MODEL = () => process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
 const LIMIT = () => Number(process.env.CLAUDE_DAILY_LIMIT || 80);
 
+/* A refused key is the app's setting, not the person's fault. Say so plainly
+   (2026-11-06: Craig and Amir kept getting an API key error). */
+export function keyTrouble(status) {
+  if (status === 401 || status === 403) return { error: "key", message: "Ask Claude is not working because the Claude key in Netlify (ANTHROPIC_API_KEY) was refused. This is one setting for the whole company. An admin replaces it with a key from A&M's Anthropic Console account, then redeploys." };
+  if (status === 402) return { error: "key", message: "Ask Claude is not working because A&M's Anthropic account is out of credit. An admin tops it up in the Anthropic Console." };
+  return null;
+}
+
 const SYSTEM = (u, drive) => `You are Claude, built into the A&M Abatement Services Office Command Centre. A&M is a hazardous materials abatement, demolition and restoration contractor in Edmonton and Calgary, Alberta. Owners: Craig and Amir. You are talking with ${u.name}${u.title ? ", " + u.title : ""}. They see these sections: ${(u.areas || []).join(", ") || "Overview only"}${u.admin ? ", and Admin" : ""}.
 
 You are given the text of the page they are looking at right now. For questions about numbers, jobs and people, answer from that text. If the answer is not on the page, say so plainly and tell them which page in the command centre, or which system (JobTread, QuickBooks, Encircle, Google Drive), would have it. For questions about how the command centre works, where something is, or how to do something in it, use the guide below. Never invent a number, a name, a date or a job. You cannot change anything in any system; if they want something changed, tell them where and how to do it. Only tell them about pages in sections they can see; if something needs another section, say who to ask.
@@ -74,7 +82,7 @@ export default async (req) => {
   /* With Drive connected, Claude may look things up first, as this person. */
   if (await tokenInfo(s, u.id).catch(() => null)) {
     try { return await withDrive(s, u, messages, n); }
-    catch (e) { return json({ error: "upstream", message: "Claude did not answer: " + e.message }, 502); }
+    catch (e) { return json({ error: "upstream", message: /^Ask Claude is not working/.test(e.message) ? e.message : "Claude did not answer: " + e.message }, 502); }
   }
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -85,7 +93,7 @@ export default async (req) => {
   if (!r.ok || !r.body) {
     const t = await r.text().catch(() => "");
     let m = ""; try { m = JSON.parse(t).error.message; } catch (e) { m = t.slice(0, 200); }
-    return json({ error: "upstream", message: "Claude did not answer: " + (m || "HTTP " + r.status) }, 502);
+    return json(keyTrouble(r.status) || { error: "upstream", message: "Claude did not answer: " + (m || "HTTP " + r.status) }, 502);
   }
 
   /* Pass on only the words, as they arrive. */
@@ -127,7 +135,7 @@ async function withDrive(s, u, messages, n) {
       headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({ model: MODEL(), max_tokens: 1200, system: SYSTEM(u, true), tools: TOOLS, messages: msgs }) });
     const b = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error((b.error && b.error.message) || "HTTP " + r.status);
+    if (!r.ok) { const k = keyTrouble(r.status); throw new Error(k ? k.message : ((b.error && b.error.message) || "HTTP " + r.status)); }
     return b;
   };
   let msgs = messages.slice(), out = null, looked = [];
