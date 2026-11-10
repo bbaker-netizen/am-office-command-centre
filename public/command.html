@@ -585,7 +585,10 @@ const STAGES = [
 const DONE = ["Closed Won","Not Bid","File Closed Bid Lost"];
 const ALLSTATUS = STAGES.flatMap(s => s.statuses).concat(DONE);
 const PRE = STAGES.slice(0,3).flatMap(s => s.statuses);
-const POST = STAGES.slice(3).flatMap(s => s.statuses);
+/* Won and not finished. A job at Job Post Mortem is invoiced and done on site,
+   so it shows only on the Post mortem page, not on Projects, Field or Closeout
+   (Craig, 2026-11-06: Farmers Market kept showing after it was moved). */
+const POST = STAGES.slice(3).flatMap(s => s.statuses).filter(x => x !== "Job Post Mortem");
 const stageOf = s => { for(const g of STAGES) if(g.statuses.includes(s)) return g.key; return DONE.includes(s) ? "done" : "unknown"; };
 
 /* ---------- small helpers ---------- */
@@ -636,6 +639,12 @@ const isAsb = j => types(j).join(" ").toLowerCase().includes("asbestos") || ["Lo
 const crew = j => { const v = parseFloat(F(j["Number of Guys Required"])); return isNaN(v) ? null : v; };
 const dur = j => { const v = parseFloat(F(j["Estimated Days of Work"])); return isNaN(v) ? null : v; };
 const isOpen = j => !j._closed && !DONE.includes(st(j));
+/* Jobs the PM gives to a subcontractor, so A&M has no crew or schedule on them in
+   JobTread (George in Calgary, 2026-11-06). Shown as "Subcontracted" instead of
+   zero crew and question marks, and kept off the crew board. Add a PM here if
+   another one works the same way. */
+const SUBBED_PMS = ["George"];
+const isSubbed = j => SUBBED_PMS.includes(pm(j));
 const isSpecial = j => /^99-/.test(j._number || "") || /^test\b/i.test(j._name || "") || /\(overhead\)/i.test(j._name || "") || /^office work$/i.test(j._name || "");
 const live = () => (S.jobs || []).filter(j => isOpen(j) && !isSpecial(j));
 const jtUrl = id => "https://app.jobtread.com/jobs/" + encodeURIComponent(id);
@@ -1392,6 +1401,9 @@ async function startApp(){
   $("refresh").disabled = false;
   $("refresh").addEventListener("click", () => {
     const b = $("refresh"); b.disabled = true; b.textContent = "Refreshing";
+    /* Crews are read separately from the job list: forget them so Dispatch reads
+       them again too (before 2026-11-10 Refresh left the old crews showing). */
+    S.crewKey = null; S.crew = {};
     /* Say when it has finished, so a press never looks like it did nothing. */
     appLoad(true).then(() => {
       const t = new Date().toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" });
@@ -1677,7 +1689,7 @@ VIEWS.estimating = {
 
     /* Win rate this fiscal year, by job outcome. */
     const since = (S.jobs || []).filter(j => !isSpecial(j) && j._created && j._created.slice(0, 10) >= FY_START);
-    const won = since.filter(j => POST.includes(st(j)) || st(j) === "Closed Won").length;
+    const won = since.filter(j => POST.includes(st(j)) || st(j) === "Job Post Mortem" || st(j) === "Closed Won").length;
     const lost = since.filter(j => st(j) === "File Closed Bid Lost").length;
     const nob = since.filter(j => st(j) === "Not Bid").length;
     const rate = won + lost ? Math.round(won / (won + lost) * 100) : null;
@@ -1816,6 +1828,8 @@ VIEWS.money = {
     if(!S.M.bs) h += S.bsErr ? failBox(S.bsErr, "Balance sheet") : wait("the balance sheet");
     else {
       h += '<div class="big num ' + (n.cash < 0 ? "stop" : "") + '">' + M(n.cash) + '</div><p class="sub">in the bank accounts, added together. A minus means the accounts are overdrawn on the books.</p>' +
+        ((S.M.bs && S.M.bs.banks && S.M.bs.banks.length) ? tbl('<th>Bank account, per QuickBooks</th><th class="r">On the books</th>', S.M.bs.banks.filter(x => x.amount).map(x => '<tr><td>' + E(x.name) + '</td><td class="r num' + (x.amount < 0 ? " stop" : "") + '">' + M(x.amount) + '</td></tr>')) +
+          '<p class="sm">These are the balances recorded in QuickBooks, not the bank\'s own figures. If the bank feed has stopped, deposits and cheques since then are missing.</p>' : '') +
         tbl('<th>&nbsp;</th><th class="r">Amount</th>', [
           '<tr><td>Owed to A&amp;M by customers<span class="sm">Including ' + M(n.holdbacks) + ' of holdbacks</span></td><td class="r num">' + M(n.arBS) + '</td></tr>',
           '<tr><td>Owed by A&amp;M to suppliers</td><td class="r num">' + M(n.apBS) + '</td></tr>',
@@ -2017,8 +2031,8 @@ VIEWS.sites = {
       tbl('<th>Job</th><th>PM</th><th>Risk</th><th class="r">Crew</th><th class="r">On site</th>', on.map(j => {
         const s = dOnly(startOf(j)), done = s ? workDaysBetween(s, today()) + 1 : null, plan = dur(j);
         const over = done !== null && plan !== null && done > Math.ceil(plan) + 1;
-        return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td>' + (risk(j) ? '<span class="tag ' + (/high/i.test(risk(j)) ? "stop" : "mute") + '">' + E(risk(j)) + '</span>' : "") + '</td><td class="r num">' + (crew(j) === null ? "?" : crew(j)) + '</td>' +
-          '<td class="r">' + (done === null ? '<span class="tag mute">No start date</span>' : '<span class="tag ' + (over ? "caution" : "mute") + '">Day ' + done + (plan !== null ? ' of ' + plan : '') + '</span>') + '</td></tr>';
+        return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(pm(j) || "Nobody") + '</td><td>' + (risk(j) ? '<span class="tag ' + (/high/i.test(risk(j)) ? "stop" : "mute") + '">' + E(risk(j)) + '</span>' : "") + '</td><td class="r num">' + (isSubbed(j) && crew(j) === null ? '<span class="tag mute">Sub</span>' : crew(j) === null ? "?" : crew(j)) + '</td>' +
+          '<td class="r">' + (done === null && isSubbed(j) ? '<span class="tag mute">Subcontracted</span>' : done === null ? '<span class="tag mute">No start date</span>' : '<span class="tag ' + (over ? "caution" : "mute") + '">Day ' + done + (plan !== null ? ' of ' + plan : '') + '</span>') + '</td></tr>';
       }), "Nobody is on site according to JobTread.", 25) + '</div>';
 
     const nn = asbNoNotice();
@@ -3766,10 +3780,17 @@ function loadCrew(force){
   const ids = boardJobs().map(j => j._id), key = ids.join(",");
   if(!ids.length || (!force && S.crewKey === key)) return;
   S.crewKey = key;
-  fetch("/api/command?part=crew&ids=" + encodeURIComponent(key), { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
+  /* Thirty jobs a call. The server asks JobTread a few at a time, and a job
+     JobTread still refuses comes back in "failed" so the rest of the board loads. */
+  const groups = []; for(let i = 0; i < ids.length; i += 30) groups.push(ids.slice(i, i + 30));
+  const one = g => fetch("/api/command?part=crew&ids=" + encodeURIComponent(g.join(",")), { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
     .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || "The app answered " + r.status + "." }; return b; })
-    .then(b => { S.crew = Object.assign({}, S.crew || {}, b.crew || {}); S.crewErr = null; render(); })
-    .catch(e => { S.crewErr = e; render(); });
+    .then(b => {
+      const add = Object.assign({}, b.crew || {});
+      (b.failed || []).forEach(id => { add[id] = { failed:true, members:[], lead:"", shop:"", site:"" }; });
+      S.crew = Object.assign({}, S.crew || {}, add); S.crewErr = null; render();
+    });
+  groups.reduce((p, g) => p.then(() => one(g)), Promise.resolve()).catch(e => { S.crewErr = e; render(); });
 }
 const isYes = v => v === true || /^(true|yes|1)$/i.test(String(F(v) || ""));
 function nextCutoff(rule){
@@ -3839,7 +3860,7 @@ function onDays(j){
   return days;
 }
 function boardJobs(){
-  return live().filter(j => { const g = stageOf(st(j)); if(g === "site") return true; if(!["won","sched"].includes(g)) return false; const d = daysTo(startOf(j)); return d !== null && d >= -3 && d <= 14; })
+  return live().filter(j => !isSubbed(j)).filter(j => { const g = stageOf(st(j)); if(g === "site") return true; if(!["won","sched"].includes(g)) return false; const d = daysTo(startOf(j)); return d !== null && d >= -3 && d <= 14; })
     .sort((a, b) => (stageOf(st(a)) === "site" ? -1 : 0) - (stageOf(st(b)) === "site" ? -1 : 0) || (daysTo(startOf(a)) ?? 99) - (daysTo(startOf(b)) ?? 99));
 }
 /* Anyone booked on two jobs whose working days overlap. */
@@ -3871,12 +3892,14 @@ function crewBoard(){
     const leadSel = canEdit ? '<select data-cb-lead="' + E(j._id) + '"><option value="">No lead</option>' +
       people.filter(p => !p.temp && !p.sub).map(p => '<option' + (p.name === lead ? " selected" : "") + '>' + E(p.name) + '</option>').join("") + (lead && !people.some(p => p.name === lead) ? '<option selected>' + E(lead) + '</option>' : '') + '</select>' : E(lead || "No lead");
     const tIn = (k, ph) => canEdit ? '<input type="text" inputmode="text" placeholder="' + ph + '" value="' + E(timeOf(j, k)) + '" data-cb-time="' + E(k) + '" data-cbj="' + E(j._id) + '" data-was="' + E(timeOf(j, k)) + '">' : E(timeOf(j, k) || "Not set");
+    if(crewRec(j) && crewRec(j).failed) return '<div class="cb-job"><div class="cb-head"><button type="button" class="cb-name" data-job="' + E(j._id) + '">' + E(j._number) + ' ' + E(j._name) + '</button></div><span class="sm">JobTread would not send this job\'s schedule. Open it in JobTread.</span></div>';
     if(!crewRec(j)) return '<div class="cb-job"><div class="cb-head"><button type="button" class="cb-name" data-job="' + E(j._id) + '">' + E(j._number) + ' ' + E(j._name) + '</button></div>' + (S.crewErr ? '<span class="sm">Crew not loaded.</span>' : wait("the crew")) + '</div>';
     return '<div class="cb-job' + (CB.busy[j._id] ? " is-busy" : "") + '" data-cb-drop="' + E(j._id) + '">' +
       '<div class="cb-head"><button type="button" class="cb-name" data-job="' + E(j._id) + '">' + E(j._number) + ' ' + E(j._name) + '</button>' +
       '<span class="tag ' + (site ? "clear" : d !== null && d <= 2 ? "caution" : "mute") + '">' + (site ? "On site" : rel(d, false, true)) + '</span></div>' +
       '<div class="sm">' + E(j._addr || j._cust || "") + (startOf(j) ? ' · starts ' + E(showDate(startOf(j))) : '') + (dur(j) ? ' · ' + plural(dur(j), "day") : '') + '</div>' +
       '<div class="cb-row"><label>Lead ' + leadSel + '</label><label>Shop ' + tIn("shop", "6:30 AM") + '</label><label>Site ' + tIn("site", "7:30 AM") + '</label></div>' +
+      ((crewRec(j) || {}).taskName ? '<div class="sm">From the JobTread task "' + E(crewRec(j).taskName) + '"' + (crewRec(j).startDate ? ', ' + E(showDate(String(crewRec(j).startDate).slice(0,10))) : '') + '</div>' : '') +
       '<div class="cb-crew">' + (crewL.length ? crewL.map(chip).join("") : '<span class="sm">Nobody on the crew yet.</span>') + '</div>' +
       '<div class="cb-foot"><span class="tag ' + (need === null ? "caution" : have >= need ? "clear" : "caution") + '">' + have + ' of ' + (need === null ? "?" : need) + ' people</span>' +
       (canEdit ? '<button type="button" class="btn ghost" data-cb-add="' + E(j._id) + '"' + (CB.pick ? '' : ' hidden') + '>Add ' + E(CB.pick || "") + ' here</button>' : '') +

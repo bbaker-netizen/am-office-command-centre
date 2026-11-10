@@ -82,6 +82,33 @@ export function indexReport(rep) {
   return { groups, labels, find, sumWhere };
 }
 
+/* Each bank account on its own line, so a strange total can be traced to the
+   account causing it (2026-11-10: BMO Business Chequing at -$563K on the books
+   made the total -$514K). Sub-accounts are kept, "Total for" lines skipped. */
+export function readBankLines(rep) {
+  const out = [];
+  const find = rows => {
+    for (const r of rows) {
+      if (r.group === "BankAccounts") return r;
+      if (r.Rows) { const f = find(rowsOf(r)); if (f) return f; }
+    }
+    return null;
+  };
+  const sec = find(rowsOf(rep));
+  if (!sec) return out;
+  const walk = rows => {
+    for (const r of rows) {
+      if (r.ColData) {
+        const lab = String((r.ColData[0] && r.ColData[0].value) || "").trim();
+        if (lab && !/^total\b/i.test(lab)) out.push({ name: lab, amount: num(r.ColData[r.ColData.length - 1].value) });
+      }
+      if (r.Rows) walk(rowsOf(r));
+    }
+  };
+  walk(rowsOf(sec));
+  return out;
+}
+
 export function readBalanceSheet(rep) {
   const ix = indexReport(rep);
   const cash = ix.find("BankAccounts", /^Total Bank Accounts$/i, /^Total Cash and Cash Equivalents$/i);
@@ -90,7 +117,7 @@ export function readBalanceSheet(rep) {
   const ca = ix.find("CurrentAssets", /^Total Current Assets$/i);
   const cl = ix.find("CurrentLiabilities", /^Total Current Liabilities$/i);
   return {
-    cash, arBS: ar, apBS: ap,
+    cash, banks: readBankLines(rep), arBS: ar, apBS: ap,
     currentAssets: ca, currentLiabilities: cl,
     wc: (ca != null && cl != null) ? Math.round((ca - cl) * 100) / 100 : null,
     ratio: (ca != null && cl) ? Math.round(ca / cl * 100) / 100 : null,

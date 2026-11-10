@@ -22,6 +22,7 @@ import { CUSTOMER_FIELDS, fieldIds } from "./_jtfields.mjs";
 import { qboGet } from "./_qbo.mjs";
 import { readAging, readBalanceSheet, readProfitAndLoss, readPayableDetail, readVendorSpend } from "./_qboreports.mjs";
 import { buildFeed, localDay } from "./_derive.mjs";
+import { pickTask, readInBatches } from "./_crew.mjs";
 import { SWEEP_KEY as ENCIRCLE_SWEEP } from "./_encircle.mjs";
 
 const STORE = "am-inventory";
@@ -251,7 +252,7 @@ async function readBilling(s) {
    on their own JobTread app. The crew lead and the shop and site start times
    are lines in the task's description ("Crew lead: Carlos", "Shop start:
    6:30 AM", "Site start: 7:30 AM"); anything else written there is kept. */
-const CREW_TASK = /site\s*work|crew/i;
+/* Which task holds the crew: see _crew.mjs. */
 const LINE = { lead: "Crew lead", shop: "Shop start", site: "Site start" };
 function parseDesc(d) {
   const out = { lead: "", shop: "", site: "", rest: [] };
@@ -266,29 +267,31 @@ function parseDesc(d) {
 function buildDesc(p) {
   return [p.lead && LINE.lead + ": " + p.lead, p.shop && LINE.shop + ": " + p.shop, p.site && LINE.site + ": " + p.site, ...(p.rest || [])].filter(Boolean).join("\n") || null;
 }
-function pickTask(tasks) {
-  const t = (tasks || []).filter(x => CREW_TASK.test(x.name || ""));
-  return t.sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || "")))[0] || null;
-}
 async function readCrew(s, idsParam) {
   const c = (await s.get("jobtread-key", { type: "json" })) || {};
   if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
-  const ids = String(idsParam || "").split(",").filter(x => /^[A-Za-z0-9_-]{2,40}$/.test(x)).slice(0, 40);
+  const ids = String(idsParam || "").split(",").filter(x => /^[A-Za-z0-9_-]{2,40}$/.test(x)).slice(0, 60);
   if (!ids.length) return { crew: {} };
-  const q = {};
-  ids.forEach((id, i) => { q["j" + i] = { _: "job", $: { id }, id: {}, tasks: { $: { size: 25 }, nodes: { id: {}, name: {}, description: {}, startDate: {}, endDate: {},
-    assignedMemberships: { nodes: { id: {}, user: { name: {} } } } } } }; });
-  const res = await pave(q, c.grantKey);
-  const crew = {};
-  ids.forEach((id, i) => {
-    const j = res["j" + i]; if (!j) return;
-    const t = pickTask(j.tasks && j.tasks.nodes);
-    if (!t) { crew[id] = { taskId: null, members: [], lead: "", shop: "", site: "" }; return; }
-    const p = parseDesc(t.description);
-    crew[id] = { taskId: t.id, taskName: t.name, startDate: t.startDate, endDate: t.endDate, lead: p.lead, shop: p.shop, site: p.site,
-      members: ((t.assignedMemberships && t.assignedMemberships.nodes) || []).map(m => ({ id: m.id, name: m.user && m.user.name })) };
-  });
-  return { crew };
+  const today = localDay();
+  /* A few jobs per request: JobTread refuses one big request ("too large"). */
+  const ask = async group => {
+    const q = {};
+    group.forEach((id, i) => { q["j" + i] = { _: "job", $: { id }, id: {}, tasks: { $: { size: 25 }, nodes: { id: {}, name: {}, description: {}, startDate: {}, endDate: {},
+      assignedMemberships: { nodes: { id: {}, user: { name: {} } } } } } }; });
+    const res = await pave(q, c.grantKey);
+    const crew = {};
+    group.forEach((id, i) => {
+      const j = res["j" + i]; if (!j) return;
+      const t = pickTask(j.tasks && j.tasks.nodes, today);
+      if (!t) { crew[id] = { taskId: null, members: [], lead: "", shop: "", site: "" }; return; }
+      const p = parseDesc(t.description);
+      crew[id] = { taskId: t.id, taskName: t.name, startDate: t.startDate, endDate: t.endDate, lead: p.lead, shop: p.shop, site: p.site,
+        members: ((t.assignedMemberships && t.assignedMemberships.nodes) || []).map(m => ({ id: m.id, name: m.user && m.user.name })) };
+    });
+    return crew;
+  };
+  const { found, failed } = await readInBatches(ids, ask);
+  return { crew: found, failed };
 }
 const TIME = /^(1[0-2]|0?[1-9]):[0-5]\d ?(AM|PM)$|^([01]?\d|2[0-3]):[0-5]\d$/;
 async function saveCrew(s, req, body) {
@@ -302,9 +305,9 @@ async function saveCrew(s, req, body) {
   const lead = clean(b.lead), shop = clean(b.shop).toUpperCase(), site = clean(b.site).toUpperCase();
   if ((shop && !TIME.test(shop)) || (site && !TIME.test(site))) return json({ error: "bad_value", message: "Write times like 6:30 AM or 14:00." }, 400);
   /* Read the job's tasks fresh, so nothing typed into JobTread meanwhile is lost. */
-  const cur = await pave({ job: { $: { id: jobId }, id: {}, number: {}, tasks: { $: { size: 25 }, nodes: { id: {}, name: {}, description: {}, startDate: {}, endDate: {} } } } }, c.grantKey);
+  const cur = await pave({ job: { $: { id: jobId }, id: {}, number: {}, tasks: { $: { size: 25 }, nodes: { id: {}, name: {}, description: {}, startDate: {}, endDate: {}, assignedMemberships: { nodes: { id: {} } } } } } }, c.grantKey);
   const job = cur && cur.job; if (!job) return json({ error: "bad_job", message: "JobTread does not know that job." }, 404);
-  const t = pickTask(job.tasks && job.tasks.nodes);
+  const t = pickTask(job.tasks && job.tasks.nodes, localDay());
   const desc = buildDesc({ lead, shop, site, rest: t ? parseDesc(t.description).rest : [] });
   let taskId;
   if (t) {
