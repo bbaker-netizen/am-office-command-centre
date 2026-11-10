@@ -22,7 +22,11 @@
    - The overhead jobs in settings (General Shop and Office Work to start with)
      always stay in general payroll, whatever cost code is on the entry.
    - Time entry types with "temp" in the name are ACES staffing, not A&M
-     payroll, and are reported separately.
+     payroll, and are reported separately. So is anyone whose JobTread name
+     names a staffing agency, such as "Mo (Aces)" (added 2026-11-10).
+   - People in "leave out" are not hourly payroll and stay out of the split:
+     Ryan Mirandilla (salaried) and Maxim (subcontractor), per Craig on
+     2026-11-06. Their hours are listed so nothing disappears silently.
    - Anyone still clocked in is left out until they clock out.
    - Overtime counts at the multiplier (1.5) when the pay is split, because
      an overtime hour costs one and a half regular hours. */
@@ -38,6 +42,7 @@ export const DEFAULTS = {
   otMultiplier: 1.5,
   tz: "America/Edmonton",
   overheadJobs: { "26-00000": "Shop (overhead)", "26-0000": "Office and admin" },
+  leaveOut: { "Ryan Mirandilla": "Salaried", "Maxim": "Subcontractor" },
   map: {},                       /* bucket -> { accountId, accountName, classId, className, departmentId, departmentName } */
   credit: null                   /* { accountId, accountName, classId, className } the payroll expense line the entry takes the money out of */
 };
@@ -46,6 +51,7 @@ export function withDefaults(s) {
   const out = { ...DEFAULTS, ...(s || {}) };
   out.overheadJobs = { ...(s && s.overheadJobs ? s.overheadJobs : DEFAULTS.overheadJobs) };
   out.map = { ...(s && s.map ? s.map : {}) };
+  out.leaveOut = { ...(s && s.leaveOut ? s.leaveOut : DEFAULTS.leaveOut) };
   return out;
 }
 
@@ -89,6 +95,14 @@ export function periodFor(date, settings) {
 
 /* ----------------------------------------------------------- classify */
 export const isTemp = type => /temp/i.test(String(type || ""));
+export const isAgencyName = name => /\((aces|cerkal|staffing|agency)\)/i.test(String(name || ""));
+/* The reason a person is left out of the split, or null. Matches the JobTread
+   name exactly, ignoring case and extra spaces. */
+export function leftOutReason(name, settings) {
+  const n = String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
+  for (const [k, v] of Object.entries((settings && settings.leaveOut) || {})) if (k.trim().replace(/\s+/g, " ").toLowerCase() === n) return v || "Left out";
+  return null;
+}
 export const isOvertime = type => /overtime/i.test(String(type || ""));
 
 function branchOf(job) {
@@ -114,7 +128,7 @@ const h = m => Math.round(m / 60 * 100) / 100;
 export function buildReport(entries, settingsIn, period) {
   const settings = withDefaults(settingsIn);
   const buckets = allBuckets(settings);
-  const emp = new Map(), temps = new Map(), detail = new Map();
+  const emp = new Map(), temps = new Map(), detail = new Map(), left = new Map();
   const open = [], assumedJobs = new Map(), conflicts = new Map(), noCode = [];
 
   for (const e of entries || []) {
@@ -126,13 +140,19 @@ export function buildReport(entries, settingsIn, period) {
     }
     const c = classify(e, settings);
     const mins = Math.max(0, Math.round(Number(e.minutes) || 0));
+    const why = leftOutReason(user, settings);
+    if (why) {
+      const l = left.get(user) || { name: user, reason: why, minutes: 0 };
+      l.minutes += mins; left.set(user, l);
+      continue;
+    }
     const ot = isOvertime(e.type);
     if (c.assumed && job.number) assumedJobs.set(job.number, { job: job.number, jobName: job.name || "", city: (job.location && job.location.city) || "", countedAs: c.bucket.split(" ").pop() });
     const br = branchOf(job), city = job.location && job.location.city;
     if (br && city && CITIES.includes(city) && city !== br && !settings.overheadJobs[job.number]) conflicts.set(job.number, { job: job.number, jobName: job.name || "", branch: br, city });
     if (c.noCode) noCode.push({ person: user, job: job.number || "" });
 
-    if (isTemp(e.type)) {
+    if (isTemp(e.type) || isAgencyName(user)) {
       const t = temps.get(user) || { name: user, minutes: 0, byBucket: {} };
       t.minutes += mins; t.byBucket[c.bucket] = (t.byBucket[c.bucket] || 0) + mins; temps.set(user, t);
       continue;
@@ -174,6 +194,7 @@ export function buildReport(entries, settingsIn, period) {
     detail: [...detail.values()].sort((a, b) => a.person.localeCompare(b.person) || a.job.localeCompare(b.job)).map(d => ({ ...d, reg: h(d.reg), ot: h(d.ot), total: h(d.reg + d.ot), unapproved: h(d.unapproved) })),
     temps: [...temps.values()].sort((a, b) => a.name.localeCompare(b.name)).map(t => ({ name: t.name, total: h(t.minutes), byBucket: Object.fromEntries(Object.entries(t.byBucket).map(([k, v]) => [k, h(v)])) })),
     tempHours: h([...temps.values()].reduce((s, t) => s + t.minutes, 0)),
+    leftOut: [...left.values()].sort((a, b) => a.name.localeCompare(b.name)).map(l => ({ name: l.name, reason: l.reason, total: h(l.minutes) })),
     open: open.sort((a, b) => String(a.since).localeCompare(String(b.since))),
     assumedJobs: [...assumedJobs.values()].sort((a, b) => a.job.localeCompare(b.job)),
     conflicts: [...conflicts.values()],

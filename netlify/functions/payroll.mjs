@@ -88,6 +88,13 @@ function cleanSettings(incoming, existing) {
     s.map = m;
   }
   if ("credit" in i) s.credit = pick(i.credit);
+  /* People who are not hourly payroll (salaried, subcontractors): name as it
+     appears in JobTread, and the reason. Up to 30. */
+  if (i.leaveOut && typeof i.leaveOut === "object") {
+    const l = {};
+    for (const [k, v] of Object.entries(i.leaveOut).slice(0, 30)) { const kk = String(k).replace(/[\u0000-\u001f]/g, "").trim(), vv = String(v || "Left out").trim(); if (kk) l[kk.slice(0, 60)] = vv.slice(0, 40); }
+    s.leaveOut = l;
+  }
   return s;
 }
 
