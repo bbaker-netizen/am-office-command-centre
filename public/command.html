@@ -561,6 +561,7 @@ const TABS = {
   closeout:  { label:"Closeout",     group:"Field" },
   postmortem:{ label:"Post mortem",  group:"Field" },
   payroll:   { label:"Payroll",      group:"Office" },
+  expenses:  { label:"Expenses",     group:"Office" },
   equipment: { label:"Equipment",    group:"Field" },
   drafts:    { label:"To send", group:"Assistants" },
   people:    { label:"People and access", group:"Admin" },
@@ -1377,7 +1378,7 @@ async function startApp(){
   const tabs = ["overview"];
   if(has("office")) tabs.push("estimating", "dispatch", "tm");
   if(has("money")) tabs.push("money");
-  if(has("payroll")) tabs.push("payroll");
+  if(has("payroll")) tabs.push("payroll", "expenses");
   if(has("money")) tabs.push("buying");
   if(has("office")) tabs.push("clients", "records");
   if(has("field")) tabs.push("projects", "sites", "closeout");
@@ -1404,6 +1405,7 @@ async function startApp(){
     /* Crews are read separately from the job list: forget them so Dispatch reads
        them again too (before 2026-11-10 Refresh left the old crews showing). */
     S.crewKey = null; S.crew = {};
+    if(CFG.tabs.includes("expenses") && EX.data) loadEX(true);
     /* Say when it has finished, so a press never looks like it did nothing. */
     appLoad(true).then(() => {
       const t = new Date().toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" });
@@ -2784,7 +2786,7 @@ document.addEventListener("keydown", ev => { if(ev.key === "Enter" && ev.target.
 const AREA_INFO = {
   office:     { label:"Office",     what:"Estimating, dispatch and records" },
   money:      { label:"Money",      what:"Money and buying, from QuickBooks and JobTread" },
-  payroll:    { label:"Payroll",    what:"The payroll split and journal entry. Shows what people are paid" },
+  payroll:    { label:"Payroll",    what:"The payroll split and journal entry, and the Expenses page (km, reimbursements, company cards). Shows what people are paid and owed" },
   field:      { label:"Field",      what:"Projects, sites, closeout, post mortems and equipment" },
   assistants: { label:"Assistants", what:"The robots' emails waiting to be sent" }
 };
@@ -3130,6 +3132,105 @@ function pyDownload(kind){
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
+/* ================= EXPENSES (inside the A&M app only) =================
+   Km claims, reimbursements, company card bills and shop purchases from
+   JobTread, for Brenda's monthly payout and Craig's branch split. Read only.
+   The rules are in netlify/functions/_expenses.mjs. */
+const EX = { data:null, err:null, loading:false, open:{}, show:"all" };
+const EX_CAT = { km:"Km", reimbursements:"Reimbursements", card:"Company card", shop:"Shop" };
+const EX_BR = ["Edmonton","Calgary","No branch"];
+function exCall(fresh){
+  return fetch("/api/expenses" + (fresh ? "?fresh=1" : ""), { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(async r => {
+    const b = await r.json().catch(() => ({}));
+    if(!r.ok) throw { code: b.error || ("http_" + r.status), message: b.message || ("The app answered " + r.status + "."), status: r.status };
+    return b;
+  });
+}
+function loadEX(fresh){
+  if(EX.loading) return; EX.loading = true;
+  return exCall(fresh).then(d => { EX.data = d; EX.err = null; EX.loading = false; render(); }).catch(e => { EX.err = e; EX.loading = false; render(); });
+}
+function exMonth(m){ if(!/^\d{4}-\d{2}$/.test(m)) return m; const d = new Date(m + "-15T12:00:00"); return d.toLocaleDateString("en-CA", { month:"long", year:"numeric" }); }
+function exDownload(kind){
+  const d = EX.data; if(!d) return;
+  let rows, name;
+  if(kind === "payout"){
+    rows = [["Employee","Kind","Date","Job","Job name","Branch","Detail","Owed"]];
+    d.payout.forEach(p => p.items.forEach(i => rows.push([p.person, i.kind === "km" ? "Km" : "Reimbursement", i.date, i.job, i.jobName, i.branch, i.detail, i.owed.toFixed(2)])));
+    name = "Km and Reimbursements Owed - " + d.today + ".csv";
+  } else {
+    rows = [["Level","Problem","Person or vendor","Job","Job name","Date","Detail"]];
+    d.exceptions.forEach(x => rows.push([x.level === "stop" ? "Fix first" : "Check", x.what, x.person, x.job, x.jobName, x.date, x.detail]));
+    name = "Expense Exceptions - " + d.today + ".csv";
+  }
+  const blob = new Blob(["﻿" + pyCsv(rows)], { type:"text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+VIEWS.expenses = {
+  alerts(){
+    const out = []; const d = EX.data; if(!d) return out;
+    const stop = d.exceptions.filter(x => x.level === "stop");
+    if(stop.length) out.push({ lvl:"stop", text: plural(stop.length, "claim or bill needs", "claims or bills need") + " fixing before anyone is paid.", meta: [...new Set(stop.map(x => x.what))].slice(0, 4).join(" · ") });
+    const nb = d.payout.reduce((s, p) => s + (p.byBranch["No branch"] || 0), 0);
+    if(nb > 0) out.push({ lvl:"caution", text: D2(nb) + " of what is owed is on jobs with no Estimating branch.", meta:"It cannot be split Edmonton or Calgary until the branch is set on those jobs in JobTread." });
+    return out;
+  },
+  render(){
+    let h = head("Expenses", "Km claims, job reimbursements, company card bills and shop purchases, from JobTread. Brenda pays from the list at the top once a month. Every cost is split Edmonton or Calgary by the job's Estimating branch, the same rule as payroll. Nothing here changes JobTread or QuickBooks.");
+    if(EX.err) return h + failBox(EX.err, "Expenses");
+    if(!EX.data){ if(!EX.loading) loadEX(); return h + wait("the claims and Expense bills"); }
+    const d = EX.data;
+    h += verdictHtml(this.alerts(), "Nothing to fix before paying.", "Every approved claim has its branch and adds up.");
+    h += '<div class="actions" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="btn ghost" data-ex-dl="payout">Download what is owed</button><button type="button" class="btn ghost" data-ex-dl="exceptions">Download the problems</button><span class="sm">Read ' + E(showWhen(d.readAt)).replace(/\.$/, "") + '. Km at ' + D2(d.rates.regular) + ' a km, ' + D2(d.rates.trailer) + ' towing.</span></div>';
+
+    /* 1. Payout */
+    const fixIds = new Set(d.exceptions.filter(x => x.level === "stop").map(x => x.id));
+    h += '<div class="card wide" data-nofold><h2>Owed to staff now</h2><p class="lede">Every km claim and reimbursement at Approved and not yet Paid, whatever month it is from, so a late approval is never missed. Km owed is worked out here from the approved km. After paying, set the claim to Paid in JobTread and it drops off.</p>';
+    if(!d.payout.length) h += '<div class="state">Nothing is approved and waiting to be paid.</div>';
+    else {
+      h += tbl('<th>Employee</th><th class="r">Km</th><th class="r">Reimbursements</th>' + EX_BR.map(b => '<th class="r">' + E(b) + '</th>').join("") + '<th class="r">Total</th>',
+        d.payout.map(p => '<tr data-ex-open="' + E(p.person) + '" tabindex="0" style="cursor:pointer"><td>' + E(p.person) + (p.items.some(i => fixIds.has(i.id)) ? ' <span class="tag stop">Fix first</span>' : '') + '<span class="sm">' + plural(p.items.length, "claim") + (EX.open[p.person] ? " · hide" : " · show") + '</span></td><td class="r num">' + D2(p.km) + '</td><td class="r num">' + D2(p.reimbursements) + '</td>' +
+          EX_BR.map(b => '<td class="r num' + (b === "No branch" && p.byBranch[b] ? " caution" : "") + '">' + (p.byBranch[b] ? D2(p.byBranch[b]) : "-") + '</td>').join("") + '<td class="r num"><b>' + D2(p.total) + '</b></td></tr>' +
+          (EX.open[p.person] ? p.items.map(i => '<tr class="sub"><td class="sm">' + (fixIds.has(i.id) ? '<span class="tag stop">Fix first</span> ' : '') + E(i.date) + ' · ' + (i.kind === "km" ? "Km" : "Reimbursement") + ' · ' + E(i.detail) + '</td><td colspan="2" class="sm">' + E(i.job + " " + i.jobName) + '</td><td colspan="3" class="sm">' + E(i.branch) + '</td><td class="r num">' + D2(i.owed) + '</td></tr>').join("") : "")
+        ).concat(['<tr><td><b>Total</b></td><td></td><td></td><td colspan="3"></td><td class="r num"><b>' + D2(d.payoutTotal) + '</b></td></tr>']), "", 400);
+    }
+    h += '</div>';
+
+    h += '<div class="grid">';
+    /* 2. Branch totals by month */
+    h += '<div class="card wide" data-nofold><h2>By branch, each month</h2><p class="lede">By the date of the trip or purchase, which is when the cost hit the job. Claims count once approved. Card bills count once logged. "No branch" is money on jobs with the Estimating branch blank, or on the overhead jobs.</p>';
+    if(!d.months.length) h += '<div class="state">No approved claims or Expense bills yet.</div>';
+    else d.months.slice(0, 4).forEach(m => {
+      const tot = b => Object.keys(EX_CAT).reduce((s, k) => s + (m[k][b] || 0), 0);
+      h += '<h3 style="margin:14px 0 6px;font-size:14px">' + E(exMonth(m.month)) + '</h3>' +
+        tbl('<th>&nbsp;</th>' + EX_BR.map(b => '<th class="r">' + E(b) + '</th>').join(""),
+          Object.keys(EX_CAT).map(k => '<tr><td>' + E(EX_CAT[k]) + '</td>' + EX_BR.map(b => '<td class="r num">' + (m[k][b] ? D2(m[k][b]) : "-") + '</td>').join("") + '</tr>')
+            .concat(['<tr><td><b>Total</b></td>' + EX_BR.map(b => '<td class="r num"><b>' + (tot(b) ? D2(tot(b)) : "-") + '</b></td>').join("") + '</tr>']));
+    });
+    h += '</div>';
+
+    /* 3. Card spend by holder */
+    h += '<div class="card" data-nofold><h2>Company card spend by holder</h2><p class="lede">Expense bills on jobs plus shop purchases on a card. Matched on the card\'s last 4 in the payment reference first, then the bill description. The card list comes from the shop form\'s "Company card used" list in JobTread.</p>' +
+      tbl('<th>Card</th><th class="r">Bills</th><th class="r">Spent</th>', d.cardSpend.map(c => '<tr><td>' + (c.last4 === "?" ? '<span class="tag caution">No card given</span>' : E(c.last4 + " " + c.holder)) + '</td><td class="r num">' + c.count + '</td><td class="r num">' + D2(c.total) + '</td></tr>'), "No company card spending logged yet.") + '</div>';
+
+    /* 4. Exceptions */
+    const counts = {}; d.exceptions.forEach(x => { counts[x.what] = (counts[x.what] || 0) + 1; });
+    const shown = EX.show === "all" ? d.exceptions : d.exceptions.filter(x => x.what === EX.show);
+    h += '<div class="card wide" data-nofold><h2>Problems to chase</h2><p class="lede">Red ones should be fixed before anyone is paid. Claims already sent back are left out.</p>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px"><button type="button" class="chip" data-ex-show="all" aria-pressed="' + (EX.show === "all") + '">All ' + d.exceptions.length + '</button>' +
+      Object.entries(counts).map(([w, c]) => '<button type="button" class="chip" data-ex-show="' + E(w) + '" aria-pressed="' + (EX.show === w) + '">' + E(w) + ' ' + c + '</button>').join("") + '</div>' +
+      tbl('<th>Problem</th><th>Who</th><th>Job</th><th>Date</th>', shown.map(x => '<tr><td><span class="tag ' + (x.level === "stop" ? "stop" : "caution") + '">' + (x.level === "stop" ? "Fix first" : "Check") + '</span> ' + E(x.what) + (x.detail ? '<span class="sm">' + E(x.detail) + '</span>' : '') + '</td><td>' + E(x.person) + '</td><td>' + E(x.job) + (x.jobName ? '<span class="sm">' + E(x.jobName) + '</span>' : '') + '</td><td>' + E(x.date) + '</td></tr>'), "Nothing to chase.", 200) + '</div>';
+    h += '</div>';
+    return h;
+  }
+};
+document.addEventListener("click", ev => {
+  const t = ev.target && ev.target.closest ? ev.target.closest("[data-ex-dl],[data-ex-open],[data-ex-show]") : null; if(!t) return;
+  if(t.dataset.exDl){ exDownload(t.dataset.exDl); return; }
+  if(t.dataset.exShow){ EX.show = t.dataset.exShow; render(); return; }
+  if(t.dataset.exOpen !== undefined){ EX.open[t.dataset.exOpen] = !EX.open[t.dataset.exOpen]; render(); }
+});
 VIEWS.payroll = {
   hold(){ const a = document.activeElement; return !!(a && a.closest && a.closest("[data-py-form]") && /INPUT|TEXTAREA|SELECT/.test(a.tagName)); },
   alerts(){
@@ -3301,6 +3402,7 @@ var ICONS = {
   dispatch:'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
   money:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
   payroll:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  expenses:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>',
   buying:'<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
   records:'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>',
   projects:'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
@@ -3578,6 +3680,7 @@ var CLAUDE = (function(){
     overview:["What needs me first today?", "Explain the top alert in plain words", "What does the SOP say happens next?"],
     money:["Who should we chase for payment first?", "How far behind are we paying suppliers?", "Explain cash in the bank"],
     payroll:["What do I fix before payroll closes?", "Who still has hours to approve?", "Explain how the split works"],
+    expenses:["What do I fix before paying km this month?", "Who is owed the most?", "Which jobs have no branch?"],
     estimating:["Which quotes need a follow-up?", "What bids are due soon?"],
     dispatch:["What starts in the next two weeks?", "Which won jobs have no start date?"],
     projects:["Which jobs look stuck?", "Who has the most on their plate?"],
