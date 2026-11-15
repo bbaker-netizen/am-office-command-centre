@@ -30,8 +30,10 @@ async function pave(query, grantKey) {
   return body;
 }
 
-const JOB = { id: {}, number: {}, name: {}, closedOn: {}, customFieldValues: { $: { where: [["customField", "id"], BRANCH_FIELD] }, nodes: { value: {} } } };
-const flatJob = j => j ? { id: j.id, number: j.number || "", name: j.name || "", closedOn: j.closedOn || null, branch: ((j.customFieldValues && j.customFieldValues.nodes && j.customFieldValues.nodes[0]) || {}).value || "" } : null;
+const JOB_TYPE_FIELD = "22PRUje2A7MJ";
+const JOB = { id: {}, number: {}, name: {}, closedOn: {}, customFieldValues: { $: { where: [["customField", "id"], "in", [BRANCH_FIELD, JOB_TYPE_FIELD]] }, nodes: { value: {}, customField: { id: {} } } } };
+const fieldOf = (j, id) => { const n = ((j.customFieldValues && j.customFieldValues.nodes) || []).find(x => x && (x.customField ? x.customField.id === id : id === BRANCH_FIELD)); return n ? n.value : ""; };
+const flatJob = j => j ? { id: j.id, number: j.number || "", name: j.name || "", closedOn: j.closedOn || null, branch: fieldOf(j, BRANCH_FIELD) || "", jobType: fieldOf(j, JOB_TYPE_FIELD) || "" } : null;
 
 async function readForm(formId, key) {
   const out = []; let page = null, guard = 0;
