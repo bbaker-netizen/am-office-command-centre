@@ -49,6 +49,16 @@ export const IDLE_CHOICES = [1, 4, 8, 12];
    Craig and Amir switch it on for staff), "none". Craig and Amir start as
    executive assistants and open on their briefing. */
 export const ASSISTANTS = ["exec", "project", "none"];
+/* The master admin (Bruce, 2026-11-15): one level above admin. Named only in
+   Netlify (MASTER_ADMINS, comma-separated email addresses), so nobody can
+   make themselves master from inside the app. Only a master admin can:
+   - see another person's email while viewing as them (View as);
+   - change, reset, invite, switch off or remove a master admin's account.
+   Admins (Craig, Amir) keep View as, but without anyone's mail. */
+export function isMaster(a) {
+  const list = String(process.env.MASTER_ADMINS || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+  return !!a && a.active !== false && a.level === "admin" && list.includes(String(a.email || "").trim().toLowerCase());
+}
 export const LANDINGS = ["brief", "overview"];
 const EXEC_START = ["craig@amabatement.com", "amir@amabatement.com"];
 export function assistantOf(a) {
@@ -168,7 +178,7 @@ export function publicAccount(a) {
     id: a.id, email: a.email, name: a.name, title: a.title || "", areas: a.areas || [], level: a.level,
     responsibility: presetOf(a.areas), responsibilityLabel: presetLabel(a.areas),
     active: a.active !== false, mustChange: !!a.mustChange, createdAt: a.createdAt || "", createdBy: a.createdBy || "",
-    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || "", claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a),
+    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || "", claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), master: isMaster(a),
     /* The invite's dates only. The link itself is never stored, only a scramble of it. */
     invite: a.invite ? { sentAt: a.invite.at || "", expires: a.invite.exp || "", by: a.invite.by || "", emailed: !!a.invite.emailed } : null
   };
@@ -213,7 +223,7 @@ export async function accountGate(req, s = authStore(), opts = {}) {
     const why = viewAsProblem(real, accounts[viewAs], req.method, req.url);
     if (why) return refuse(why.error, why.message, why.status);
     req.amReal = real;
-    req.amUser = { ...userOf(accounts[viewAs], settings), edit: false, admin: false, claude: false, shownLevel: accounts[viewAs].level, viewAs: { byId: real.id, byName: real.name } };
+    req.amUser = { ...userOf(accounts[viewAs], settings), edit: false, admin: false, master: false, claude: false, shownLevel: accounts[viewAs].level, viewAs: { byId: real.id, byName: real.name, mail: !!real.master } };
   }
   return null;
 }
@@ -225,7 +235,7 @@ export function userOf(a, settings = {}) {
     kind: "account", id: a.id, name: a.name, email: a.email, title: a.title || "", areas, level: a.level,
     edit: a.level === "edit" || a.level === "admin", admin: a.level === "admin",
     office: areas.includes("office"), mustChange: !!a.mustChange, idleHours: settings.idleHours,
-    claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), projectLive: !!settings.projectAssistantLive
+    claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), projectLive: !!settings.projectAssistantLive, master: isMaster(a)
   };
   u.role = areas.includes("office") && areas.includes("field") ? "owner" : areas.includes("office") ? "office" : areas.includes("field") ? "field" : "none";
   return u;
@@ -236,6 +246,7 @@ const VIEW_AS_NEVER = ["start", "connect", "callback", "disconnect", "forget", "
 export function viewAsProblem(real, target, method, url) {
   if (!real || !real.admin) return { error: "role", message: "Only an admin can view the command centre as someone else.", status: 403 };
   if (!target || target.active === false) return { error: "view_as", message: "That person's account is not there or is switched off.", status: 404 };
+  if (isMaster(target) && !real.master) return { error: "role", message: "That is the master admin's account. Only the master admin can view it.", status: 403 };
   const m = String(method || "GET").toUpperCase();
   const name = String(target.name || "that person").split(" ")[0];
   if (m !== "GET" && m !== "HEAD") return { error: "view_only", message: `You are viewing as ${name}. Nothing can be changed while you do. Go back to yourself first.`, status: 403 };

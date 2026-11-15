@@ -13,6 +13,7 @@ let n = 0; const ok = m => { n++; console.log("ok", m); };
 const T = "2026-11-16";
 process.env.INBOX_DOMAINS = "example.test";
 process.env.MAILBOX = "robots@example.test";
+process.env.MASTER_ADMINS = "master@example.test";
 
 assert.equal(hoursLeft("12:00"), 5.5); assert.equal(hoursLeft("06:30"), 10.5); assert.equal(hoursLeft("18:00"), 0);
 assert.equal(checkinSlot({ weekday: "Mon", hour: 7 }), "morning"); assert.equal(checkinSlot({ weekday: "Tue", hour: 12 }), "noon"); assert.equal(checkinSlot({ weekday: "Wed", hour: 17 }), "end");
@@ -69,8 +70,9 @@ const s = getStore({ name: "am-inventory", consistency: "strong" });
 const owner = { id: "c1", name: "Owen Owner", email: "owner@example.test", title: "Owner", areas: ["office", "money", "payroll", "field", "assistants"], level: "admin", pwv: "1", assistant: "exec" };
 const gm = { id: "a1", name: "Gina Manager", email: "gm@example.test", title: "General Manager", areas: ["office", "field", "assistants"], level: "admin", pwv: "1", assistant: "exec" };
 const pm = { id: "p1", name: "Paul Manager", email: "pm@example.test", areas: ["field"], level: "edit", pwv: "1", assistant: "project" };
+const mst = { id: "m1", name: "Max Master", email: "master@example.test", areas: ["office", "money", "field"], level: "admin", pwv: "1" };
 const est = { id: "d1", name: "Eve Estimator", email: "est@example.test", areas: ["office"], level: "edit", pwv: "1" };
-await s.setJSON(ACCOUNTS, { accounts: { c1: owner, a1: gm, p1: pm, d1: est }, settings: { idleHours: 8, payrollSplit: true } });
+await s.setJSON(ACCOUNTS, { accounts: { c1: owner, a1: gm, p1: pm, d1: est, m1: mst }, settings: { idleHours: 8, payrollSplit: true } });
 await s.setJSON("cashflow-plan", { items: [], done: {}, place: {}, settings: {}, log: [] });
 await s.setJSON("google-tokens", { refresh_token: "r", access_token: "robot", expires_at: Date.now() + 3600000 });
 await s.setJSON("qbo-tokens", { access_token: "q", refresh_token: "q", realmId: "1", expires_at: Date.now() + 3600000 });
@@ -135,10 +137,15 @@ ok("his inbox is sorted (needs you, payment, not yours for estimating); a reply 
 
 const viewTok = await tok("a1");
 const asView = await (await handler(new Request("https://site/api/assistant", { headers: { authorization: "Bearer " + viewTok, "x-am-view-as": "c1" } }))).json();
-assert.ok(!asView.triage.hidden); assert.equal(asView.triage.items.length, 3);
-const blocked = await handler(new Request("https://site/api/assistant", { method: "POST", headers: { authorization: "Bearer " + viewTok, "x-am-view-as": "c1", "content-type": "application/json" }, body: JSON.stringify({ action: "draft", id: "m1" }) }));
+assert.equal(asView.triage.hidden, true); assert.ok(!asView.triage.items); assert.ok(asView.open.length >= 0);
+const mTok = await tok("m1");
+const asMaster = await (await handler(new Request("https://site/api/assistant", { headers: { authorization: "Bearer " + mTok, "x-am-view-as": "c1" } }))).json();
+assert.ok(!asMaster.triage.hidden); assert.equal(asMaster.triage.items.length, 3);
+const blocked = await handler(new Request("https://site/api/assistant", { method: "POST", headers: { authorization: "Bearer " + mTok, "x-am-view-as": "c1", "content-type": "application/json" }, body: JSON.stringify({ action: "draft", id: "m1" }) }));
 assert.equal(blocked.status, 403);
-ok("an admin viewing as the owner sees his list and his mail (Craig's call), but cannot draft, tick or send anything");
+const intoMaster = await handler(new Request("https://site/api/assistant", { headers: { authorization: "Bearer " + viewTok, "x-am-view-as": "m1" } }));
+assert.equal(intoMaster.status, 403);
+ok("an admin viewing as the owner sees his list but not his mail; only the master admin sees mail, still look only; admins cannot view as the master admin");
 
 await s.setJSON("inbox-a1", { inboxes: [{ email: "gm@example.test", refresh_token: "r", access_token: "gmtok", expires_at: Date.now() + 3600000 }] });
 r = await call("a1", { action: "chase", jobNumber: "26-00999", jobName: "Test Site", who: "Sam at Northwind", email: "sam@northwind.test", what: "the signed site safety plan", from: "me" });

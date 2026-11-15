@@ -38,7 +38,7 @@ import { readFails, addFail, clearFails, lockedFor, ipKey, ipBlocked, ipFail, ch
 import {
   AREAS, LEVELS, PRESETS, IDLE_CHOICES, ACCOUNTS_LOG, normEmail, okEmail, hashPassword, checkPassword, needsRehash,
   passwordProblem, tempPassword, readAccounts, changeAccounts, logAccount, publicAccount, activeAdmins,
-  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS
+  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS, isMaster
 } from "./_accounts.mjs";
 
 function json(body, status = 200) {
@@ -264,6 +264,12 @@ export default async (req) => {
 
     /* ------------------------------------------------------------ admins */
     if (!isAdmin(me)) return bad("Only an admin can manage people and access.", 403, "role");
+    /* The master admin's account answers only to the master admin. */
+    if (["update", "invite", "cancelInvite", "reset", "remove"].includes(action)) {
+      const { accounts: all } = await readAccounts(s);
+      const tgt = all[String(body.id || "")];
+      if (tgt && isMaster(tgt) && !me.master) return bad("That is the master admin's account. Only the master admin can change it.", 403, "master");
+    }
 
     if (action === "list") {
       const { accounts, settings } = await readAccounts(s);
