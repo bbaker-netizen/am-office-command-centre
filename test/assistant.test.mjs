@@ -135,8 +135,10 @@ ok("his inbox is sorted (needs you, payment, not yours for estimating); a reply 
 
 const viewTok = await tok("a1");
 const asView = await (await handler(new Request("https://site/api/assistant", { headers: { authorization: "Bearer " + viewTok, "x-am-view-as": "c1" } }))).json();
-assert.equal(asView.triage.hidden, true); assert.ok(!asView.triage.items);
-ok("the general manager viewing as the owner sees his list but not his mail");
+assert.ok(!asView.triage.hidden); assert.equal(asView.triage.items.length, 3);
+const blocked = await handler(new Request("https://site/api/assistant", { method: "POST", headers: { authorization: "Bearer " + viewTok, "x-am-view-as": "c1", "content-type": "application/json" }, body: JSON.stringify({ action: "draft", id: "m1" }) }));
+assert.equal(blocked.status, 403);
+ok("an admin viewing as the owner sees his list and his mail (Craig's call), but cannot draft, tick or send anything");
 
 await s.setJSON("inbox-a1", { inboxes: [{ email: "gm@example.test", refresh_token: "r", access_token: "gmtok", expires_at: Date.now() + 3600000 }] });
 r = await call("a1", { action: "chase", jobNumber: "26-00999", jobName: "Test Site", who: "Sam at Northwind", email: "sam@northwind.test", what: "the signed site safety plan", from: "me" });
