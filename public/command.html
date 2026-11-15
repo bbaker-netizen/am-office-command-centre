@@ -951,7 +951,7 @@ function go(tab){
    else sees it, so he can check and sort out what each person has. */
 function viewAsBanner(me){
   const b = document.createElement("div"); b.className = "viewas"; b.setAttribute("role", "status");
-  b.innerHTML = '<span>Viewing as <b>' + E(me.name) + '</b>' + (me.title ? ' (' + E(me.title) + ')' : '') + '. Look only: nothing can be saved, sent or changed. Their mail shows; their Google Drive and Ask Claude stay closed.' +
+  b.innerHTML = '<span>Viewing as <b>' + E(me.name) + '</b>' + (me.title ? ' (' + E(me.title) + ')' : '') + '. Look only: nothing can be saved, sent or changed. ' + (me.viewAs.mail ? 'Their mail shows (master admin).' : 'Their mail stays private.') + ' Their Google Drive and Ask Claude stay closed.' +
     (me.viewAs.shownLevel === "admin" ? ' Their admin pages are not shown.' : '') + '</span><button type="button" class="btn" data-view-end>Back to me</button>';
   $("top").appendChild(b);
   b.querySelector("[data-view-end]").onclick = viewAsEnd;
@@ -968,9 +968,9 @@ function viewAsPick(){
   openDrawer("View as", '<p class="sub">Loading people…</p>');
   drawerState = { kind:"viewas" };
   acctCall("action=list").then(d => {
-    const list = (d.accounts || []).filter(a => a.active && a.id !== ME.id).sort((a, b) => a.name.localeCompare(b.name));
+    const list = (d.accounts || []).filter(a => a.active && a.id !== ME.id && (!a.master || ME.master)).sort((a, b) => a.name.localeCompare(b.name));
     $("dbody").innerHTML = '<p class="sub">Pick a person to see the command centre exactly as they do: their sections, their pages and their numbers. It is look only. A bar across the top takes you back.</p>' +
-      (list.length ? '<ul class="valist">' + list.map(a => '<li><button type="button" data-view-as="' + E(a.id) + '" data-view-name="' + E(a.name) + '"><b>' + E(a.name) + '</b><span>' + E([a.title, a.responsibilityLabel, LEVEL_INFO[a.level] ? LEVEL_INFO[a.level].label : ""].filter(Boolean).join(" · ")) + '</span></button></li>').join("") + '</ul>' : '<p class="sub">Nobody else has an account yet.</p>');
+      (list.length ? '<ul class="valist">' + list.map(a => '<li><button type="button" data-view-as="' + E(a.id) + '" data-view-name="' + E(a.name) + '"><b>' + E(a.name) + '</b><span>' + E([a.title, a.responsibilityLabel, a.master ? "Master admin" : LEVEL_INFO[a.level] ? LEVEL_INFO[a.level].label : ""].filter(Boolean).join(" · ")) + '</span></button></li>').join("") + '</ul>' : '<p class="sub">Nobody else has an account yet.</p>') + '<p class="sub">' + (ME.master ? 'As the master admin you also see each person\'s mail.' : 'Their mail stays private. Only the master admin can see another person\'s mail.') + '</p>';
   }).catch(e => { $("dbody").innerHTML = '<div class="state err">' + E(errCopy(e)) + '</div>'; });
 }
 document.addEventListener("click", ev => { const t = ev.target.closest && ev.target.closest("[data-view-as]"); if(t) viewAsStart(t.dataset.viewAs, t.dataset.viewName); });
@@ -1966,7 +1966,7 @@ function asItem(it){
 function asInbox(){
   const d = AS.data, ib = (AS.inbox && AS.inbox.inboxes) || d.inboxes || [];
   let h = '<div class="card wide"><h2>Your inbox</h2>';
-  if(d.triage && d.triage.hidden) return h + '<p class="lede">Mail is not shown while you view as someone else.</p></div>';
+  if(d.triage && d.triage.hidden) return h + '<p class="lede">Their mail stays private. Only the master admin can see another person\'s mail.</p></div>';
   if(!ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what is someone else\'s (estimating mail stays out of your way). It drafts replies for you to check and send yourself. It never sends anything.</p>' +
     (AS.inbox && AS.inbox.ready === false ? '<div class="state wait">Google sign-in is not set up in Netlify yet.</div>' : '<button class="btn" data-as-connect>Connect my inbox</button>') + '</div>';
   const t = d.triage || {}, items = t.items || [];
@@ -3379,14 +3379,15 @@ VIEWS.people = {
       '<p class="lede">Press a name to change what they see or can do, send them a link to set their password, or switch them off. Changes apply at their next click; they do not have to sign in again.</p>' +
       tbl('<th>Person</th><th>Responsible for</th><th>Sees</th><th>Can do</th><th>Last signed in</th><th></th>', on.concat(off).map(a =>
         '<tr class="' + (a.active ? "" : "ac-off") + '" data-ac-edit="' + E(a.id) + '" tabindex="0" style="cursor:pointer"><td><span class="nm">' + E(a.name) + (a.id === ADM.me ? ' <span class="tag clear">You</span>' : '') + '</span><span class="sm">' + E(a.email) + (a.title ? ' · ' + E(a.title) : '') + '</span></td>' +
-        '<td>' + E(respLabel(a.areas)) + '</td><td class="ac-chips">' + areaChips(a.areas) + '</td><td>' + E(LEVEL_INFO[a.level] ? LEVEL_INFO[a.level].label : a.level) + '</td>' +
+        '<td>' + E(respLabel(a.areas)) + '</td><td class="ac-chips">' + areaChips(a.areas) + '</td><td>' + (a.master ? '<b>Master admin</b>' : E(LEVEL_INFO[a.level] ? LEVEL_INFO[a.level].label : a.level)) + '</td>' +
         '<td>' + E(whenSeen(a.lastSignIn)) + '</td><td>' + acStatus(a) + '</td></tr>'), "Nobody yet.", 60) + '</div>';
 
     h += '<div class="card"><h2>What each responsibility sees</h2><p class="lede">A shortcut for a set of areas. Tick the areas yourself for anything in between; that shows as Custom.</p><p class="ac-sub">Responsibilities</p><dl class="facts">' +
       RESP.filter(r => r[0] !== "custom").map(r => '<dt>' + E(r[1]) + '</dt><dd>' + RESP_AREAS[r[0]].map(k => AREA_INFO[k].label).join(", ") + '</dd>').join("") + '</dl>' +
       '<p class="ac-sub">Areas</p><dl class="facts">' + AREA_KEYS.map(k => '<dt>' + E(AREA_INFO[k].label) + '</dt><dd>' + E(AREA_INFO[k].what) + '</dd>').join("") + '</dl></div>';
     h += '<div class="card"><h2>What each level can do</h2><p class="lede">Separate from what they see. A field lead can make changes in Field without seeing Money.</p><dl class="facts">' +
-      ["view", "edit", "admin"].map(k => '<dt>' + E(LEVEL_INFO[k].label) + '</dt><dd>' + E(LEVEL_INFO[k].what) + '</dd>').join("") + '</dl></div>';
+      ["view", "edit", "admin"].map(k => '<dt>' + E(LEVEL_INFO[k].label) + '</dt><dd>' + E(LEVEL_INFO[k].what) + '</dd>').join("") +
+      '<dt>Master admin</dt><dd>One level above admin, for Bruce only. Named in Netlify, not here, so nobody can make themselves master. The only person who can see another person\'s mail through View as, and the only one who can change the master admin\'s account.</dd></dl></div>';
 
     h += '<div class="card"><h2>Project assistant for staff</h2><p class="lede">Built and ready for project managers and field leads, but held back until Craig and Amir have used theirs and vouch for it. Preview it under Admin first.</p>' +
       '<div class="ac-row"><span class="tag ' + (ADM.settings.projectAssistantLive ? "clear" : "mute") + '">' + (ADM.settings.projectAssistantLive ? "On for staff" : "Off for staff") + '</span><button class="btn ghost" data-ac-pmlive="' + (ADM.settings.projectAssistantLive ? "0" : "1") + '">' + (ADM.settings.projectAssistantLive ? "Switch off" : "Switch on for staff") + '</button></div></div>';

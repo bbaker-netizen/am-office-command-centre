@@ -255,9 +255,10 @@ export default async (req) => {
       }
       const d = await readDoc(s, u.id);
       const ib = await readInboxes(s, u.id);
-      /* View as shows mail too: Craig, 2026-11-15 ("it can show someone's
-         email"). Only admins can use View as, and it stays look only. */
-      const hideMail = false;
+      /* View as shows another person's mail only to the master admin (Bruce,
+         2026-11-15). Admins viewing as someone see their list, not their mail.
+         It stays look only either way. */
+      const hideMail = !!u.viewAs && !u.viewAs.mail;
       return json({
         role: u.assistant, live, name: u.name, today, settings: d.settings,
         open: rank(d.items, today), held: d.items.filter(x => x.held && !x.done), doneToday: d.items.filter(x => x.done && String(x.doneAt || "").slice(0, 10) === today),
