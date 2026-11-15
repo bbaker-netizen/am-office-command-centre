@@ -36,22 +36,28 @@ jobs:
         run: pip install edge-tts
       - name: Make the missing clips
         run: |
-          set -e
           names=$(grep -E '^##[[:space:]]+[A-Za-z0-9._-]+[[:space:]]*$' tools/Narration-Script-Command-Centre.md | sed -E 's/^##[[:space:]]+//; s/[[:space:]]+$//')
-          made=0
+          made=0; failed=0
           for n in $names; do
             if [ ! -f "public/tour/cc/$n.mp3" ]; then
-              echo "Making $n"
-              python3 tools/generate-narration.py tools/Narration-Script-Command-Centre.md public/tour/cc --only "$n"
-              made=$((made+1))
+              if python3 tools/generate-narration.py tools/Narration-Script-Command-Centre.md public/tour/cc --only "$n" > "/tmp/$n.log" 2>&1; then
+                made=$((made+1))
+              else
+                failed=$((failed+1))
+                rm -f "public/tour/cc/$n.mp3"
+                echo "::error title=Clip $n failed::$(tail -c 400 /tmp/$n.log | tr '\n' ' ')"
+              fi
             fi
           done
-          echo "Made $made clip(s)."
+          echo "::notice title=Clips::Made $made, failed $failed."
+          [ "$failed" = 0 ]
       - name: Save them to this branch
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/tour/cc/*.mp3
-          if git diff --cached --quiet; then echo "No new clips."; exit 0; fi
+          if git diff --cached --quiet; then echo "::notice title=Save::No new clips to save."; exit 0; fi
           git commit -m "Narration clips made in the cloud"
-          git push
+          if ! git push > /tmp/push.log 2>&1; then echo "::error title=Push failed::$(tail -c 400 /tmp/push.log | tr '\n' ' ')"; exit 1; fi
+          echo "::notice title=Save::Clips saved to the branch."
