@@ -728,6 +728,13 @@ button,input,select,textarea,optgroup{font-family:inherit}
   .nb-tools .sw{width:20px;height:20px;min-width:20px}
   .nb-pal{flex-wrap:wrap;justify-content:flex-end}
 }
+/* long lists: first four, then Show all */
+.peek-hide{display:none!important}
+.peek-row{margin-top:6px}
+.peek-btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:13px;font-weight:700;color:var(--cyan-deep);background:var(--cyan-wash);border:0;border-radius:999px;padding:6px 14px;cursor:pointer}
+.peek-btn:hover{background:var(--cyan);color:#fff}
+.peek-btn .ico{width:15px;height:15px;transition:transform .2s ease}
+.peek-btn.up .ico{transform:rotate(180deg)}
 /* folding cards */
 .card.fold>h2{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;margin:-6px -8px 2px;padding:6px 8px;border-radius:4px}
 .card.fold>h2:hover{background:var(--panel-2)}
@@ -928,10 +935,13 @@ let tblN = 0; const EXPANDED = {};
 function tbl(head, rows, empty, limit){
   const id = current + ":" + (++tblN);
   if(!rows.length) return '<div class="state ok">' + E(empty || "Nothing here right now.") + '</div>';
-  const lim = EXPANDED[id] ? rows.length : (limit || 12);
+  /* Lists open condensed (Bruce, 15 Nov): five rows unless a page asks for a
+     working table of 30 or more (payroll, timesheets). */
+  const lim = EXPANDED[id] ? rows.length : (limit && limit >= 30 ? limit : 5);
   const shown = rows.slice(0, lim);
   return '<div class="scroll"><table><thead><tr>' + head + '</tr></thead><tbody>' + shown.join("") + '</tbody></table></div>' +
-    (rows.length > lim ? '<div class="more">Showing ' + lim + ' of ' + rows.length + '. <button class="go" data-expand="' + E(id) + '">Show all ' + rows.length + '</button></div>' : "");
+    (rows.length > lim ? '<div class="more">Showing ' + lim + ' of ' + rows.length + '. <button class="peek-btn" data-expand="' + E(id) + '">Show all ' + rows.length + ico("chevron") + '</button></div>'
+      : EXPANDED[id] && rows.length > 5 ? '<div class="more"><button class="peek-btn up" data-collapse="' + E(id) + '">Show fewer' + ico("chevron") + '</button></div>' : "");
 }
 function bars(list, onclick){
   const max = Math.max(0, ...list.map(x => x[1]));
@@ -1257,9 +1267,10 @@ function searchJobs(q){
 
 /* ---------- wiring ---------- */
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-sec],[data-tab],[data-job],[data-list],[data-go],[data-pm],[data-back],[data-hit],[data-expand]");
+  const t = ev.target.closest("[data-sec],[data-tab],[data-job],[data-list],[data-go],[data-pm],[data-back],[data-hit],[data-expand],[data-collapse]");
   if(!t) return;
   if(t.dataset.expand){ const y = window.scrollY; EXPANDED[t.dataset.expand] = 1; render(); window.scrollTo(0, y); return; }
+  if(t.dataset.collapse){ EXPANDED[t.dataset.collapse] = 0; render(); const c = t.isConnected ? null : document.querySelector('[data-expand="' + t.dataset.collapse + '"]'); if(c) c.closest(".card,.scroll") && c.closest(".card,.scroll").scrollIntoView({ block:"nearest" }); return; }
   if(t.dataset.hit){ $("hits").hidden = true; $("find").value = ""; drawerStateBack = null; openJob(t.dataset.hit); return; }
   if(t.dataset.sec){ goSection(t.dataset.sec); return; }
   if(t.dataset.tab){ go(t.dataset.tab); return; }
@@ -2235,11 +2246,10 @@ function mdBank(){
   if(AS.bankErr) return h + failBox(AS.bankErr, "Bank") + '</div>';
   if(!AS.bank) return h + wait("payments since you last looked") + '</div>';
   const b = AS.bank, tin = b.in.reduce((x, p) => x + p.amount, 0), tout = b.out.reduce((x, p) => x + p.amount, 0);
-  const rows = (list, n) => list.length ? '<ul class="md-rows">' + list.slice(0, n).map(p => '<li><span class="nm">' + E(p.name) + '<small>' + E(mdDay(p.date)) + '</small></span><span class="amt">' + M(p.amount) + '</span></li>').join("") +
-    (list.length > n ? '<li class="more">and ' + (list.length - n) + ' more</li>' : '') + '</ul>' : '<p class="sub">None.</p>';
+  const rows = list => list.length ? '<ul class="md-rows">' + list.map(p => '<li><span class="nm">' + E(p.name) + '<small>' + E(mdDay(p.date)) + '</small></span><span class="amt">' + M(p.amount) + '</span></li>').join("") + '</ul>' : '<p class="sub">None.</p>';
   h += '<p class="lede">Since ' + E(mdDay(b.since)) + ', as recorded in QuickBooks. The BMO import is Danielle\'s, on Tuesdays.</p>' +
-    '<div class="md-sec">Money in <b class="in">' + M(tin) + '</b></div>' + rows(b.in, 5) +
-    '<div class="md-sec">Money out <b>' + M(tout) + '</b></div>' + rows(b.out, 5) +
+    '<div class="md-sec">Money in <b class="in">' + M(tin) + '</b></div>' + rows(b.in) +
+    '<div class="md-sec">Money out <b>' + M(tout) + '</b></div>' + rows(b.out) +
     (b.balances.length ? '<p class="sub" style="margin-top:10px">Bank balance you typed for ' + b.balances.slice(-1).map(x => E(mdDay(x.date)) + ": " + M(x.amount)).join("") + '</p>' : '') +
     '<div class="md-foot"><button class="btn ghost" data-as-seenbank>I have looked</button></div>';
   return h + '</div>';
@@ -2249,10 +2259,10 @@ function mdDue(){
   const ready = tb.filter(j => st(j) === "Invoicing"), rest = tb.filter(j => st(j) !== "Invoicing");
   const list = ready.concat(rest), tpay = pay.reduce((x, p) => x + (p.amount || 0), 0);
   let h = '<div class="card o-due" data-nofold><h2>Due this week</h2><p class="lede">To invoice at Thursday billing, and to pay.</p>';
-  h += '<div class="md-sec">To invoice <b>' + list.length + '</b></div>' + (list.length ? '<ul class="md-rows">' + list.slice(0, 6).map(j => '<li data-job="' + E(j._id) + '" tabindex="0"><span class="nm">' + E(j._number) + ' ' + E(j._name || "") + '<small>' + E((AS_WAIT[st(j)] || [st(j)])[0]) + '</small></span></li>').join("") +
-    (list.length > 6 ? '<li class="more">and ' + (list.length - 6) + ' more, under Done, not billed</li>' : '') + '</ul>' : '<p class="sub">Nothing finished and unbilled.</p>');
-  h += '<div class="md-sec">To pay <b>' + M(tpay) + '</b></div>' + (pay.length ? '<ul class="md-rows">' + pay.slice(0, 8).map(x => '<li><span class="nm">' + E(x.name) + (x.rolled ? '<small>Rolled from an earlier week</small>' : '') + '</span><span class="amt">' + M(x.amount) + '</span></li>').join("") +
-    (pay.length > 8 ? '<li class="more">and ' + (pay.length - 8) + ' more on Cash flow</li>' : '') + '</ul>' : '<p class="sub">Nothing planned.</p>');
+  h += '<div class="md-sec">To invoice <b>' + list.length + '</b></div>' + (list.length ? '<ul class="md-rows">' + list.map(j => '<li data-job="' + E(j._id) + '" tabindex="0"><span class="nm">' + E(j._number) + ' ' + E(j._name || "") + '<small>' + E((AS_WAIT[st(j)] || [st(j)])[0]) + '</small></span></li>').join("") +
+    '</ul>' : '<p class="sub">Nothing finished and unbilled.</p>');
+  h += '<div class="md-sec">To pay <b>' + M(tpay) + '</b></div>' + (pay.length ? '<ul class="md-rows">' + pay.map(x => '<li><span class="nm">' + E(x.name) + (x.rolled ? '<small>Rolled from an earlier week</small>' : '') + '</span><span class="amt">' + M(x.amount) + '</span></li>').join("") +
+    '</ul>' : '<p class="sub">Nothing planned.</p>');
   return h + '</div>';
 }
 /* Closeout checks from JobTread (quotes, POs, bills, last day worked) for
@@ -2299,7 +2309,7 @@ function asJobs(){
   coFor(stuck.filter(j => TOBILL.includes(st(j))));
   const counts = {}; stuck.forEach(j => counts[st(j)] = (counts[st(j)] || 0) + 1);
   const pick = AS.jobsWhy && counts[AS.jobsWhy] ? AS.jobsWhy : "";
-  const shown = stuck.filter(j => !pick || st(j) === pick), lim = AS.jobsAll ? shown.length : 8;
+  const shown = stuck.filter(j => !pick || st(j) === pick);
   const won = live().filter(j => POST.includes(st(j)) && !TOBILL.includes(st(j)));
   const row = j => { const w = AS_WAIT[st(j)] || [st(j), ""]; const ch = byJob(j._id);
     return '<div class="md-job"><div class="jn" data-job="' + E(j._id) + '" tabindex="0">' + E(j._number) + ' ' + E(j._name || "") + '<small>' + E([j._cust, pm(j) ? "PM " + pm(j) : ""].filter(Boolean).join(" · ")) + '</small></div>' +
@@ -2310,8 +2320,7 @@ function asJobs(){
     '<p class="lede">Finished jobs that cannot be invoiced yet, closest to billing first. Press Chase when a site or a subcontractor owes something: your assistant drafts a note each day for three days, then tells you to call.</p>' +
     (stuck.length ? '<div class="md-filter"><button type="button" class="md-pill' + (pick ? "" : " on") + '" data-as-why="">All<b>' + stuck.length + '</b></button>' +
       AS_ORDER.filter(k => counts[k]).map(k => '<button type="button" class="md-pill' + (pick === k ? " on" : "") + '" data-as-why="' + E(k) + '">' + E(AS_WAIT[k][0]) + '<b>' + counts[k] + '</b></button>').join("") + '</div>' +
-      shown.slice(0, lim).map(row).join("") +
-      (shown.length > lim ? '<div class="md-foot"><button type="button" class="btn ghost" data-as-jobsall>Show all ' + shown.length + '</button></div>' : '')
+      '<div class="md-jobs">' + shown.map(row).join("") + '</div>'
     : '<div class="md-empty"><b>Nothing is stuck.</b>Every finished job is billed.</div>') +
     '<p class="sub" style="margin-top:12px">' + plural(won.length, "more job is", "more jobs are") + ' won and not finished. <button class="linkish" data-go="projects">See them on Projects</button></p></div>';
 }
@@ -2597,12 +2606,12 @@ function mdNotes(){
   let h = '<div class="card o-notes" data-nofold><h2>Sticky notes' + (notes.length ? ' <span class="md-count">' + notes.length + '</span>' : '') + '</h2>';
   if(NB.err) return h + failBox(NB.err, "Sticky notes") + '</div>';
   if(!NB.notes) return h + wait("your sticky notes") + '</div>';
-  h += notes.length ? '<div class="md-notes">' + notes.slice(0, 6).map(n => '<div class="md-note c-' + E(n.colour) + '" style="--r:' + (Number(n.rot) || 0) + 'deg" data-go="notes" title="Open the board">' + E(n.text.length > 90 ? n.text.slice(0, 88) + "…" : n.text) + '</div>').join("") + '</div>'
+  h += notes.length ? '<div class="md-notes">' + notes.slice(0, 4).map(n => '<div class="md-note c-' + E(n.colour) + '" style="--r:' + (Number(n.rot) || 0) + 'deg" data-go="notes" title="Open the board">' + E(n.text.length > 90 ? n.text.slice(0, 88) + "…" : n.text) + '</div>').join("") + '</div>'
     : '<p class="lede">No sticky notes yet. Stick one on here, or open the board to drag them around.</p>';
   if(!NB.viewAs) h += '<form class="md-stick" data-md-stick onsubmit="return false"><div class="nb-sw">' + NB_COLOURS.map(c => '<button type="button" class="nb-dot c-' + c[0] + (NB.colour === c[0] ? " on" : "") + '" data-nb-pick="' + c[0] + '" aria-label="' + c[1] + '" aria-pressed="' + (NB.colour === c[0]) + '"></button>').join("") + '</div>' +
     '<input id="mdStick" maxlength="400" autocomplete="off" placeholder="Stick a note on…" aria-label="Write a sticky note"><button type="submit" class="btn">Stick it</button></form>' +
     (NB.msg && current === "brief" ? '<p class="sub" role="status" style="margin-top:8px">' + E(NB.msg) + '</p>' : '');
-  return h + '<div class="md-foot"><button class="btn ghost" data-go="notes">Open the board' + (notes.length > 6 ? ' (' + notes.length + ')' : '') + '</button></div></div>';
+  return h + '<div class="md-foot"><button class="btn ghost" data-go="notes">Open the board' + (notes.length > 4 ? ' (all ' + notes.length + ')' : '') + '</button></div></div>';
 }
 document.addEventListener("submit", ev => { if(!ev.target.matches || !ev.target.matches("[data-md-stick]")) return; ev.preventDefault(); const i = $("mdStick"); const t = i.value.trim(); if(!t) return; i.value = ""; nbAdd(t, "typed"); });
 /* The project assistant, as staff will see it, for admins while it is off. */
@@ -2760,12 +2769,13 @@ function cfWeekPick(x){
 function cfTick(x, word){ return CAN_EDIT ? '<button type="button" class="btn ghost sm" data-cf-done="' + E(x.key) + '" data-cf-label="' + E(x.name + (x.num ? " " + x.num : "") + " " + M(x.amount)) + '">' + word + '</button>' : ''; }
 function cfRows(list, side, key, max){
   if(!list.length) return '<p class="sub">Nothing.</p>';
-  const all = CF.showAll[key], show = all ? list : list.slice(0, max || 12);
+  const all = CF.showAll[key], show = all ? list : list.slice(0, Math.min(max || 5, 5));
   const word = side === "in" ? "Received" : "Paid";
   return '<ul class="cflist">' + show.map(x => '<li class="' + (x.rolled ? "rolled" : "") + '"><div class="nm"><b>' + E(x.name) + '</b>' + (x.num ? ' <span class="sm">' + E(x.num) + '</span>' : '') +
     '<span class="sm">' + E([x.kind === "item" ? (CATS()[x.cat] || {}).label || "" : x.kind === "inv" ? "Invoice" : "Bill", x.why || (x.due ? "due " + x.due : ""), x.daysLate ? x.daysLate + " days late" : "", x.movedForGst ? "dated the 1st, probably moved for GST, so older than it looks" : "", x.estimate ? "estimate, check it" : ""].filter(Boolean).join(" · ")) + '</span></div>' +
     '<div class="amt num">' + M(x.amount) + '</div><div class="acts">' + cfTick(x, word) + cfWeekPick(x) + '</div></li>').join("") + '</ul>' +
-    (list.length > show.length ? '<button type="button" class="linkish" data-cf-all="' + key + '">Show all ' + list.length + '</button>' : '');
+    (list.length > show.length ? '<div class="peek-row"><button type="button" class="peek-btn" data-cf-all="' + key + '">Show all ' + list.length + ico("chevron") + '</button></div>'
+      : all && list.length > 5 ? '<div class="peek-row"><button type="button" class="peek-btn up" data-cf-all="' + key + '">Show fewer' + ico("chevron") + '</button></div>' : '');
 }
 const CATS = () => (S.cf && S.cf.categories) || {};
 function cfFour(){
@@ -2850,7 +2860,7 @@ document.addEventListener("click", ev => {
   const t = ev.target.closest && ev.target.closest("[data-cf-view],[data-cf-done],[data-cf-all],[data-cf-new],[data-cf-edit],[data-cf-cancel],[data-cf-save],[data-cf-remove],[data-cf-settings-save]");
   if(!t || !S.cf) return;
   if(t.dataset.cfView){ CF.view = t.dataset.cfView; return render(); }
-  if(t.dataset.cfAll){ CF.showAll[t.dataset.cfAll] = true; return render(); }
+  if(t.dataset.cfAll){ CF.showAll[t.dataset.cfAll] = !CF.showAll[t.dataset.cfAll]; return render(); }
   if(t.dataset.cfNew !== undefined){ CF.edit = "new"; return render(); }
   if(t.dataset.cfEdit){ CF.edit = t.dataset.cfEdit; return render(); }
   if(t.dataset.cfCancel !== undefined){ CF.edit = null; if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); return render(); }
@@ -4662,6 +4672,33 @@ function kpiIco(label){
    stays open or closed as you left it while you move around the app, and
    starts closed again next time you sign in. Cards with something to type
    in, and short lists, are left as they are. */
+/* ---------- long lists show five, the rest a press away (2026-11-15) ----------
+   Bruce: the scrolling was too long. Any list on a page with more than five
+   lines shows the first four and a "Show all" button underneath; "Show fewer"
+   folds it back. Lists open condensed every time a page opens; one opened
+   stays open while you are on it. Tables do the same through tbl(). */
+var PEEK = {}, PEEK_SHOW = 4;
+const PEEK_LISTS = "ul.alerts, ol.aslist, ul.md-rows, .asmail > ul, ul.plain, .md-jobs";
+function uxPeek(){
+  const main = document.getElementById("main"); if(!main) return;
+  main.querySelectorAll(PEEK_LISTS).forEach((list, i) => {
+    if(list.dataset.peeked) return;
+    const items = [...list.children].filter(x => !x.classList.contains("more"));
+    if(items.length <= PEEK_SHOW + 1) return;
+    const card = list.closest(".card"), h2 = card && card.querySelector("h2");
+    const key = current + ":" + (h2 ? h2.textContent.trim().replace(/\d+/g, "") : "") + ":" + i;
+    list.dataset.peeked = "1";
+    const btn = document.createElement("button"); btn.type = "button"; btn.className = "peek-btn"; btn.dataset.peekKey = key;
+    const paint = () => { const open = !!PEEK[key];
+      items.forEach((x, k) => x.classList.toggle("peek-hide", !open && k >= PEEK_SHOW));
+      btn.classList.toggle("up", open);
+      btn.innerHTML = (open ? "Show fewer" : "Show all " + items.length) + ico("chevron"); btn.setAttribute("aria-expanded", open ? "true" : "false"); };
+    btn.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); PEEK[key] = !PEEK[key]; paint(); if(!PEEK[key]) list.scrollIntoView({ block:"nearest", behavior:"smooth" }); };
+    paint();
+    const wrap = document.createElement("div"); wrap.className = "peek-row"; wrap.appendChild(btn);
+    list.insertAdjacentElement("afterend", wrap);
+  });
+}
 var FOLD = {};
 function uxFold(){
   document.querySelectorAll("#main .card").forEach(card => {
@@ -4801,6 +4838,7 @@ function afterRender(){
   if(UX.enterNext && !onlyWaiting){ UX.enterNext = false; main.classList.add("enter"); clearTimeout(UX.enterTimer); UX.enterTimer = setTimeout(() => main.classList.remove("enter"), 700); }
   else if(!UX.enterNext){ clearTimeout(UX.enterTimer); main.classList.remove("enter"); }
   if(current === "overview") uxKpis();
+  uxPeek();
   uxFold();
   const q = new URLSearchParams(location.search);
   if(q.get("qbo") === "connected"){ toast("QuickBooks is connected.", "ok"); try{ history.replaceState(null, "", location.pathname + location.hash); }catch(e){} }
