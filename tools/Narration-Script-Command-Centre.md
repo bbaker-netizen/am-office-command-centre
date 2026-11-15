@@ -241,11 +241,9 @@ The first time, open Payroll settings and pick the QuickBooks account for each b
 
 That's it! Check the box at the top, download or post, and you're done. If anything looks off, press the round Claude button and ask, or press Walk me through it to see this again.
 
----
-
 # Added 2026-11-15: My day, Cash flow, View as and what is new
 
-The captions on screen can add the person's name after "Hi"; the clips do not.
+> The captions on screen can add the person's name after "Hi"; the clips do not.
 
 ## myday
 
