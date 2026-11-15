@@ -38,7 +38,7 @@ import { readFails, addFail, clearFails, lockedFor, ipKey, ipBlocked, ipFail, ch
 import {
   AREAS, LEVELS, PRESETS, IDLE_CHOICES, ACCOUNTS_LOG, normEmail, okEmail, hashPassword, checkPassword, needsRehash,
   passwordProblem, tempPassword, readAccounts, changeAccounts, logAccount, publicAccount, activeAdmins,
-  accountToken, accountGate, isAdmin
+  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS
 } from "./_accounts.mjs";
 
 function json(body, status = 200) {
@@ -317,6 +317,8 @@ export default async (req) => {
         if (body.level !== undefined) { if (!LEVELS.includes(body.level)) return { err: bad("Choose what they can do.") }; next.level = body.level; }
         if (body.active !== undefined) next.active = !!body.active;
         if (body.claude !== undefined) next.claude = !!body.claude;
+        if (body.assistant !== undefined) { if (!ASSISTANTS.includes(body.assistant)) return { err: bad("Choose an assistant: executive, project or none.") }; next.assistant = body.assistant; }
+        if (body.landing !== undefined) { if (!LANDINGS.includes(body.landing)) return { err: bad("Choose where they open: My day or Overview.") }; next.landing = body.landing; }
         /* Nobody locks themselves out, and the app never ends up with nobody
            who can let people in. */
         if (id === me.id && next.level !== "admin") return { err: bad("You cannot take admin away from yourself. Ask another admin to do it.", 400, "self") };
@@ -382,6 +384,13 @@ export default async (req) => {
       return json({ ok: true });
     }
 
+    /* The project assistant for staff: off until Craig and Amir switch it on. */
+    if (action === "settings" && body.projectAssistantLive !== undefined) {
+      const on = !!body.projectAssistantLive;
+      await changeAccounts(s, doc => { doc.settings.projectAssistantLive = on; });
+      await logAccount(s, { by: me.name, action: "settings", who: "", detail: "Project assistant " + (on ? "switched on for staff" : "switched off for staff") });
+      return json({ ok: true, settings: { projectAssistantLive: on } });
+    }
     if (action === "settings") {
       const h = Number(body.idleHours);
       if (!IDLE_CHOICES.includes(h)) return bad("Choose one of " + IDLE_CHOICES.join(", ") + " hours.");
@@ -407,6 +416,8 @@ function changeWords(a, b) {
   if (a.level !== b.level) out.push(levelWord(b.level));
   if (a.active !== b.active) out.push(b.active ? "switched on" : "switched off");
   if (!!a.claude !== !!b.claude) out.push(b.claude ? "can ask Claude" : "cannot ask Claude");
+  if (a.assistant !== b.assistant) out.push("assistant: " + b.assistant);
+  if (a.landing !== b.landing) out.push("opens on " + (b.landing === "brief" ? "My day" : "Overview"));
   return out.length ? "Changed " + out.join("; ") : "No change";
 }
 

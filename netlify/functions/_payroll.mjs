@@ -22,11 +22,12 @@
    - Pay periods run 14 days from Saturday 19 September 2026 (paid Friday
      9 October), the periods in Craig's 6 November workbook. Payroll is
      processed on the Tuesday and paid on the Friday after a period ends.
-   - Calgary jobs worked by the Edmonton crew: Craig's 6 November run counted
-     them as Edmonton. Bruce asked for that to be confirmed with Craig first,
-     so it is a setting (crewRule): "job" (the job's city, the default) or
-     "crew" (the person's home city; people in calgaryCrew are Calgary,
-     everyone else Edmonton). The hours affected are always listed.
+   - Calgary jobs worked by the Edmonton crew count as Calgary: the job's
+     city decides (Craig, 15 November 2026). His 6 November run had counted
+     them as Edmonton. The setting (crewRule) stays, default "job", and the
+     hours affected are always listed.
+   - Overtime counts at 1.5 when net pay is spread, because overtime is paid
+     at 1.5 (Craig, 15 November 2026).
    - City comes from the job's Estimating branch field. If it is blank, a job
      whose address city is Calgary goes to Calgary and everything else to
      Edmonton, and the job is listed so the field can be filled in.

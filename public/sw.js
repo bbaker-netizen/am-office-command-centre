@@ -28,7 +28,7 @@
    app has to be installed to the home screen and why the pending count is on
    every screen. */
 
-const VERSION = "am-inv-v79";
+const VERSION = "am-inv-v81";
 const SHELL = [
   "./",
   "./index.html",
