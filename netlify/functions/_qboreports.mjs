@@ -192,3 +192,29 @@ export function readVendorSpend(rep) {
   walk(rowsOf(rep));
   return out.sort((a, b) => b.amount - a.amount);
 }
+
+/* ------------------------------------------------ invoices, line by line
+   The receivables detail report lists every unpaid invoice with its due date.
+   Same shape as the payables detail, with a customer column. Credits and
+   payments not yet applied come through as negative open balances. */
+export function readReceivableDetail(rep) {
+  const cols = colsOf(rep);
+  const at = (...names) => { for (const n of names) { const i = cols.indexOf(n); if (i >= 0) return i; } return -1; };
+  const iDate = at("date"), iType = at("transactiontype"), iNum = at("num"), iCust = at("customer", "name", "customerfullname"),
+        iDue = at("duedate"), iAmt = at("amount"), iOpen = at("openbalance");
+  const out = [];
+  const walk = rows => {
+    for (const r of rows) {
+      if (r.ColData && r.type !== "Section") {
+        const c = r.ColData, v = i => (i >= 0 && c[i]) ? c[i].value : "";
+        const cust = v(iCust);
+        if (!cust || /^total\b/i.test(String(v(0)))) continue;
+        out.push({ customer: String(cust), type: String(v(iType)), num: String(v(iNum)), date: String(v(iDate)),
+          due: String(v(iDue) || v(iDate)), amount: num(v(iAmt)), open: num(v(iOpen) || v(iAmt)) });
+      }
+      if (r.Rows) walk(rowsOf(r));
+    }
+  };
+  walk(rowsOf(rep));
+  return out;
+}

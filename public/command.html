@@ -403,6 +403,30 @@ main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-p
 .kpi.drag-hole{opacity:.25;outline:2px dashed var(--cyan);outline-offset:-2px}
 .kpi-hint{font-size:11px;color:var(--ink-3);margin:-8px 0 14px;display:flex;gap:10px;align-items:center}
 .kpi-hint button{font:inherit;font-size:11px;background:none;border:0;color:var(--cyan-deep);cursor:pointer;padding:0;text-decoration:underline}
+/* cash flow */
+.cftop{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px}
+.cftop .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.cfadvice p{margin:0 0 8px;line-height:1.5}.cfadvice{border-left:4px solid var(--cyan)}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:999px;overflow:hidden;margin:4px 0 14px}
+.seg button{font:inherit;font-size:13px;font-weight:700;border:0;background:var(--panel);color:var(--ink-2);padding:7px 16px;cursor:pointer}
+.seg button[aria-selected="true"]{background:var(--ink);color:var(--panel)}
+.cflist{list-style:none;margin:0;padding:0}
+.cflist li{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:8px 0;border-bottom:1px solid var(--rule)}
+.cflist li.rolled{background:linear-gradient(90deg,rgba(50,157,187,.08),transparent)}
+.cflist .nm span.sm{display:block;font-size:11px;color:var(--ink-3)}
+.cflist .amt{text-align:right;font-weight:700}
+.cflist .acts{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+.btn.sm{font-size:12px;padding:3px 10px}
+.cfsel{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--rule);border-radius:6px;background:var(--panel);color:var(--ink)}
+.linkish{font:inherit;font-size:12px;background:none;border:0;padding:0;color:var(--cyan-deep);cursor:pointer;text-decoration:underline}
+.cftable td span.sm,.cftable th span.sm{display:block;font-size:11px;color:var(--ink-3);font-weight:400}
+.cftable tr.strong td{font-weight:700;border-top:2px solid var(--rule)}
+.cfevery{margin-top:16px;padding-top:12px;border-top:1px solid var(--rule)}
+.cfplan summary{cursor:pointer;list-style:none}.cfplan summary h2{display:inline}.cfplan summary .sm{display:block;color:var(--ink-3);font-size:12px;margin-top:4px}
+.cfform{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:12px 0}
+.cfform label{display:flex;flex-direction:column;font-size:11px;color:var(--ink-3);gap:3px}.cfform label.wide{flex:1;min-width:180px}
+.cfform input,.cfform select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--rule);border-radius:6px;background:var(--panel);color:var(--ink)}
+.tablewrap{overflow-x:auto}
 /* View as */
 .viewas{background:var(--cyan);color:#fff;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;padding:8px 16px;font-size:13px;line-height:1.35}
 .viewas .btn{background:#fff;color:var(--ink);border:0;font-weight:700;padding:5px 12px;border-radius:6px;cursor:pointer}
@@ -568,6 +592,7 @@ const TABS = {
   tm:        { label:"T&M and extras", group:"Office" },
   clients:   { label:"Clients",      group:"Office" },
   money:     { label:"Money",        group:"Office" },
+  cashflow:  { label:"Cash flow",    group:"Office" },
   buying:    { label:"Buying",       group:"Office" },
   records:   { label:"Records",      group:"Office" },
   projects:  { label:"Projects",     group:"Field" },
@@ -1366,6 +1391,7 @@ function api(part, fresh){
 }
 function appLoad(fresh){
   const waits = [];
+  if(CFG.tabs.includes("cashflow")) waits.push(cfLoad(fresh));
   /* The first answer carries up to about seven seconds' worth of jobs. If
      there are more, keep asking with the nextPage it hands back, and show the
      list growing as it comes. */
@@ -1448,7 +1474,7 @@ async function startApp(){
   if(me.viewAs){ CAN_EDIT = false; viewAsBanner(me); }
   const tabs = ["overview"];
   if(has("office")) tabs.push("estimating", "dispatch", "tm");
-  if(has("money")) tabs.push("money");
+  if(has("money")) tabs.push("money", "cashflow");
   if(has("payroll")) tabs.push("payroll", "expenses");
   if(has("money")) tabs.push("buying");
   if(has("office")) tabs.push("clients", "records");
@@ -1656,8 +1682,13 @@ function kpis(){
   const has = t => CFG.tabs.includes(t);
   if(ROLE !== "field"){
     if(ROLE === "craig" && has("money")) list.push(kpi("Cash in the bank", n.cash !== undefined && n.cash !== null ? MK(n.cash) : (S.bsErr ? "n/a" : dots), n.cash !== undefined && n.cash !== null ? cashSource(n) : "All bank accounts", "money", n.cash < 0 ? "stop" : ""));
-    if(has("money")) list.push(kpi("Owed to A&M", n.ar ? MK(n.ar.tot.Total) : (S.arErr ? "n/a" : dots), n.ar ? MK(n.ar.tot.Late) + " of it is late" : "Customers, including holdbacks", "money"));
-    if(ROLE === "craig" && has("money")) list.push(kpi("A&M owes", n.ap ? MK(n.ap.tot.Total) : (S.apErr ? "n/a" : dots), n.ap ? MK(n.ap.tot.Late) + " of it is late" : "Suppliers and subtrades", "money"));
+    if(ROLE === "craig" && has("cashflow")){
+      const cf = S.cf, w0 = cf && cf.weeks && cf.weeks[0];
+      list.push(kpi("Room on the line", cf && cf.roomNow !== null ? MK(cf.roomNow) : (S.cfErr ? "n/a" : dots), cf && cf.roomNow !== null ? "Bank " + MK(cf.opening.amount) + " plus the " + MK(cf.limit) + " line" : "Type Sunday's bank balance", "cashflow", cf && cf.roomNow !== null && cf.roomNow < cf.floor ? "stop" : ""));
+      list.push(kpi("End of this week", w0 && w0.close !== null ? MK(w0.close) : (S.cfErr ? "n/a" : dots), w0 ? "After " + MK(w0.totalIn) + " in and " + MK(w0.totalOut) + " out" : "From the cash flow", "cashflow", w0 && w0.close !== null && w0.close < 0 ? "stop" : w0 && w0.close !== null && w0.close < cf.floor ? "caution" : ""));
+    }
+    if(has("money") && !(ROLE === "craig" && has("cashflow"))) list.push(kpi("Owed to A&M", n.ar ? MK(n.ar.tot.Total) : (S.arErr ? "n/a" : dots), n.ar ? MK(n.ar.tot.Late) + " of it is late" : "Customers, including holdbacks", "money"));
+    if(ROLE === "craig" && has("money") && !has("cashflow")) list.push(kpi("A&M owes", n.ap ? MK(n.ap.tot.Total) : (S.apErr ? "n/a" : dots), n.ap ? MK(n.ap.tot.Late) + " of it is late" : "Suppliers and subtrades", "money"));
     list.push(kpi("Quotes out", q ? MK(q.value) : (S.ordersErr ? "n/a" : dots), q ? plural(q.list.length, "quote") + " waiting on an answer" : "Built in JobTread", "estimating"));
   }
   if(J){
@@ -1879,6 +1910,143 @@ function worstTable(list, who){
     '<tr><td>' + E(r.name) + '</td><td class="r num">' + M(r.total) + '</td><td class="r num">' + M(r.late) + '</td><td class="r num">' + (r.b["91+"] ? '<span class="tag stop">' + M(r.b["91+"]) + '</span>' : '') + '</td></tr>');
   return tbl('<th>' + who + '</th><th class="r">Owed</th><th class="r">Late</th><th class="r">Over 90 days</th>', rows, "Nobody is late.", 10);
 }
+/* ---------- Cash flow (Craig's weekly method) ----------
+   Read from /api/cashflow, worked out on the server (_cashflow.mjs). Room on
+   the line, money in, money out, week by week, with what to pay, hold and
+   chase. Owed money comes from QuickBooks; the plan (planned payments, ticks,
+   the week each invoice or bill is placed in) is kept by the app. */
+const CF = { view: "week", busy: false, msg: "", edit: null, showAll: {} };
+function cfCall(body, fresh){
+  const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
+  return fetch("/api/cashflow" + (fresh ? "?fresh=1" : ""), opts).then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || ("The app answered " + r.status + ".") }; return b; });
+}
+function cfLoad(fresh){ return cfCall(null, fresh).then(d => { S.cf = d; S.cfErr = null; render(); }).catch(e => { S.cfErr = e; render(); }); }
+function cfChange(body, okText){
+  if(CF.busy) return; CF.busy = true; CF.msg = "";
+  return cfCall(body).then(d => { S.cf = d; S.cfErr = null; CF.busy = false; if(okText) toast(okText); if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); render(); })
+    .catch(e => { CF.busy = false; CF.msg = errCopy(e); toast(errCopy(e), "bad"); render(); });
+}
+const cfWeekLabel = d => { const x = dOnly(d); return x ? x.toLocaleDateString("en-CA", { month:"short", day:"numeric" }) : d; };
+function cfWeekPick(x){
+  if(!CAN_EDIT || !(x.kind === "inv" || x.kind === "bill")) return "";
+  const W = S.cf.weeks, cur = x.placed || "";
+  return '<select class="cfsel" data-cf-place="' + E(x.key) + '" data-cf-label="' + E(x.name + " " + (x.num || "")) + '" aria-label="Move to a week">' +
+    '<option value="">' + (cur ? "Back to due date" : "Move to…") + '</option>' +
+    W.map(w => '<option value="' + w.start + '"' + (cur && w.start === cur ? " selected" : "") + '>Week of ' + E(cfWeekLabel(w.start)) + '</option>').join("") +
+    '<option value="later"' + (cur === "later" ? " selected" : "") + '>Later</option></select>';
+}
+function cfTick(x, word){ return CAN_EDIT ? '<button type="button" class="btn ghost sm" data-cf-done="' + E(x.key) + '" data-cf-label="' + E(x.name + (x.num ? " " + x.num : "") + " " + M(x.amount)) + '">' + word + '</button>' : ''; }
+function cfRows(list, side, key, max){
+  if(!list.length) return '<p class="sub">Nothing.</p>';
+  const all = CF.showAll[key], show = all ? list : list.slice(0, max || 12);
+  const word = side === "in" ? "Received" : "Paid";
+  return '<ul class="cflist">' + show.map(x => '<li class="' + (x.rolled ? "rolled" : "") + '"><div class="nm"><b>' + E(x.name) + '</b>' + (x.num ? ' <span class="sm">' + E(x.num) + '</span>' : '') +
+    '<span class="sm">' + E([x.kind === "item" ? (CATS()[x.cat] || {}).label || "" : x.kind === "inv" ? "Invoice" : "Bill", x.why || (x.due ? "due " + x.due : ""), x.daysLate ? x.daysLate + " days late" : "", x.movedForGst ? "dated the 1st, probably moved for GST, so older than it looks" : "", x.estimate ? "estimate, check it" : ""].filter(Boolean).join(" · ")) + '</span></div>' +
+    '<div class="amt num">' + M(x.amount) + '</div><div class="acts">' + cfTick(x, word) + cfWeekPick(x) + '</div></li>').join("") + '</ul>' +
+    (list.length > show.length ? '<button type="button" class="linkish" data-cf-all="' + key + '">Show all ' + list.length + '</button>' : '');
+}
+const CATS = () => (S.cf && S.cf.categories) || {};
+function cfFour(){
+  const cf = S.cf, W = cf.weeks, C = CATS();
+  const order = ["payroll","source","wcb","benefits","subs","loans","tax","oneoff","bills","running","owner"];
+  const label = k => k === "bills" ? "Supplier bills (QuickBooks)" : (C[k] || {}).label || k;
+  const row = (lab, vals, cls, sub) => '<tr class="' + (cls || "") + '"><td>' + lab + (sub ? '<span class="sm">' + sub + '</span>' : '') + '</td>' + vals.map(v => '<td class="r num' + (typeof v === "number" && v < 0 ? " stop" : "") + '">' + (v === "" ? "" : M(v)) + '</td>').join("") + '</tr>';
+  let rows = row("<b>Room at the start</b>", W.map(w => w.open).concat([""]), "strong");
+  rows += row("Customers paying (QuickBooks)", W.map(w => w.receivables).concat([cf.later.in.filter(x => x.kind === "inv").reduce((s, x) => s + x.amount, 0)]));
+  rows += row("Other money in", W.map(w => w.otherIn).concat([""]));
+  order.forEach(k => { if(W.some(w => w.byCat[k])) rows += row(label(k), W.map(w => -(w.byCat[k] || 0)).concat([k === "bills" ? -cf.later.out.reduce((s, x) => s + x.amount, 0) : ""])); });
+  rows += row("<b>Room at the end</b>", W.map(w => w.close).concat([""]), "strong");
+  const e = cf.everyone;
+  return '<div class="tablewrap"><table class="cftable"><thead><tr><th></th>' + W.map((w, i) => '<th class="r">' + (i === 0 ? "This week" : "Week of") + '<span class="sm">' + E(cfWeekLabel(w.start)) + '</span></th>').join("") + '<th class="r">Later<span class="sm">Placed or due after</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '<p class="sub">Money out is shown as a minus. Invoices more than ' + cf.graceDays + ' days late (' + M(cf.chaseTotal) + ') and late supplier bills with no pay date (' + M(cf.lateBillsTotal) + ') are not in the weeks until you give them one.</p>' +
+    (e ? '<div class="cfevery"><h3>If everyone paid me and I paid everyone</h3><div class="big num' + (e.result < 0 ? " stop" : "") + '">' + M(e.result) + '</div><p class="sub">Room now ' + M(e.room) + ', plus every open invoice ' + M(e.allIn) + ' and other money planned in ' + M(e.plannedIn) + ', minus every open supplier bill ' + M(e.allBills) + ' and the next four weeks of planned payments ' + M(e.plannedOut) + '.' + (e.result < 0 ? ' Even if everyone settled up today, the line would be over its limit by ' + M(-e.result) + '.' : ' That is the room you would have on the line if everything owed settled today.') + '</p></div>' : '');
+}
+function cfWeek(){
+  const cf = S.cf, w = cf.weeks[0], C = CATS();
+  let h = '<div class="grid">';
+  h += '<div class="card"><h2>Money in this week</h2><p class="lede">' + M(w.totalIn) + ' expected. Tick it when it lands.</p>' + cfRows(w.in, "in", "in0") + '</div>';
+  h += '<div class="card"><h2>Money out this week</h2><p class="lede">' + M(w.totalOut) + ' planned. Tick it when you pay it.</p>' + cfRows(w.out, "out", "out0") + '</div>';
+  h += '<div class="card"><h2>Overdue, no date yet: chase</h2><p class="lede">' + M(cf.chaseTotal) + ' more than ' + cf.graceDays + ' days late. Not counted in the weeks. When a customer gives a date, move it to that week.</p>' + cfRows(cf.chase, "in", "chase", 10) + '</div>';
+  h += '<div class="card"><h2>Late bills with no pay date</h2><p class="lede">' + M(cf.lateBillsTotal) + ' past due. Not counted until you give each one a week. The advice above picks the ones to pay first.</p>' + cfRows(cf.lateBills, "out", "late", 10) + '</div>';
+  return h + '</div>';
+}
+function cfPlan(){
+  const cf = S.cf, C = CATS(), items = (cf.items || []).slice();
+  const ed = CF.edit && CF.edit !== "new" ? items.find(x => x.id === CF.edit) : null;
+  const form = it => '<div class="cfform" data-cf-form>' +
+    '<label>What<input name="name" value="' + E(it ? it.name : "") + '" placeholder="WCB"></label>' +
+    '<label>Amount<input name="amount" inputmode="decimal" value="' + E(it ? it.amount : "") + '" placeholder="13,616"></label>' +
+    '<label>How often<select name="every">' + [["once","Once"],["week","Every week"],["2weeks","Every two weeks"],["month","Every month"]].map(o => '<option value="' + o[0] + '"' + (it && it.every === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
+    '<label>First date<input type="date" name="start" value="' + E(it ? it.start : iso(today())) + '"></label>' +
+    '<label>Group<select name="cat">' + Object.keys(C).map(k => '<option value="' + k + '"' + ((it ? it.cat : "running") === k ? " selected" : "") + '>' + E(C[k].label) + '</option>').join("") + '</select></label>' +
+    '<label class="wide">Note<input name="note" value="' + E(it ? it.note || "" : "") + '" maxlength="200"></label>' +
+    '<button type="button" class="btn" data-cf-save="' + E(it ? it.id : "") + '">' + (it ? "Save" : "Add") + '</button><button type="button" class="btn ghost" data-cf-cancel>Cancel</button></div>';
+  const next = it => { const a = (cf.weeks || []).flatMap(w => w.out.concat(w.in)).find(x => x.itemId === it.id); return a ? a.date : (it.every === "once" ? it.start : ""); };
+  const shown = items.filter(it => it.every !== "once" || it.start >= addDaysIso(cf.weekZero, -56)).sort((a, b) => (a.cat || "").localeCompare(b.cat || "") || a.name.localeCompare(b.name) || a.start.localeCompare(b.start));
+  let h = '<details class="card wide cfplan"' + (CF.edit ? " open" : "") + '><summary><h2>Planned payments</h2><span class="sm">' + plural(shown.length, "line") + '. Payroll, source deductions, WCB, loans and the rest. Copied once from Craig\'s sheet (' + E(cf.seededFrom || "") + ').</span></summary>';
+  if(CAN_EDIT) h += CF.edit === "new" ? form(null) : '<button type="button" class="btn" data-cf-new>Add a payment</button>';
+  if(ed) h += form(ed);
+  h += tbl('<th>What</th><th>Group</th><th>How often</th><th>Next</th><th class="r">Amount</th><th></th>', shown.map(it => '<tr><td>' + E(it.name) + (it.estimate ? ' <span class="tag caution">Check</span>' : '') + (it.note ? '<span class="sm">' + E(it.note) + '</span>' : '') + '</td><td>' + E((C[it.cat] || {}).label || "") + '</td><td>' + E({ once:"Once", week:"Every week", "2weeks":"Every two weeks", month:"Every month" }[it.every] || "") + '</td><td>' + E(next(it) || it.start) + '</td><td class="r num">' + M(it.amount) + '</td><td>' + (CAN_EDIT ? '<button type="button" class="linkish" data-cf-edit="' + E(it.id) + '">Change</button> <button type="button" class="linkish" data-cf-remove="' + E(it.id) + '" data-cf-label="' + E(it.name) + '">Remove</button>' : '') + '</td></tr>'));
+  if(CAN_EDIT){ const st = cf; h += '<div class="cfform" data-cf-settings><label>Line of credit<input name="limit" inputmode="decimal" value="' + st.limit + '"></label><label>Keep in reserve<input name="floor" inputmode="decimal" value="' + st.floor + '"></label><label>Roll in if due in the last (days)<input name="graceDays" inputmode="numeric" value="' + st.graceDays + '"></label><button type="button" class="btn ghost" data-cf-settings-save>Save settings</button></div>'; }
+  if((cf.log || []).length) h += '<p class="sub">Last changes: ' + cf.log.slice(0, 5).map(l => E(l.by + ", " + whenSeen(l.at) + ": " + l.text)).join("<br>") + '</p>';
+  return h + '</details>';
+}
+function addDaysIso(d, n){ const x = dOnly(d); x.setDate(x.getDate() + n); return iso(x); }
+VIEWS.cashflow = {
+  hold(){ const a = document.activeElement; return !!(a && a.closest && a.closest("[data-cf-form],[data-cf-settings],.cfsel")); },
+  alerts(){
+    const cf = S.cf, a = []; if(!cf || !cf.weeks) return a;
+    const w = cf.weeks[0];
+    if(cf.opening.source !== "you" || !cf.opening.sunday) a.push({ lvl:"caution", text:"The weeks start from " + (cf.opening.source === "you" ? "the balance you typed for " + cf.opening.date : "QuickBooks, which is only as current as Danielle's last bank import") + ", not Sunday's.", meta:"Type Sunday's end of day balance under Money, Cash position." });
+    const tw = cf.advice && cf.advice.tightest;
+    if(tw && tw.close !== null && tw.close < 0) a.push({ lvl:"stop", text:"The line goes over its limit by " + M(-tw.close) + " in the week of " + cfWeekLabel(tw.week) + ".", meta:"Something has to move before then. See What to do this week." });
+    else if(tw && tw.close !== null && tw.close < cf.floor) a.push({ lvl:"caution", text:"Room on the line drops to " + M(tw.close) + " in the week of " + cfWeekLabel(tw.week) + ", under the " + M(cf.floor) + " you keep in reserve.", meta:"Hold what can wait." });
+    const rolled = w ? w.out.filter(x => x.rolled && x.kind === "item") : [];
+    if(rolled.length) a.push({ lvl:"caution", text: plural(rolled.length, "planned payment") + " from earlier weeks " + (rolled.length === 1 ? "is" : "are") + " not ticked as paid.", meta: rolled.slice(0, 3).map(x => x.name + " " + M(x.amount)).join(", ") + ". Tick each one once it is paid, or remove it from the plan." });
+    return a;
+  },
+  render(){
+    let h = head("Cash flow", "Craig's weekly method: room on the line of credit, money in, money out, week by week. Owed money comes from QuickBooks with its due dates. The plan is kept here.");
+    if(!S.cf) return h + (S.cfErr ? failBox(S.cfErr, "Cash flow") : wait("the cash flow"));
+    const cf = S.cf, w = cf.weeks[0], o = cf.opening;
+    h += verdictHtml(this.alerts(), "All four weeks stay inside the line, with your reserve kept.", "");
+    h += '<div class="card wide cftop"><div><span class="k">Room on the line now</span><div class="big num' + (cf.roomNow !== null && cf.roomNow < cf.floor ? " stop" : "") + '">' + (cf.roomNow === null ? "n/a" : M(cf.roomNow)) + '</div><p class="sub">' + (o.amount === null ? "No bank balance yet. Type Sunday's balance under Money, Cash position." : "Bank " + M(o.amount) + " (" + (o.source === "you" ? "you typed it for " + o.date : "QuickBooks" + (o.date ? ", bank entered to " + o.date : "")) + ") plus the " + M(cf.limit) + " line.") + '</p></div>' +
+      '<div><span class="k">End of this week</span><div class="big num' + (w.close !== null && w.close < 0 ? " stop" : "") + '">' + M(w.close) + '</div><p class="sub">' + M(w.totalIn) + ' in, ' + M(w.totalOut) + ' out.</p></div>' +
+      '<div><span class="k">End of four weeks</span><div class="big num' + (cf.weeks[3].close !== null && cf.weeks[3].close < 0 ? " stop" : "") + '">' + M(cf.weeks[3].close) + '</div><p class="sub">Week of ' + E(cfWeekLabel(cf.weeks[3].start)) + '.</p></div>' +
+      (cf.everyone ? '<div><span class="k">If everyone paid me and I paid everyone</span><div class="big num' + (cf.everyone.result < 0 ? " stop" : "") + '">' + M(cf.everyone.result) + '</div><p class="sub">Every invoice and bill settled today.</p></div>' : '') + '</div>';
+    h += '<div class="card wide cfadvice"><h2>What to do this week</h2>' + cf.advice.lines.map(l => '<p>' + E(l) + '</p>').join("") + '<p class="sm">Ask Claude can go deeper: "What if Chandos pays a week late?" or "Can I pay Aces in full?"</p></div>';
+    h += '<div class="seg" role="tablist"><button type="button" data-cf-view="week" aria-selected="' + (CF.view === "week") + '">This week</button><button type="button" data-cf-view="four" aria-selected="' + (CF.view === "four") + '">Four weeks</button></div>';
+    h += CF.view === "four" ? '<div class="card wide">' + cfFour() + '</div>' : cfWeek();
+    h += cfPlan();
+    h += '<p class="sm">QuickBooks read ' + E(whenSeen(new Date(cf.readAt).toISOString())) + '. Invoices and bills you tick stay off until QuickBooks shows them paid.</p>';
+    return h;
+  }
+};
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-cf-view],[data-cf-done],[data-cf-all],[data-cf-new],[data-cf-edit],[data-cf-cancel],[data-cf-save],[data-cf-remove],[data-cf-settings-save]");
+  if(!t || !S.cf) return;
+  if(t.dataset.cfView){ CF.view = t.dataset.cfView; return render(); }
+  if(t.dataset.cfAll){ CF.showAll[t.dataset.cfAll] = true; return render(); }
+  if(t.dataset.cfNew !== undefined){ CF.edit = "new"; return render(); }
+  if(t.dataset.cfEdit){ CF.edit = t.dataset.cfEdit; return render(); }
+  if(t.dataset.cfCancel !== undefined){ CF.edit = null; if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); return render(); }
+  if(t.dataset.cfDone) return cfChange({ action:"done", key: t.dataset.cfDone, label: t.dataset.cfLabel }, "Ticked. " + t.dataset.cfLabel + " is off the weeks.");
+  if(t.dataset.cfRemove){ if(!confirmInline(t, "Remove " + t.dataset.cfLabel + "?")) return; return cfChange({ action:"remove", id: t.dataset.cfRemove }, "Removed from the plan."); }
+  if(t.dataset.cfSave !== undefined){
+    const f = t.closest("[data-cf-form]"), v = n => (f.querySelector('[name="' + n + '"]') || {}).value;
+    const item = { name: v("name"), amount: v("amount"), every: v("every"), start: v("start"), cat: v("cat"), note: v("note") };
+    const body = t.dataset.cfSave ? { action:"update", id: t.dataset.cfSave, item } : { action:"add", item };
+    CF.edit = null; return cfChange(body, t.dataset.cfSave ? "Saved." : "Added to the plan.");
+  }
+  if(t.dataset.cfSettingsSave !== undefined){ const f = t.closest("[data-cf-settings]"), v = n => f.querySelector('[name="' + n + '"]').value; return cfChange({ action:"settings", limit: v("limit"), floor: v("floor"), graceDays: v("graceDays") }, "Settings saved."); }
+});
+/* Removing asks once, on the button itself (no browser pop-up). */
+function confirmInline(t, q){ if(t.dataset.sure === "1") return true; t.dataset.sure = "1"; t.textContent = "Press again to remove"; setTimeout(() => { if(t.isConnected){ t.dataset.sure = ""; t.textContent = "Remove"; } }, 4000); return false; }
+document.addEventListener("change", ev => {
+  const t = ev.target; if(!t.matches || !t.matches("[data-cf-place]")) return;
+  cfChange({ action:"place", key: t.dataset.cfPlace, week: t.value || null, label: t.dataset.cfLabel }, t.value ? "Moved." : "Back on its due date.");
+});
+
 /* Craig's own bank balance: the gap to QuickBooks, the form to type a new
    one, and the last few he typed. */
 function bankBox(n){
@@ -1916,7 +2084,7 @@ VIEWS.money = {
     if(n.cash !== undefined && n.cash !== null && n.cash < 0) a.push({ lvl:"stop", text: (cp && cp.source === "you" ? "The bank balance you typed is " : "The bank accounts in QuickBooks add up to ") + M(n.cash) + ".", meta: cp && cp.source === "you" ? "A minus means the account is drawn on the line of credit." : "QuickBooks is only as current as Danielle's last bank import (BMO does not feed QuickBooks). If it looks wrong, type the real balance from the bank under Cash position." });
     else if(!(cp && cp.source === "you") && S.M.bank && S.M.bank.lastEntry && daysSince(S.M.bank.lastEntry) > 7) a.push({ lvl:"caution", text:"QuickBooks has no bank entries after " + showDate(S.M.bank.lastEntry) + ".", meta:"The cash figure is that old. Type today's balance from the bank under Cash position." });
     if(n.ar && n.ar.tot["91+"] > 100000) a.push({ lvl:"stop", text: M(n.ar.tot["91+"]) + " has been owed to A&M for more than 90 days.", meta:"At that age an email will not collect it. These are phone calls." });
-    if(n.ar && n.ap){ const cover = n.ap.tot.Late > 0 ? n.ar.tot.Current / n.ap.tot.Late : null; if(cover !== null && cover < 1) a.push({ lvl:"stop", text:"Less customer money is due in than supplier money is already late.", meta: M(n.ar.tot.Current) + " not yet due from customers against " + M(n.ap.tot.Late) + " already late to suppliers." }); }
+    /* The coverage ratio (customer money not yet due against supplier money already late) was replaced by the Cash flow page (Bruce, 2026-11-15). */
     if(n.ar && n.arBS !== undefined && n.arBS !== null && Math.abs(n.ar.tot.Total - n.arBS) > 5) a.push({ lvl:"caution", text:"The receivables report and the balance sheet disagree by " + M(Math.abs(n.ar.tot.Total - n.arBS)) + ".", meta:"The balance sheet figure is the one to trust until the bookkeeper finds the gap." });
     const b = booksCheck(); if(b && b.faults.length) a.push({ lvl:"caution", text:"Do not price work from the QuickBooks margin yet.", meta: b.faults[0] });
     if(S.jobs){ const tb = live().filter(j => TOBILL.includes(st(j))); if(tb.length) a.push({ lvl:"caution", text: plural(tb.length, "finished job has", "finished jobs have") + " not been invoiced yet.", meta:"Money already spent and not yet asked for." }); }
@@ -1926,7 +2094,7 @@ VIEWS.money = {
     let h = head("Money", "Cash, who owes us, who we owe, and whether the books are safe to price from. QuickBooks owns every figure here.");
     if(!CFG.qb) return h + '<div class="state">Money is not part of this command centre.</div>';
     const n = moneyNums();
-    h += verdictHtml(this.alerts(), "Money coming in covers money going out.", "");
+    h += verdictHtml(this.alerts(), "Nothing on Money needs a decision right now.", "Week by week, what can be paid and who to chase, is on Cash flow.");
     h += '<div class="grid">';
 
     /* cash position */
@@ -1946,15 +2114,6 @@ VIEWS.money = {
     h += '</div>';
 
     /* cover */
-    h += '<div class="card"><h2>Does money coming in cover money going out</h2><p class="lede">What customers owe that is not late yet, against what A&amp;M owes that is already late.</p>';
-    if(!n.ar || !n.ap) h += (S.arErr || S.apErr) ? failBox(S.arErr || S.apErr, "Aging reports") : wait("the aging reports");
-    else {
-      const cover = n.ap.tot.Late > 0 ? n.ar.tot.Current / n.ap.tot.Late : null;
-      const cls = cover === null ? "clear" : cover >= 1.5 ? "clear" : cover >= 1 ? "caution" : "stop";
-      h += '<div class="big num ' + cls + '">' + (cover === null ? "n/a" : cover.toFixed(2) + "×") + '</div><p class="sub">' + M(n.ar.tot.Current) + ' due in from customers and not late yet, against ' + M(n.ap.tot.Late) +
-        ' already late to suppliers. ' + (cover === null ? "Nothing is late to suppliers." : cover >= 1 ? "For every dollar late to suppliers there is " + cover.toFixed(2) + " dollars of customer money coming that is not late yet." : "There is less customer money coming than supplier money already late.") + '</p>';
-    }
-    h += '</div>';
 
     /* AR */
     h += '<div class="card wide"><h2>Who owes us money</h2><p class="lede">Every unpaid invoice, by how late it is. Each customer counted once.</p>';
@@ -1997,7 +2156,7 @@ VIEWS.money = {
     /* lifted from the old finance console */
     h += '<div class="card"><h2>Break even</h2><p class="lede">The sales a year needs before A&amp;M stops losing money. Worked out from this year\'s running costs and margin.</p>' + breakEvenHtml() + '</div>';
     h += '<div class="card"><h2>What an hour of labour really costs</h2><p class="lede">The wage, plus the employer\'s share of CPP, EI, WCB, holiday pay and benefits. Price every hour from the right-hand number, not the wage.</p>' + ladderHtml() + '</div>';
-    h += '<div class="card wide"><h2>Bank balance, next 13 weeks</h2><p class="lede">A rough draft from QuickBooks totals and this year\'s pace. Move the sliders to test what happens if customers pay slower or bills get paid faster.</p>' + runwayHtml() + '</div>';
+    h += '<div class="card wide"><h2>Cash flow, week by week</h2><p class="lede">Room on the line of credit, what comes in, what goes out, and what to pay, hold and chase. Built on Craig\'s own weekly sheet.</p><button class="btn" data-go="cashflow">Open Cash flow</button></div>';
 
     /* to bill */
     if(S.jobs) h += invoicingCard();
@@ -3505,6 +3664,7 @@ var ICONS = {
   estimating:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h4"/>',
   dispatch:'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
   money:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+  cashflow:'<path d="M3 17l5-5 4 4 8-8"/><path d="M14 8h6v6"/><path d="M3 21h18"/>',
   payroll:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   expenses:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>',
   buying:'<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
@@ -3783,6 +3943,7 @@ var CLAUDE = (function(){
   const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/></svg>';
   const CHIPS = {
     overview:["What needs me first today?", "Explain the top alert in plain words", "What does the SOP say happens next?"],
+    cashflow:["What can I pay this week?", "Who should I chase first?", "What if our biggest customer pays a week late?"],
     money:["Who should we chase for payment first?", "How far behind are we paying suppliers?", "Explain cash in the bank"],
     payroll:["What do I fix before payroll closes?", "Who still has hours to approve?", "Explain how the split works"],
     expenses:["What do I fix before paying km this month?", "Who is owed the most?", "Which jobs have no branch?"],
