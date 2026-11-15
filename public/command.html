@@ -2004,17 +2004,51 @@ function asMoney(){
     '<h3>To pay</h3>' + (pay.length ? '<ul class="plain">' + pay.map(x => '<li>' + E(x.name) + ' <b class="num">' + M(x.amount) + '</b>' + (x.rolled ? ' <span class="tag caution">rolled</span>' : '') + '</li>').join("") + '</ul>' : '<p class="sub">Nothing planned.</p>') + '</div>';
   return h;
 }
+/* Closeout checks from JobTread (quotes, POs, bills, last day worked) for
+   jobs that have finished on site. See netlify/functions/_closeout.mjs. */
+const CO = { data:{}, asked:"", err:null, up:{} };
+function coFor(jobs){
+  const ids = jobs.map(j => j._id).sort(), key = ids.join(",");
+  if(!ids.length || CO.asked === key) return;
+  CO.asked = key;
+  api("closeout&ids=" + encodeURIComponent(ids.join(",")) + "&po=" + ids.map(id => encodeURIComponent(F((jobs.find(j => j._id === id) || {})["PO Status"]) || "")).join(","))
+    .then(d => { Object.assign(CO.data, d.closeout || {}); CO.err = null; render(); }).catch(e => { CO.err = e; render(); });
+}
+function coCell(j){
+  const c = CO.data[j._id]; if(!c) return '<span class="sm">Checking JobTread…</span>';
+  return (c.ok ? '<span class="tag clear">Paperwork in</span>' : c.missing.map(m => '<span class="sm">' + E(m) + '</span>').join("")) +
+    (c.finished ? '<span class="sm">Last worked ' + E(c.finished) + (c.late ? ', <b>past the 7 days</b>' : '') + '. Billing ' + E(c.billing) + '</span>' : '');
+}
+function coUpload(j){
+  if(!CAN_EDIT) return "";
+  const busy = CO.up[j._id];
+  return '<label class="linkish">' + (busy ? E(busy) : "Add a document") + '<input type="file" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" data-co-up="' + E(j._id) + '" hidden></label>' +
+    ' <select class="cfsel" data-co-folder="' + E(j._id) + '" aria-label="Which folder">' + ["Purchase orders","Quotes","Subcontractor invoices","Site documents"].map(f => '<option>' + f + '</option>').join("") + '</select>';
+}
+document.addEventListener("change", ev => {
+  const t = ev.target; if(!t.matches || !t.matches("[data-co-up]")) return;
+  const f = t.files && t.files[0]; const id = t.dataset.coUp; if(!f) return;
+  if(f.size > 4000000){ toast("That file is over 4 MB. Upload it in JobTread instead.", "bad"); t.value = ""; return; }
+  const sel = document.querySelector('[data-co-folder="' + id + '"]'), folder = sel ? sel.value : "Site documents";
+  CO.up[id] = "Uploading…"; render();
+  const fr = new FileReader();
+  fr.onload = () => apiPost({ upload:{ jobId:id, name:f.name, dataUrl: fr.result, folder } }).then(r => { CO.up[id] = "Added to " + r.folder; CO.asked = ""; toast(f.name + " is in the job's " + r.folder + " folder in JobTread."); render(); })
+    .catch(e => { CO.up[id] = ""; toast(errCopy(e), "bad"); render(); });
+  fr.readAsDataURL(f); t.value = "";
+});
 /* Jobs that cannot be invoiced yet, why, and who they wait on (Amir). */
 const AS_WAIT = { "Loose Ends Required":["Loose ends on site","Site supervisor"], "Job Complete by A&M":["Finished; costs and paperwork into JobTread","Project manager"], "PM Approvals":["Waiting on the PM's approval","Project manager"], "Invoicing":["Ready for Thursday billing","Office"], "Job Post Mortem":["Invoiced; post mortem due","Project manager"] };
 function asJobs(){
   if(!S.jobs) return "";
   const chases = (AS.data && AS.data.chases) || [];
   const byJob = id => chases.filter(c => c.jobId === id);
-  const rows = live().filter(j => TOBILL.includes(st(j)) || st(j) === "Job Post Mortem").map(j => { const w = AS_WAIT[st(j)] || [st(j), ""]; const ch = byJob(j._id);
-    return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(w[0]) + '<span class="sm">Waiting on ' + E(w[1] === "Project manager" && pm(j) ? pm(j) : w[1]) + '</span></td><td>' + (ch.length ? ch.map(c => '<span class="tag ' + (c.step === "call" ? "stop" : "caution") + '">' + E(c.status) + '</span>').join(" ") : '<button type="button" class="linkish" data-as-chasefor="' + E(j._id) + '">Chase</button>') + '</td></tr>'; });
+  const stuck = live().filter(j => TOBILL.includes(st(j)) || st(j) === "Job Post Mortem");
+  coFor(stuck.filter(j => TOBILL.includes(st(j))));
+  const rows = stuck.map(j => { const w = AS_WAIT[st(j)] || [st(j), ""]; const ch = byJob(j._id);
+    return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(w[0]) + '<span class="sm">Waiting on ' + E(w[1] === "Project manager" && pm(j) ? pm(j) : w[1]) + '</span></td><td>' + (TOBILL.includes(st(j)) ? coCell(j) : '<span class="sm">Post mortem after Thursday\'s invoice meeting</span>') + '</td><td>' + (ch.length ? ch.map(c => '<span class="tag ' + (c.step === "call" ? "stop" : "caution") + '">' + E(c.status) + '</span>').join(" ") : '<button type="button" class="linkish" data-as-chasefor="' + E(j._id) + '">Chase</button>') + '</td></tr>'; });
   const won = live().filter(j => POST.includes(st(j)) && !TOBILL.includes(st(j)));
   return '<div class="card wide"><h2>Done, not billed</h2><p class="lede">Every job that cannot be invoiced yet, why, and who it is waiting on. Press Chase when a site or a subcontractor owes something: your assistant drafts a note each day for three days, then tells you to call.</p>' +
-    tbl('<th>Job</th><th>Why it is stuck</th><th>Chase</th>', rows, "Nothing is stuck.") + '<p class="sub">' + plural(won.length, "more job is", "more jobs are") + ' won and not finished. <button class="linkish" data-go="projects">See them on Projects</button></p></div>';
+    tbl('<th>Job</th><th>Why it is stuck</th><th>Paperwork in JobTread</th><th>Chase</th>', rows, "Nothing is stuck.") + '<p class="sub">' + plural(won.length, "more job is", "more jobs are") + ' won and not finished. <button class="linkish" data-go="projects">See them on Projects</button></p></div>';
 }
 function asChaseForm(){
   const j = AS.chaseFor && (S.jobs || []).find(x => x._id === AS.chaseFor);
@@ -2037,8 +2071,10 @@ function asProject(name){
   const first = String(name || "").split(" ")[0];
   const mine = live().filter(j => !first || (pm(j) || "").toLowerCase() === first.toLowerCase());
   const close = mine.filter(j => stageOf(st(j)) === "close");
-  return '<div class="card wide"><h2>Closeout</h2><p class="lede">Every purchase order, approved quote and subcontractor invoice goes into JobTread within 7 days of the job finishing, before Thursday billing. Post mortems run straight after the Thursday invoice meeting.</p>' +
-    tbl('<th>Job</th><th>Status</th><th>Next</th>', close.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + E((AS_WAIT[st(j)] || [""])[0]) + '</td></tr>'), "Nothing closing out.") + '</div>';
+  coFor(close.filter(j => st(j) !== "Job Post Mortem"));
+  return '<div class="card wide"><h2>Closeout</h2><p class="lede">Every purchase order, approved quote and subcontractor invoice goes into JobTread within 7 days of the job finishing, before Thursday billing. Post mortems run straight after the Thursday invoice meeting. Add a document from your phone and it lands in the job\'s Files in JobTread. Site photos go in Encircle, which keeps them for the job.</p>' +
+    (CO.err ? failBox(CO.err, "Closeout checks") : '') +
+    tbl('<th>Job</th><th>Status</th><th>Paperwork in JobTread</th><th></th>', close.map(j => '<tr><td data-job="' + E(j._id) + '" tabindex="0">' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + (st(j) === "Job Post Mortem" ? '<span class="sm">Post mortem after Thursday\'s invoice meeting</span>' : coCell(j)) + '</td><td>' + coUpload(j) + '</td></tr>'), "Nothing closing out.") + '</div>';
 }
 VIEWS.brief = {
   /* Wait while someone is typing (a chase, or words not yet added); an empty
@@ -2185,6 +2221,7 @@ function cfFour(){
   rows += row("Other money in", W.map(w => w.otherIn).concat([""]));
   order.forEach(k => { if(W.some(w => w.byCat[k])) rows += row(label(k), W.map(w => -(w.byCat[k] || 0)).concat([k === "bills" ? -cf.later.out.reduce((s, x) => s + x.amount, 0) : ""])); });
   rows += row("<b>Room at the end</b>", W.map(w => w.close).concat([""]), "strong");
+  rows += row("Keep in reserve" + (cf.reserveGrowth ? '<span class="sm">Up ' + M(cf.reserveGrowth) + ' a week, paying the line down</span>' : ''), W.map(w => w.reserve ?? cf.floor).concat([""]));
   const e = cf.everyone;
   return '<div class="tablewrap"><table class="cftable"><thead><tr><th></th>' + W.map((w, i) => '<th class="r">' + (i === 0 ? "This week" : "Week of") + '<span class="sm">' + E(cfWeekLabel(w.start)) + '</span></th>').join("") + '<th class="r">Later<span class="sm">Placed or due after</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<p class="sub">Money out is shown as a minus. Invoices more than ' + cf.graceDays + ' days late (' + M(cf.chaseTotal) + ') and late supplier bills with no pay date (' + M(cf.lateBillsTotal) + ') are not in the weeks until you give them one.</p>' +
@@ -2216,7 +2253,7 @@ function cfPlan(){
   if(CAN_EDIT) h += CF.edit === "new" ? form(null) : '<button type="button" class="btn" data-cf-new>Add a payment</button>';
   if(ed) h += form(ed);
   h += tbl('<th>What</th><th>Group</th><th>How often</th><th>Next</th><th class="r">Amount</th><th></th>', shown.map(it => '<tr><td>' + E(it.name) + (it.estimate ? ' <span class="tag caution">Check</span>' : '') + (it.note ? '<span class="sm">' + E(it.note) + '</span>' : '') + '</td><td>' + E((C[it.cat] || {}).label || "") + '</td><td>' + E({ once:"Once", week:"Every week", "2weeks":"Every two weeks", month:"Every month" }[it.every] || "") + '</td><td>' + E(next(it) || it.start) + '</td><td class="r num">' + M(it.amount) + '</td><td>' + (CAN_EDIT ? '<button type="button" class="linkish" data-cf-edit="' + E(it.id) + '">Change</button> <button type="button" class="linkish" data-cf-remove="' + E(it.id) + '" data-cf-label="' + E(it.name) + '">Remove</button>' : '') + '</td></tr>'));
-  if(CAN_EDIT){ const st = cf; h += '<div class="cfform" data-cf-settings><label>Line of credit<input name="limit" inputmode="decimal" value="' + st.limit + '"></label><label>Keep in reserve<input name="floor" inputmode="decimal" value="' + st.floor + '"></label><label>Roll in if due in the last (days)<input name="graceDays" inputmode="numeric" value="' + st.graceDays + '"></label><button type="button" class="btn ghost" data-cf-settings-save>Save settings</button></div>'; }
+  if(CAN_EDIT){ const st = cf; h += '<div class="cfform" data-cf-settings><label>Line of credit<input name="limit" inputmode="decimal" value="' + st.limit + '"></label><label>Keep in reserve<input name="floor" inputmode="decimal" value="' + st.floor + '"></label><label>Roll in if due in the last (days)<input name="graceDays" inputmode="numeric" value="' + st.graceDays + '"></label><label>Grow the reserve each week by<input name="reserveGrowth" inputmode="decimal" value="' + (st.reserveGrowth || 0) + '"></label><button type="button" class="btn ghost" data-cf-settings-save>Save settings</button></div><p class="sub">Craig\'s sheet kept $5,000 more of the line unused each week ("Amount to stay in the LOC") to pay it down. Put 5000 above to do the same.</p>'; }
   if((cf.log || []).length) h += '<p class="sub">Last changes: ' + cf.log.slice(0, 5).map(l => E(l.by + ", " + whenSeen(l.at) + ": " + l.text)).join("<br>") + '</p>';
   return h + '</details>';
 }
@@ -2267,7 +2304,7 @@ document.addEventListener("click", ev => {
     const body = t.dataset.cfSave ? { action:"update", id: t.dataset.cfSave, item } : { action:"add", item };
     CF.edit = null; return cfChange(body, t.dataset.cfSave ? "Saved." : "Added to the plan.");
   }
-  if(t.dataset.cfSettingsSave !== undefined){ const f = t.closest("[data-cf-settings]"), v = n => f.querySelector('[name="' + n + '"]').value; return cfChange({ action:"settings", limit: v("limit"), floor: v("floor"), graceDays: v("graceDays") }, "Settings saved."); }
+  if(t.dataset.cfSettingsSave !== undefined){ const f = t.closest("[data-cf-settings]"), v = n => f.querySelector('[name="' + n + '"]').value; return cfChange({ action:"settings", limit: v("limit"), floor: v("floor"), graceDays: v("graceDays"), reserveGrowth: v("reserveGrowth") }, "Settings saved."); }
 });
 /* Removing asks once, on the button itself (no browser pop-up). */
 function confirmInline(t, q){ if(t.dataset.sure === "1") return true; t.dataset.sure = "1"; t.textContent = "Press again to remove"; setTimeout(() => { if(t.isConnected){ t.dataset.sure = ""; t.textContent = "Remove"; } }, 4000); return false; }

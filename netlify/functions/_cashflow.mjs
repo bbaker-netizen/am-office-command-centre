@@ -98,6 +98,10 @@ export const docKey = (kind, d) => kind + ":" + [d.type || "", d.num || "", d.na
 export function buildCashFlow(input) {
   const today = input.today, W = Math.max(1, Math.min(13, input.weeks || 4));
   const limit = Number(input.limit) || 750000, floor = Number(input.floor ?? 25000), grace = Number(input.graceDays ?? 14);
+  /* Craig's sheet keeps more of the line unused each week ("Amount to stay in
+     the LOC", up $5,000 a week): paying the line down. reserveGrowth does the
+     same: the reserve in week i is floor + reserveGrowth x i. */
+  const growth = Math.max(0, Number(input.reserveGrowth) || 0);
   const plan = input.plan || {}, done = plan.done || {}, place = plan.place || {};
   const w0 = weekZero(today);
   const weeks = Array.from({ length: W }, (_, i) => { const s = addDays(w0, i * 7); return { start: s, end: addDays(s, 6), in: [], out: [] }; });
@@ -160,6 +164,7 @@ export function buildCashFlow(input) {
     w.receivables = sum(w.in.filter(x => x.kind === "inv")); w.otherIn = r2(w.totalIn - w.receivables);
     w.open = room; w.close = room === null ? null : r2(room + w.totalIn - w.totalOut); room = w.close;
   }
+  weeks.forEach((w, i) => { w.reserve = r2(floor + growth * i); });
   chase.sort((a, b) => b.amount - a.amount); lateBills.sort((a, b) => b.daysLate - a.daysLate || b.amount - a.amount);
 
   const allIn = sum((input.invoices || []).filter(x => !done[docKey("inv", { type: x.type, num: x.num, name: x.customer, date: x.date })]).map(x => ({ amount: Math.max(0, Number(x.open) || 0) })));
@@ -169,7 +174,7 @@ export function buildCashFlow(input) {
   const roomNow = opening.amount === null || opening.amount === undefined ? null : r2(opening.amount + limit);
   const everyone = roomNow === null ? null : { room: roomNow, allIn, allBills, plannedIn, plannedOut, result: r2(roomNow + allIn + plannedIn - allBills - plannedOut) };
 
-  const out = { today, weekZero: w0, limit, floor, graceDays: grace, opening, roomNow, weeks, later: { in: later.in, out: later.out, totalIn: sum(later.in), totalOut: sum(later.out) },
+  const out = { today, weekZero: w0, limit, floor, reserveGrowth: growth, graceDays: grace, opening, roomNow, weeks, later: { in: later.in, out: later.out, totalIn: sum(later.in), totalOut: sum(later.out) },
     chase, chaseTotal: sum(chase), lateBills, lateBillsTotal: sum(lateBills), everyone };
   out.advice = advise(out);
   return out;
@@ -195,8 +200,9 @@ export function advise(cf) {
   const names = list => list.slice(0, 3).map(x => x.name + " " + M(x.amount)).join(", ") + (list.length > 3 ? ", and " + (list.length - 3) + " more" : "");
   const must = w.out.filter(x => x.kind === "item" && CATEGORIES[x.cat] && CATEGORIES[x.cat].must);
   const mustTotal = must.reduce((s, x) => s + x.amount, 0);
-  const tight = cf.weeks.reduce((lo, x) => (x.close !== null && (lo === null || x.close < lo.close)) ? x : lo, null);
-  let headroom = (tight ? tight.close : w.close) - cf.floor;
+  const res = x => x.reserve ?? cf.floor;
+  const tight = cf.weeks.reduce((lo, x) => (x.close !== null && (lo === null || x.close - res(x) < lo.close - res(lo))) ? x : lo, null);
+  let headroom = (tight ? tight.close - res(tight) : w.close - cf.floor);
   const pri = b => /ap solutions/i.test(b.name) ? 0 : 1;
   const byPriority = (a, b) => pri(a) - pri(b) || (b.daysLate || 0) - (a.daysLate || 0) || b.amount - a.amount;
   const counted = w.out.filter(x => x.kind === "bill").sort(byPriority);
@@ -213,12 +219,12 @@ export function advise(cf) {
   lines.push(`You start the week with ${M(w.open)} of room on the line. ${M(w.totalIn)} is expected in, and ${M(mustTotal)} has to go out${kinds.length ? " for " + kinds.join(", ") : ""}.`);
   if (tight) lines.push(`The tightest week is the week of ${day(tight.start)}. ${tight.close < 0 ? "As things stand it ends " + M(-tight.close) + " over the line's limit." : "As things stand it ends with " + M(tight.close) + " of room."}`);
   const payAll = pay.concat(extra);
-  if (payAll.length) lines.push(`You can pay ${payAll.length === 1 ? "this bill" : "these " + payAll.length + " bills"}: ${names(payAll)}. That keeps at least ${M(cf.floor)} of room in every one of the four weeks.`);
+  if (payAll.length) lines.push(`You can pay ${payAll.length === 1 ? "this bill" : "these " + payAll.length + " bills"}: ${names(payAll)}. That keeps ${cf.reserveGrowth ? "the reserve, growing " + M(cf.reserveGrowth) + " a week," : "at least " + M(cf.floor) + " of room"} in every one of the four weeks.`);
   else if (counted.length || cf.lateBills.length) lines.push(`Hold the supplier bills this week. Paying any of them would take the room below the ${M(cf.floor)} you keep in reserve before the month is out.`);
   if (hold.length && payAll.length) lines.push(`Hold ${hold.length === 1 ? "this one" : "these"} for now: ${names(hold)}.`);
   if (chase.length) lines.push(`Chase ${chase.length === 1 ? "this one" : "these " + chase.length}: ${chase.map(x => x.name + " " + M(x.amount) + " (" + x.daysLate + " days late)").join(", ")}.`);
   if (promisedLate.length) lines.push(`${names(promisedLate)} ${promisedLate.length === 1 ? "was" : "were"} expected and ${promisedLate.length === 1 ? "has" : "have"} not come in. It rolled into this week.`);
-  if (headroom < 0) lines.push(`Even with every bill held, the week of ${day(tight ? tight.start : w.start)} is ${M(-headroom)} short of the ${M(cf.floor)} you keep in reserve. Something else has to move: a customer payment brought forward, or an owner payment held.`);
+  if (headroom < 0) lines.push(`Even with every bill held, the week of ${day(tight ? tight.start : w.start)} is ${M(-headroom)} short of the ${M(tight ? res(tight) : cf.floor)} you keep in reserve. Something else has to move: a customer payment brought forward, or an owner payment held.`);
   return { lines, pay: payAll, hold: hold.slice(0, 10), chase, must, tightest: tight ? { week: tight.start, close: tight.close } : null, headroomLeft: Math.round(headroom) };
 }
 
