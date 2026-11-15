@@ -403,6 +403,12 @@ main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-p
 .kpi.drag-hole{opacity:.25;outline:2px dashed var(--cyan);outline-offset:-2px}
 .kpi-hint{font-size:11px;color:var(--ink-3);margin:-8px 0 14px;display:flex;gap:10px;align-items:center}
 .kpi-hint button{font:inherit;font-size:11px;background:none;border:0;color:var(--cyan-deep);cursor:pointer;padding:0;text-decoration:underline}
+/* bank balance typed in */
+.bankform{margin:10px 0}.bankform summary{cursor:pointer;color:var(--cyan-deep);font-size:13px;font-weight:700}
+.bankrow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:8px 0}
+.bankrow label{display:flex;flex-direction:column;font-size:11px;color:var(--ink-3);gap:3px}
+.bankrow label.wide{flex:1;min-width:180px}
+.bankrow input{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--rule);border-radius:6px;background:var(--panel);color:var(--ink)}
 /* Ask Claude */
 #cBub{position:fixed;right:22px;bottom:22px;z-index:70;width:58px;height:58px;border-radius:50%;border:0;background:var(--ink);color:var(--panel);box-shadow:0 12px 30px -10px rgba(0,0,0,.55);cursor:grab;display:flex;align-items:center;justify-content:center;touch-action:none;animation:am-bub-in .6s cubic-bezier(.2,.9,.3,1.4) both}
 #cBub svg{width:26px;height:26px}
@@ -1086,7 +1092,7 @@ function normPL(p){
   const income = Number(p.totalIncome) || 0, gp = Number(p.grossProfit) || 0;
   return { income, gp, cogs: income - gp, expenses, payroll, labour: labourSeen ? labour : null, consulting };
 }
-S.M = { bs:null, ar:null, ap:null, pl:null };
+S.M = { bs:null, ar:null, ap:null, pl:null, cash:null, bank:null, bankHistory:[], readAt:null };
 
 function booksCheck(){
   const p = S.M.pl;
@@ -1100,9 +1106,20 @@ function booksCheck(){
     faults.push("Consulting fees of " + M(consulting) + " sit in overhead and need sorting out.");
   return { income, gp, margin: income > 0 ? gp / income * 100 : null, payroll, labour, consulting, expenses: p.expenses, cogs: p.cogs, faults };
 }
+/* n.cash is the figure the page leads with: Craig's typed bank balance while
+   QuickBooks has not caught up to its date, otherwise QuickBooks (see
+   _bank.mjs). n.qboCash is always the QuickBooks figure. */
 function moneyNums(){
-  const b = S.M.bs || {};
-  return { ...b, ar: S.M.ar || undefined, ap: S.M.ap || undefined, ready: !!(S.M.bs || S.M.ar || S.M.ap) };
+  const b = S.M.bs || {}, p = S.M.cash;
+  const lead = p && p.amount !== null && p.amount !== undefined ? p.amount : b.cash;
+  return { ...b, qboCash: b.cash, cash: lead, cashPick: p || null, ar: S.M.ar || undefined, ap: S.M.ap || undefined, ready: !!(S.M.bs || S.M.ar || S.M.ap) };
+}
+/* One short line saying where the cash figure came from and how old it is. */
+function cashSource(n){
+  const p = n.cashPick;
+  if(p && p.source === "you"){ const by = p.actual && p.actual.by ? String(p.actual.by) : ""; const mine = !by || by.split(" ")[0] === S.meName; return (mine ? "You typed it" : "Typed by " + by) + " for " + showDate(p.date) + (p.stale ? ". Over a week old" : ""); }
+  const le = p && p.qbo ? p.qbo.lastEntry : (S.M.bank && S.M.bank.lastEntry);
+  return "QuickBooks" + (le ? ", bank entered to " + showDate(le) : "") + (S.M.readAt ? ", read " + whenSeen(new Date(S.M.readAt).toISOString()) : "");
 }
 const TOBILL = ["Loose Ends Required","Job Complete by A&M","PM Approvals","Invoicing"];
 const approvedFor = id => (S.orders || []).filter(o => o.job && o.job.id === id && o.status === "approved").reduce((s, o) => s + (Number(o.price) || 0), 0);
@@ -1322,6 +1339,7 @@ function appLoad(fresh){
   }).catch(e => { S.jobsErr = S.ordersErr = e; render(); }));
   if(CFG.qb) waits.push(api("money", fresh).then(d => {
     S.M.bs = d.bs; S.M.ar = d.ar; S.M.ap = d.ap; S.M.pl = d.pl;
+    S.M.cash = d.cash || null; S.M.bank = d.bank || null; S.M.bankHistory = d.bankHistory || []; S.M.readAt = d.storedAt || null;
     S.bsErr = S.arErr = S.apErr = S.plErr = null; render();
   }).catch(e => { S.bsErr = S.arErr = S.apErr = S.plErr = e; render(); }));
   if(ME.areas.some(a => ["office","field","money"].includes(a))) waits.push(api("inventory", fresh).then(d => { S.inv = d; S.invErr = null; render(); })
@@ -1585,7 +1603,7 @@ function kpis(){
   const list = [];
   const has = t => CFG.tabs.includes(t);
   if(ROLE !== "field"){
-    if(ROLE === "craig" && has("money")) list.push(kpi("Cash in the bank", n.cash !== undefined && n.cash !== null ? MK(n.cash) : (S.bsErr ? "n/a" : dots), "All bank accounts, per QuickBooks", "money", n.cash < 0 ? "stop" : ""));
+    if(ROLE === "craig" && has("money")) list.push(kpi("Cash in the bank", n.cash !== undefined && n.cash !== null ? MK(n.cash) : (S.bsErr ? "n/a" : dots), n.cash !== undefined && n.cash !== null ? cashSource(n) : "All bank accounts", "money", n.cash < 0 ? "stop" : ""));
     if(has("money")) list.push(kpi("Owed to A&M", n.ar ? MK(n.ar.tot.Total) : (S.arErr ? "n/a" : dots), n.ar ? MK(n.ar.tot.Late) + " of it is late" : "Customers, including holdbacks", "money"));
     if(ROLE === "craig" && has("money")) list.push(kpi("A&M owes", n.ap ? MK(n.ap.tot.Total) : (S.apErr ? "n/a" : dots), n.ap ? MK(n.ap.tot.Late) + " of it is late" : "Suppliers and subtrades", "money"));
     list.push(kpi("Quotes out", q ? MK(q.value) : (S.ordersErr ? "n/a" : dots), q ? plural(q.list.length, "quote") + " waiting on an answer" : "Built in JobTread", "estimating"));
@@ -1809,10 +1827,42 @@ function worstTable(list, who){
     '<tr><td>' + E(r.name) + '</td><td class="r num">' + M(r.total) + '</td><td class="r num">' + M(r.late) + '</td><td class="r num">' + (r.b["91+"] ? '<span class="tag stop">' + M(r.b["91+"]) + '</span>' : '') + '</td></tr>');
   return tbl('<th>' + who + '</th><th class="r">Owed</th><th class="r">Late</th><th class="r">Over 90 days</th>', rows, "Nobody is late.", 10);
 }
+/* Craig's own bank balance: the gap to QuickBooks, the form to type a new
+   one, and the last few he typed. */
+function bankBox(n){
+  const p = n.cashPick, q = n.qboCash; let h = '';
+  if(p && p.source === "you" && q !== null && q !== undefined) h += '<p class="sm">QuickBooks says ' + M(q) + (p.qbo && p.qbo.lastEntry ? ' (bank entered to ' + E(showDate(p.qbo.lastEntry)) + ')' : '') + '. The ' + M(Math.abs(p.gap)) + ' difference is what has gone through the bank and is not in QuickBooks yet. It switches back to QuickBooks by itself once Danielle\'s import reaches ' + E(showDate(p.date)) + '.</p>';
+  else if(p && p.caughtUp && p.actual) h += '<p class="sm">QuickBooks has caught up to the ' + M(p.actual.amount) + ' you typed for ' + E(showDate(p.actual.date)) + ', so it shows QuickBooks again.</p>';
+  if(!(CAN_EDIT && CFG.qb)) return h;
+  h += '<details class="bankform"' + (p && p.stale ? ' open' : '') + '><summary>Type the balance from the bank</summary>' +
+    '<div data-bank-form class="bankrow"><label>Balance<input type="text" inputmode="decimal" name="amount" placeholder="-540,000"></label>' +
+    '<label>As of<input type="date" name="date" value="' + iso(today()) + '" max="' + iso(today()) + '"></label>' +
+    '<label class="wide">Note (optional)<input type="text" name="note" maxlength="200" placeholder="BMO online banking, end of day"></label>' +
+    '<button class="btn" type="button" data-bank-save>Save</button>' + (p && p.actual ? '<button class="btn ghost" type="button" data-bank-clear>Go back to QuickBooks</button>' : '') + '<span class="sm" id="bankMsg"></span></div>' +
+    '<p class="sm">Use the end of day balance from BMO online banking for all A&amp;M bank accounts together. A minus is money drawn on the line of credit.</p>';
+  const hist = (S.M.bankHistory || []).slice(0, 5);
+  if(hist.length) h += tbl('<th>For</th><th class="r">Balance</th><th>Typed by</th>', hist.map(x => '<tr><td>' + E(showDate(x.date)) + (x.note ? '<span class="sm">' + E(x.note) + '</span>' : '') + '</td><td class="r num' + (x.amount < 0 ? " stop" : "") + '">' + M(x.amount) + '</td><td>' + E(x.by || "") + '<span class="sm">' + E(whenSeen(x.at)) + '</span></td></tr>'));
+  return h + '</details>';
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-bank-save],[data-bank-clear]"); if(!t) return;
+  const f = t.closest("[data-bank-form]"), msg = $("bankMsg");
+  const body = t.dataset.bankClear !== undefined ? { bankActual: null } : { bankActual: { amount: f.querySelector('[name=amount]').value, date: f.querySelector('[name=date]').value, note: f.querySelector('[name=note]').value } };
+  t.disabled = true; if(msg) msg.textContent = "Saving…";
+  apiPost(body).then(() => api("money", false)).then(d => {
+    S.M.cash = d.cash || null; S.M.bankHistory = d.bankHistory || []; S.M.bank = d.bank || S.M.bank;
+    if(document.activeElement) document.activeElement.blur();
+    toast(body.bankActual ? "Saved. The command centre now leads with your figure." : "Back to the QuickBooks figure."); render();
+  }).catch(e => { t.disabled = false; if(msg) msg.textContent = errCopy(e); });
+});
 VIEWS.money = {
+  hold(){ const a = document.activeElement; return !!(a && a.closest && a.closest("[data-bank-form]")); },
   alerts(){
     const a = [], n = moneyNums();
-    if(n.cash !== undefined && n.cash !== null && n.cash < 0) a.push({ lvl:"stop", text:"The bank accounts in QuickBooks add up to " + M(n.cash) + ".", meta:"Either the overdraft is real or deposits have not been recorded. Ask the bookkeeper which, because every other number here leans on it." });
+    const cp = n.cashPick;
+    if(cp && cp.source === "you" && cp.stale) a.push({ lvl:"caution", text:"The bank balance you typed is " + plural(cp.ageDays, "day") + " old, and QuickBooks has not caught up to it.", meta:"Type today's balance from the bank under Cash position." });
+    if(n.cash !== undefined && n.cash !== null && n.cash < 0) a.push({ lvl:"stop", text: (cp && cp.source === "you" ? "The bank balance you typed is " : "The bank accounts in QuickBooks add up to ") + M(n.cash) + ".", meta: cp && cp.source === "you" ? "A minus means the account is drawn on the line of credit." : "QuickBooks is only as current as Danielle's last bank import (BMO does not feed QuickBooks). If it looks wrong, type the real balance from the bank under Cash position." });
+    else if(!(cp && cp.source === "you") && S.M.bank && S.M.bank.lastEntry && daysSince(S.M.bank.lastEntry) > 7) a.push({ lvl:"caution", text:"QuickBooks has no bank entries after " + showDate(S.M.bank.lastEntry) + ".", meta:"The cash figure is that old. Type today's balance from the bank under Cash position." });
     if(n.ar && n.ar.tot["91+"] > 100000) a.push({ lvl:"stop", text: M(n.ar.tot["91+"]) + " has been owed to A&M for more than 90 days.", meta:"At that age an email will not collect it. These are phone calls." });
     if(n.ar && n.ap){ const cover = n.ap.tot.Late > 0 ? n.ar.tot.Current / n.ap.tot.Late : null; if(cover !== null && cover < 1) a.push({ lvl:"stop", text:"Less customer money is due in than supplier money is already late.", meta: M(n.ar.tot.Current) + " not yet due from customers against " + M(n.ap.tot.Late) + " already late to suppliers." }); }
     if(n.ar && n.arBS !== undefined && n.arBS !== null && Math.abs(n.ar.tot.Total - n.arBS) > 5) a.push({ lvl:"caution", text:"The receivables report and the balance sheet disagree by " + M(Math.abs(n.ar.tot.Total - n.arBS)) + ".", meta:"The balance sheet figure is the one to trust until the bookkeeper finds the gap." });
@@ -1828,12 +1878,12 @@ VIEWS.money = {
     h += '<div class="grid">';
 
     /* cash position */
-    h += '<div class="card"><h2>Cash position</h2><p class="lede">From the balance sheet, as of today.</p>';
+    h += '<div class="card"><h2>Cash position</h2><p class="lede">The bank balance, with where it came from and how old it is.</p>';
     if(!S.M.bs) h += S.bsErr ? failBox(S.bsErr, "Balance sheet") : wait("the balance sheet");
     else {
-      h += '<div class="big num ' + (n.cash < 0 ? "stop" : "") + '">' + M(n.cash) + '</div><p class="sub">in the bank accounts, added together. A minus means the accounts are overdrawn on the books.</p>' +
+      h += '<div class="big num ' + (n.cash < 0 ? "stop" : "") + '">' + M(n.cash) + '</div><p class="sub"><b>' + E(cashSource(n)) + '.</b> A minus means the account is drawn on the line of credit.</p>' + bankBox(n) +
         ((S.M.bs && S.M.bs.banks && S.M.bs.banks.length) ? tbl('<th>Bank account, per QuickBooks</th><th class="r">On the books</th>', S.M.bs.banks.filter(x => x.amount).map(x => '<tr><td>' + E(x.name) + '</td><td class="r num' + (x.amount < 0 ? " stop" : "") + '">' + M(x.amount) + '</td></tr>')) +
-          '<p class="sm">These are the balances recorded in QuickBooks, not the bank\'s own figures. If the bank feed has stopped, deposits and cheques since then are missing.</p>' : '') +
+          '<p class="sm">These are the balances recorded in QuickBooks, not the bank\'s own figures. BMO does not feed QuickBooks: Danielle imports it by hand on Tuesdays' + (S.M.bank && S.M.bank.lastEntry ? ', and the newest bank entry is dated ' + E(showDate(S.M.bank.lastEntry)) : '') + '. Anything after that is missing here.</p>' : '') +
         tbl('<th>&nbsp;</th><th class="r">Amount</th>', [
           '<tr><td>Owed to A&amp;M by customers<span class="sm">Including ' + M(n.holdbacks) + ' of holdbacks</span></td><td class="r num">' + M(n.arBS) + '</td></tr>',
           '<tr><td>Owed by A&amp;M to suppliers</td><td class="r num">' + M(n.apBS) + '</td></tr>',

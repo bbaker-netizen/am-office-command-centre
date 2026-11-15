@@ -19,7 +19,8 @@
 import { getStore } from "@netlify/blobs";
 import { accountGate, sees, canEdit } from "./_accounts.mjs";
 import { CUSTOMER_FIELDS, fieldIds } from "./_jtfields.mjs";
-import { qboGet } from "./_qbo.mjs";
+import { qboGet, query as qboQuery } from "./_qbo.mjs";
+import { KEY as BANK_KEY, cleanActual, readBankAccounts, lastEntryDate, pickCash, addActual, clearActual } from "./_bank.mjs";
 import { readAging, readBalanceSheet, readProfitAndLoss, readPayableDetail, readVendorSpend } from "./_qboreports.mjs";
 import { buildFeed, localDay } from "./_derive.mjs";
 import { pickTask, readInBatches } from "./_crew.mjs";
@@ -179,7 +180,48 @@ async function readMoney() {
   const apRep = await qboGet("reports/AgedPayables", { report_date: today });
   const plRep = await qboGet("reports/ProfitAndLoss", { start_date: start, end_date: today, accounting_method: "Accrual" });
   const bs = readBalanceSheet(bsRep), ar = readAging(arRep), ap = readAging(apRep), pl = readProfitAndLoss(plRep);
-  return { asOf: today, fyStart: start, bs, ar, ap, pl };
+  return { asOf: today, fyStart: start, bs, ar, ap, pl, bank: await readBankStatus(today) };
+}
+
+/* How far the bank accounts in QuickBooks have been brought up to date. BMO
+   does not feed QuickBooks; Danielle imports it by hand each Tuesday, so the
+   newest transaction date is the date QuickBooks' balance is good to. */
+async function readBankStatus(today) {
+  try {
+    const accounts = readBankAccounts(await qboQuery("select * from Account where AccountType = 'Bank'"));
+    if (!accounts.length) return { accounts, lastEntry: null };
+    const from = new Date(Date.parse(today + "T12:00:00Z") - 60 * 86400000).toISOString().slice(0, 10);
+    let lastEntry = null;
+    try {
+      const gl = await qboGet("reports/GeneralLedger", { start_date: from, end_date: today, account: accounts.map(a => a.id).join(","), columns: "tx_date", accounting_method: "Accrual" });
+      lastEntry = lastEntryDate(gl, today, accounts.map(a => a.name));
+    } catch (e) { return { accounts, lastEntry: null, problem: "Could not read when the bank was last brought up to date: " + e.message.slice(0, 120) }; }
+    return { accounts, lastEntry };
+  } catch (e) { return { accounts: [], lastEntry: null, problem: e.message.slice(0, 160) }; }
+}
+
+/* The cash figure the page leads with, worked out on every read (Craig's typed
+   figure is not cached with the QuickBooks reports). */
+async function withCash(s, data) {
+  const doc = (await s.get(BANK_KEY, { type: "json" })) || { current: null, history: [] };
+  const qAmount = data && data.bs ? data.bs.cash : null;
+  const cash = pickCash({ qbo: { amount: qAmount, lastEntry: data && data.bank ? data.bank.lastEntry : null }, actual: doc.current, today: localDay() });
+  return { ...data, cash, bankHistory: (doc.history || []).slice(0, 10) };
+}
+
+async function saveBankActual(s, req, body) {
+  const u = req.amUser;
+  if (!sees(u, "money") || !canEdit(u)) return json({ error: "role", message: "Only someone who sees Money and can make changes can type in the bank balance." }, 403);
+  const doc = (await s.get(BANK_KEY, { type: "json" })) || { current: null, history: [] };
+  if (body.bankActual === null || body.bankActual === "clear") {
+    await s.setJSON(BANK_KEY, clearActual(doc));
+    return json({ ok: true, current: null });
+  }
+  const ck = cleanActual(body.bankActual, localDay());
+  if (!ck.ok) return json({ error: "bad_value", message: ck.message }, 400);
+  const next = addActual(doc, ck.value, u.name, new Date().toISOString());
+  await s.setJSON(BANK_KEY, next);
+  return json({ ok: true, current: next.current });
 }
 
 /* --------------------------------------------------------------- inventory */
@@ -428,6 +470,10 @@ export default async (req) => {
   if (denied) return denied;
   const u = req.amUser;
   if (req.method === "POST") {
+    const peek = await req.clone().json().catch(() => ({}));
+    if (peek && Object.prototype.hasOwnProperty.call(peek, "bankActual")) {
+      try { return await saveBankActual(s, req, peek); } catch (e) { return json({ error: "upstream", message: e.message }, 502); }
+    }
     if (!canEdit(u) || !sees(u, "office", "field")) return json({ error: "role", message: "Your account can look but not change jobs. Ask an admin if you need to." }, 403);
     try {
       const body = await req.clone().json().catch(() => ({}));
@@ -447,7 +493,7 @@ export default async (req) => {
     if (part === "me") return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, claude: !!u.claude, today: localDay() });
     if (part === "jobs" && url.searchParams.get("page")) return json(await readJobs(s, url.searchParams.get("page")));
     if (part === "jobs") return json(await cached(s, "jobs", () => readJobs(s), fresh));
-    if (part === "money") return json(await cached(s, "money", () => readMoney(), fresh));
+    if (part === "money") return json(await withCash(s, await cached(s, "money", () => readMoney(), fresh)));
     if (part === "inventory") return json(await cached(s, "inventory", () => readInventory(s), fresh));
     if (part === "buying") return json(await cached(s, "buying", () => readBuying(s), fresh));
     if (part === "people") return json(await cached(s, "people", () => readPeople(s), fresh));
