@@ -423,7 +423,7 @@ main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-p
 .cm{max-width:88%;padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.45;animation:am-up .25s ease both;white-space:normal;overflow-wrap:anywhere}
 .cm.u{align-self:flex-end;background:var(--ink);color:var(--panel);border-bottom-right-radius:3px}
 .cm.a{align-self:flex-start;background:var(--panel-2);border:1px solid var(--rule);border-bottom-left-radius:3px}
-.cm.a.typing::after{content:"";display:inline-block;width:7px;height:15px;margin-left:2px;vertical-align:-2px;background:var(--cyan);animation:am-caret .8s steps(2) infinite}
+.cm.a.typing .ctext::after{content:"";display:inline-block;width:7px;height:15px;margin-left:2px;vertical-align:-2px;background:var(--cyan);animation:am-caret .8s steps(2) infinite}
 @keyframes am-caret{50%{opacity:0}}
 .cm ul{margin:4px 0 0 18px;padding:0}
 .cthink{display:flex;gap:5px;padding:12px;align-self:flex-start}
@@ -437,7 +437,9 @@ main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-p
 #cForm textarea{flex:1;font:inherit;font-size:14px;resize:none;border:1px solid var(--rule);border-radius:8px;padding:8px 10px;background:var(--panel);color:var(--ink);max-height:120px}
 #cForm textarea:focus{outline:2px solid var(--cyan);border-color:transparent}
 #cForm button{border:0;border-radius:8px;background:var(--cyan);color:#fff;font-weight:700;padding:0 14px;cursor:pointer}
-#cHand{display:block;text-align:center;font-size:12px;padding:0 14px 12px;color:var(--cyan-deep)}
+#cHand{display:block;text-align:center;font-size:12px;padding:0 14px 12px;color:var(--cyan-deep);user-select:none;-webkit-user-select:none}
+#cChips,.cm .ccopy{user-select:none;-webkit-user-select:none}
+.cm .ccopy{display:block;margin-top:6px;font:inherit;font-size:11px;background:none;border:0;padding:0;color:var(--cyan-deep);cursor:pointer;text-decoration:underline}
 @media (max-width:640px){#cPanel{right:0;left:0;bottom:0;top:auto;height:82vh;width:auto;border-radius:16px 16px 0 0}#cBub{right:14px;bottom:14px}}
 /* Connections */
 .conn{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));align-items:start}
@@ -3747,15 +3749,29 @@ var CLAUDE = (function(){
     panel.innerHTML = '<div class="ch" id="cHead"><span class="grip"></span><div><b>Ask Claude</b><div class="sm" id="cSub">Reads this page with you</div></div><button class="cx" type="button" aria-label="Close" id="cClose">&times;</button></div>' +
       '<div id="cMsgs" aria-live="polite"></div><div id="cChips"></div>' +
       '<form id="cForm" onsubmit="return false"><textarea id="cIn" rows="1" placeholder="Ask about this page…"></textarea><button type="submit" id="cSend">Ask</button></form>' +
-      '<a id="cHand" href="#" target="_blank" rel="noopener">Continue in my own Claude</a>';
+      '<a id="cHand" href="#" target="_blank" rel="noopener" title="Opens claude.ai with your question and this page">Continue in my own Claude</a>';
     document.body.appendChild(panel);
     panel.querySelector("#cClose").onclick = close;
     panel.querySelector("#cForm").onsubmit = () => { const t = panel.querySelector("#cIn"); ask(t.value); t.value = ""; grow(); return false; };
     const ta = panel.querySelector("#cIn");
     ta.addEventListener("keydown", ev => { if(ev.key === "Enter" && !ev.shiftKey){ ev.preventDefault(); panel.querySelector("#cForm").onsubmit(); } });
-    ta.addEventListener("input", () => { grow(); panel.querySelector("#cHand").href = handOver(ta.value); });
-    panel.querySelector("#cHand").addEventListener("click", ev => { ev.currentTarget.href = handOver(ta.value || lastQ()); });
-    panel.addEventListener("click", ev => { const c = ev.target.closest(".chip"); if(c) ask(c.textContent); });
+    ta.addEventListener("input", grow);
+    /* The prompt for the person's own Claude (the page text plus "I am looking
+       at the A&M Office Command Centre...") is built only at the moment the link
+       is pressed, and put back to "#" straight after. Before 2026-11-15 it sat
+       in the link all the time, so copying a reply together with the link
+       carried that whole hidden prompt into whatever it was pasted into (Craig,
+       6 November). */
+    panel.querySelector("#cHand").addEventListener("click", ev => { const a = ev.currentTarget; a.href = handOver(ta.value || lastQ()); setTimeout(() => { a.href = "#"; }, 0); });
+    /* Copying from the chat gives plain words only: no links, no hidden parts. */
+    panel.querySelector("#cMsgs").addEventListener("copy", ev => { const t = String(getSelection() || ""); if(!t || !ev.clipboardData) return; ev.clipboardData.setData("text/plain", t); ev.preventDefault(); });
+    panel.addEventListener("click", ev => {
+      const c = ev.target.closest(".chip"); if(c) return ask(c.textContent);
+      const k = ev.target.closest("[data-ccopy]"); if(!k) return;
+      const m = msgs[Number(k.dataset.ccopy)]; if(!m) return;
+      const done = () => { k.textContent = "Copied"; setTimeout(() => { k.textContent = "Copy"; }, 1800); };
+      (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(m.content) : Promise.reject()).then(done, () => { const r = document.createRange(); r.selectNodeContents(k.parentNode.querySelector(".ctext")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); document.execCommand("copy"); sel.removeAllRanges(); done(); });
+    });
     dragPanel();
   }
   const lastQ = () => { for(let i = msgs.length - 1; i >= 0; i--) if(msgs[i].role === "user") return msgs[i].content; return ""; };
@@ -3779,7 +3795,7 @@ var CLAUDE = (function(){
   function draw(){
     const box = panel.querySelector("#cMsgs");
     if(!msgs.length) box.innerHTML = '<div class="cm a">Hi ' + E(S.meName || "") + '. I can see the ' + E(tabName()) + ' page you have open. Ask me what something means, what to deal with first, or where to go to fix it. I can read, but I cannot change anything.</div>';
-    else box.innerHTML = msgs.map(m => '<div class="cm ' + (m.role === "user" ? "u" : "a") + (m.typing ? " typing" : "") + '">' + (m.role === "user" ? E(m.content) : fmt(m.content)) + '</div>').join("") + (busy && !msgs[msgs.length - 1].content ? '<div class="cthink"><i></i><i></i><i></i></div>' : '');
+    else box.innerHTML = msgs.map((m, i) => '<div class="cm ' + (m.role === "user" ? "u" : "a") + (m.typing ? " typing" : "") + '">' + (m.role === "user" ? E(m.content) : '<div class="ctext">' + fmt(m.content) + '</div>' + (!m.typing && !m.err && m.content ? '<button type="button" class="ccopy" data-ccopy="' + i + '">Copy</button>' : '')) + '</div>').join("") + (busy && !msgs[msgs.length - 1].content ? '<div class="cthink"><i></i><i></i><i></i></div>' : '');
     box.scrollTop = box.scrollHeight; chips();
   }
   async function ask(q){
@@ -3795,9 +3811,8 @@ var CLAUDE = (function(){
       if(!a.content.trim()) a.content = "I did not get an answer back. Try asking again.";
     }catch(e){ a.content = e.message || "Claude could not be reached. Check for signal and try again."; a.err = true; }
     a.typing = false; busy = false; draw(); panel.querySelector("#cSend").disabled = false;
-    panel.querySelector("#cHand").href = handOver(q);
   }
-  function open(){ if(!panel) build(); panel.hidden = false; bub.style.opacity = "0"; bub.style.pointerEvents = "none"; draw(); panel.querySelector("#cHand").href = handOver(""); setTimeout(() => panel.querySelector("#cIn").focus(), 60); }
+  function open(){ if(!panel) build(); panel.hidden = false; bub.style.opacity = "0"; bub.style.pointerEvents = "none"; draw(); setTimeout(() => panel.querySelector("#cIn").focus(), 60); }
   function close(){ if(!panel) return; panel.hidden = true; panel.style.transform = ""; bub.style.opacity = ""; bub.style.pointerEvents = ""; }
   function toggle(){ if(panel && !panel.hidden) close(); else open(); }
   return { mount, open, close, ask, status: () => ready };
