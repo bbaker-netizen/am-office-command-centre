@@ -1,0 +1,69 @@
+# Makes the walkthrough voice clips in GitHub's cloud, in the same natural
+# voice as the rest of the tour (edge-tts, Andrew), so nobody needs Python on
+# their own computer.
+#
+# It only makes clips that are missing: any "## name" in the narration script
+# with no public/tour/cc/name.mp3 yet. Clips already there, including any real
+# recordings saved over them, are never touched. To redo a clip after changing
+# its words, delete its mp3 on the branch and push.
+#
+# Runs on every branch except main when the narration script changes, and
+# commits the new clips back to that same branch, so they are in the pull
+# request before it is merged. It can also be run by hand from the Actions tab.
+name: Narration clips
+
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - tools/Narration-Script-Command-Centre.md
+      - tools/generate-narration.py
+      - .github/workflows/narration-clips.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  clips:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the voice tool
+        run: pip install edge-tts
+      - name: Make the missing clips
+        run: |
+          names=$(grep -E '^##[[:space:]]+[A-Za-z0-9._-]+[[:space:]]*$' tools/Narration-Script-Command-Centre.md | sed -E 's/^##[[:space:]]+//; s/[[:space:]]+$//')
+          made=0; failed=0
+          for n in $names; do
+            if [ ! -f "public/tour/cc/$n.mp3" ]; then
+              ok=0
+              # The voice service sometimes answers with no audio; try again after a pause.
+              for try in 1 2 3 4; do
+                if python3 tools/generate-narration.py tools/Narration-Script-Command-Centre.md public/tour/cc --only "$n" > "/tmp/$n.log" 2>&1; then ok=1; break; fi
+                sleep $((try*8))
+              done
+              if [ "$ok" = 1 ]; then
+                made=$((made+1))
+              else
+                failed=$((failed+1))
+                rm -f "public/tour/cc/$n.mp3"
+                echo "::error title=Clip $n failed::$(tail -c 400 /tmp/$n.log | tr '\n' ' ')"
+              fi
+            fi
+          done
+          echo "::notice title=Clips::Made $made, failed $failed."
+          [ "$failed" = 0 ]
+      - name: Save them to this branch
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/tour/cc/*.mp3
+          if git diff --cached --quiet; then echo "::notice title=Save::No new clips to save."; exit 0; fi
+          git commit -m "Narration clips made in the cloud"
+          if ! git push > /tmp/push.log 2>&1; then echo "::error title=Push failed::$(tail -c 400 /tmp/push.log | tr '\n' ' ')"; exit 1; fi
+          echo "::notice title=Save::Clips saved to the branch."
