@@ -24,6 +24,7 @@
 import { getStore } from "@netlify/blobs";
 import { accountGate, sees, canEdit, isAdmin } from "./_accounts.mjs";
 import { withLock } from "./_lock.mjs";
+import { inboxCallback } from "./inbox.mjs";
 
 const store = () => getStore({ name: "am-inventory", consistency: "strong" });
 const TOKENS = "google-tokens", STATE = "google-state", LOG = "mail-log";
@@ -137,6 +138,16 @@ export async function sendEmail({ to, subject, text, html, replyTo: rt, by }) {
   return { id: sent.id || "" };
 }
 
+/* A draft in the robots' mailbox, for a person's chase when they chose the
+   robots to write it (Amir's three-day chase). Replies go to that person
+   (Reply-To), not to estimating. It waits in To send like every robot draft. */
+export async function makeRobotsDraft({ to, subject, body, replyTo }) {
+  const s = store();
+  const { rawMessage } = await import("./_gmail.mjs");
+  const d = await gmail(s, "/drafts", { method: "POST", body: JSON.stringify({ message: { raw: rawMessage({ to, subject, body, replyTo }) } }) });
+  return { draftId: d.id || "", link: "" };
+}
+
 async function log(s, entry) {
   try {
     const d = (await s.get(LOG, { type: "json" })) || { entries: [] };
@@ -155,6 +166,9 @@ export default async (req) => {
 
   /* The callback comes back from Google and cannot carry a sign-in. It is held
      to a one-time state that only a signed-in admin can have started. */
+  /* A person connecting their own inbox to their assistant comes back here too
+     (same Google app, same redirect address). inbox.mjs handles it. */
+  if (action === "callback" && String(url.searchParams.get("state") || "").startsWith("inbox.")) return inboxCallback(url);
   if (action === "callback") {
     const saved = await s.get(STATE, { type: "json" });
     const state = url.searchParams.get("state");

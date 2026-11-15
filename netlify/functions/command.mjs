@@ -492,7 +492,7 @@ export default async (req) => {
   try {
     if (part === "me") {
       if (u.viewAs) await logAccount(s, { action: "view-as", by: u.viewAs.byName, target: u.name });
-      return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, claude: !!u.claude, today: localDay(),
+      return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, claude: !!u.claude, today: localDay(), assistant: u.assistant, landing: u.landing, projectLive: !!u.projectLive,
         viewAs: u.viewAs ? { by: u.viewAs.byName, shownLevel: u.shownLevel } : null });
     }
     if (part === "jobs" && url.searchParams.get("page")) return json(await readJobs(s, url.searchParams.get("page")));
