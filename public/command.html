@@ -644,6 +644,80 @@ button,input,select,textarea,optgroup{font-family:inherit}
 .refresh[data-ico="refresh"][disabled]::before{animation:am-spin .9s linear infinite}
 @media (max-width:640px){.refresh[data-ico]{font-size:0;gap:0;padding:8px 10px}.refresh[data-ico]::before{width:18px;height:18px}}
 .btn .ico{width:15px;height:15px}
+/* Sticky notes board (2026-11-15). Each person's own board: notes in
+   handwriting (Caveat, open font licence, in public/fonts) on paper colours,
+   held on with a strip of A&M cyan tape, dragged anywhere. */
+@font-face{font-family:"Caveat";font-weight:600;font-style:normal;font-display:swap;src:url("fonts/caveat-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Caveat";font-weight:700;font-style:normal;font-display:swap;src:url("fonts/caveat-latin-700-normal.woff2") format("woff2")}
+.nb{--nw:212px;--hand:"Caveat","Segoe Print","Bradley Hand","Comic Sans MS",cursive}
+.nb-hero{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:10px 24px;margin:2px 0 16px}
+.nb-hero h1{font-size:34px;font-weight:800;letter-spacing:-.025em;line-height:1.1;margin:6px 0 6px}
+.nb-hero h1 span{font-family:var(--hand);font-weight:700;color:var(--cyan-deep);font-size:42px;letter-spacing:0;margin-left:6px}
+.nb-hero p{margin:0;font-size:16px;color:var(--ink-2);max-width:60ch}
+.nb-bar{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--rule);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:16px}
+.nb-bar form{display:contents}
+.nb-bar .mic{display:flex;align-items:center;justify-content:center;gap:8px;height:54px;padding:0 22px;border:0;border-radius:999px;background:var(--cyan);color:#fff;font:inherit;font-weight:700;font-size:16px;cursor:pointer}
+.nb-bar .mic svg{width:22px;height:22px}.nb-bar .mic.on{background:var(--stop);animation:am-ring 1.2s infinite}
+.nb-bar input{height:54px;min-width:0;border:1px solid var(--rule);border-radius:12px;padding:0 16px;background:var(--panel-2);color:var(--ink);font-family:var(--hand);font-weight:600;font-size:26px}
+.nb-bar input::placeholder{color:var(--ink-3);opacity:.8}
+.nb-bar input:focus{outline:2px solid var(--cyan);outline-offset:0;border-color:transparent}
+.nb-bar .btn{height:54px;padding:0 22px;border-radius:12px;font-size:15px}
+.nb-row{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.nb-sw{display:flex;gap:8px;align-items:center}
+.nb-sw span{font-size:13px;color:var(--ink-3);margin-right:2px}
+.nb-dot{width:30px;height:30px;border-radius:5px;border:1px solid rgba(26,25,23,.18);cursor:pointer;padding:0;box-shadow:0 1px 2px rgba(26,25,23,.15);transform:rotate(-4deg)}
+.nb-dot:nth-child(odd){transform:rotate(3deg)}
+.nb-dot.on{outline:3px solid var(--ink);outline-offset:2px}
+.nb-acts{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-3)}
+.nb-msg{grid-column:1/-1;margin:0;background:var(--cyan-wash);color:var(--cyan-deep);padding:9px 14px;border-radius:10px;font-size:14px;font-weight:600;display:flex;gap:12px;align-items:center}
+.nb-msg button{font:inherit;font-weight:700;background:none;border:0;color:var(--cyan-deep);text-decoration:underline;cursor:pointer;padding:0}
+.nb-board{position:relative;border-radius:18px;border:1px solid var(--rule);overflow:hidden;touch-action:pan-y;
+  background-color:#efede7;background-image:radial-gradient(rgba(26,25,23,.13) 1.2px,transparent 1.3px);background-size:22px 22px;box-shadow:inset 0 2px 10px rgba(26,25,23,.06)}
+.nb-board::before{content:"";position:absolute;inset:0 0 auto 0;height:6px;background:linear-gradient(90deg,var(--ink) 0 70%,var(--cyan) 70% 100%)}
+.nb-note{--bg:#ffe98a;position:absolute;left:calc(var(--x) * (100% - var(--nw) - 28px) + 14px);width:var(--nw);min-height:168px;padding:26px 16px 34px;
+  background:var(--bg);color:#1a1917;border-radius:3px 3px 14px 3px;transform:rotate(var(--r));
+  box-shadow:0 1px 1px rgba(26,25,23,.12),0 10px 18px -10px rgba(26,25,23,.45),inset 0 -14px 18px -16px rgba(26,25,23,.25);
+  cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;transition:box-shadow .18s ease,transform .18s ease}
+.nb-note::before{content:"";position:absolute;top:-9px;left:45%;width:82px;height:22px;transform:translateX(-50%) rotate(-2deg);background:rgba(50,157,187,.55);box-shadow:0 1px 2px rgba(26,25,23,.15);border-left:1px dashed rgba(255,255,255,.5);border-right:1px dashed rgba(255,255,255,.5)}
+.nb-note:hover{box-shadow:0 1px 1px rgba(26,25,23,.12),0 16px 26px -12px rgba(26,25,23,.5),inset 0 -14px 18px -16px rgba(26,25,23,.25)}
+.nb-note:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+.nb-note.lift{cursor:grabbing;transform:rotate(0deg) scale(1.05);box-shadow:0 2px 3px rgba(26,25,23,.15),0 28px 40px -14px rgba(26,25,23,.55);transition:none;z-index:9999!important}
+.nb-note.new{animation:nb-drop .55s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes nb-drop{0%{opacity:0;transform:translateY(-26px) rotate(calc(var(--r) - 8deg)) scale(1.12)}100%{opacity:1;transform:rotate(var(--r))}}
+.c-yellow{--bg:#ffe98a}.c-cyan{--bg:#bfe6f1}.c-pink{--bg:#fbcad5}.c-green{--bg:#cdebc4}.c-orange{--bg:#ffd3a6}.c-white{--bg:#fdfcf8}
+.nb-dot.c-yellow,.nb-dot.c-cyan,.nb-dot.c-pink,.nb-dot.c-green,.nb-dot.c-orange,.nb-dot.c-white{background:var(--bg)}
+.nb-text{font-family:var(--hand);font-weight:600;font-size:26px;line-height:1.12;white-space:pre-wrap;overflow-wrap:anywhere;min-height:60px}
+.nb-text.long{font-size:22px}
+.nb-edit{display:block;width:100%;min-height:110px;resize:none;border:0;outline:0;background:rgba(255,255,255,.35);border-radius:4px;padding:2px 4px;font-family:var(--hand);font-weight:600;font-size:26px;line-height:1.12;color:#1a1917}
+.nb-meta{position:absolute;right:12px;top:7px;font-size:11px;color:rgba(26,25,23,.5)}
+.nb-tools{position:absolute;left:10px;right:8px;bottom:6px;display:flex;gap:4px;align-items:center;justify-content:flex-end;flex-wrap:wrap;opacity:0;transition:opacity .15s ease}
+.nb-note:hover .nb-tools,.nb-note:focus-within .nb-tools,.nb-note.sel .nb-tools{opacity:1}
+.nb-tools button{font:inherit;font-size:12px;font-weight:700;border:0;background:rgba(26,25,23,.08);color:#1a1917;border-radius:999px;height:26px;min-width:26px;padding:0 9px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.nb-tools button:hover{background:#1a1917;color:#fff}
+.nb-tools button i{font-style:normal;margin-right:5px;font-size:13px}
+.nb-wheel{display:inline-block;width:13px;height:13px;border-radius:50%;border:1px solid rgba(26,25,23,.3);background:conic-gradient(#ffe98a 0 60deg,#bfe6f1 0 120deg,#fbcad5 0 180deg,#cdebc4 0 240deg,#ffd3a6 0 300deg,#fdfcf8 0)}
+.nb-tools .sw{width:16px;height:16px;min-width:16px;padding:0;border-radius:50%;border:1px solid rgba(26,25,23,.25);background:var(--bg)}
+.nb-tools .sw:hover{transform:scale(1.2);background:var(--bg)}
+.nb-pal{display:none;gap:4px}.nb-note.pal .nb-pal{display:flex}
+.nb-empty{position:absolute;left:50%;top:70px;transform:translateX(-50%) rotate(-2deg);width:min(420px,86%);background:#fdfcf8;color:#1a1917;padding:30px 26px 26px;border-radius:3px 3px 16px 3px;box-shadow:0 12px 24px -12px rgba(26,25,23,.45)}
+.nb-empty::before{content:"";position:absolute;top:-10px;left:50%;width:96px;height:24px;transform:translateX(-50%) rotate(2deg);background:rgba(50,157,187,.55)}
+.nb-empty b{display:block;font-family:var(--hand);font-weight:700;font-size:34px;line-height:1.05;margin-bottom:8px}
+.nb-empty p{margin:0 0 6px;font-size:15px;color:#4a4844}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .nb-board{background-color:#22211e;background-image:radial-gradient(rgba(242,239,233,.12) 1.2px,transparent 1.3px)} }
+:root[data-theme="dark"] .nb-board{background-color:#22211e;background-image:radial-gradient(rgba(242,239,233,.12) 1.2px,transparent 1.3px)}
+@media (max-width:620px){
+  .nb{--nw:156px}
+  .nb-hero h1{font-size:27px}.nb-hero h1 span{font-size:34px}
+  .nb-bar{grid-template-columns:auto minmax(0,1fr) auto;gap:8px;padding:12px}
+  .nb-bar .mic{width:50px;height:50px;padding:0}.nb-bar .mic span{display:none}
+  .nb-bar input{height:50px;font-size:22px}.nb-bar .btn{height:50px;padding:0 14px}
+  .nb-acts{margin-left:0}
+  .nb-note{min-height:140px;padding:22px 12px 34px}
+  .nb-text,.nb-edit{font-size:22px}.nb-text.long{font-size:19px}
+  .nb-tools{opacity:1;gap:6px}.nb-tools button span{display:none}.nb-tools button i{margin:0}.nb-tools button{width:30px;height:30px;padding:0}
+  .nb-tools .sw{width:20px;height:20px;min-width:20px}
+  .nb-pal{flex-wrap:wrap;justify-content:flex-end}
+}
 /* folding cards */
 .card.fold>h2{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;margin:-6px -8px 2px;padding:6px 8px;border-radius:4px}
 .card.fold>h2:hover{background:var(--panel-2)}
@@ -728,6 +802,7 @@ const ROLES = {
 };
 const TABS = {
   brief:     { label:"My day",       group:"My day" },
+  notes:     { label:"Sticky notes", group:"My day" },
   overview:  { label:"Overview",     group:"" },
   pmpreview: { label:"Project assistant (preview)", group:"Admin" },
   estimating:{ label:"Estimating",   group:"Office" },
@@ -1618,7 +1693,7 @@ async function startApp(){
   if(VIEW_AS && !me.viewAs){ try{ sessionStorage.removeItem("am.viewAs"); }catch(e){} VIEW_AS = null; }
   if(me.viewAs){ CAN_EDIT = false; viewAsBanner(me); }
   const asLive = me.assistant === "exec" || (me.assistant === "project" && (me.projectLive || me.admin));
-  const tabs = asLive ? ["brief", "overview"] : ["overview"];
+  const tabs = asLive ? ["brief", "notes", "overview"] : ["notes", "overview"];
   if(has("office")) tabs.push("estimating", "dispatch", "tm");
   if(has("money")) tabs.push("money", "cashflow");
   if(has("payroll")) tabs.push("payroll", "expenses");
@@ -2319,6 +2394,192 @@ VIEWS.brief = {
     return h + '</div>';
   }
 };
+/* ---------- Sticky notes board ----------
+   Each person's own board (server: netlify/functions/notes.mjs). Type or talk
+   to add a note, drag it anywhere, tap the words to change them, pick a
+   colour, throw it away (with Undo), or put it on your My day list. */
+const NB = { notes:null, err:null, loading:false, colour:"yellow", msg:"", undo:null, drag:null, editing:null, fresh:"", viewAs:false, pal:"" };
+const NB_COLOURS = [["yellow","Yellow"],["cyan","Cyan"],["pink","Pink"],["green","Green"],["orange","Orange"],["white","White"]];
+try{ const c = localStorage.getItem("am.nb.colour"); if(c) NB.colour = c; }catch(e){}
+/* The board's own redraws go through even while a note is being moved or changed. */
+function nbRender(){ NB.force = true; try{ render(); } finally { NB.force = false; } }
+function nbCall(body){
+  const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
+  return fetch("/api/notes", opts).then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || ("The app answered " + r.status + ".") }; return b; });
+}
+function nbLoad(){
+  NB.loading = true;
+  return nbCall().then(d => { NB.notes = d.notes || []; NB.viewAs = !!d.viewAs; NB.err = null; }).catch(e => { NB.err = e; }).then(() => { NB.loading = false; nbRender(); });
+}
+function nbSay(text, kind){ NB.msg = text; NB.msgKind = kind || ""; clearTimeout(NB.msgT); NB.msgT = setTimeout(() => { NB.msg = ""; NB.undo = null; if(current === "notes" && !NB.drag && !NB.editing) nbRender(); }, NB.undo ? 9000 : 5000); }
+function nbCols(){ const b = $("nbBoard"); const w = b ? b.clientWidth : 900; const nw = window.innerWidth <= 620 ? 156 : 212; return Math.max(1, Math.floor((w - 28 + 18) / (nw + 18))); }
+function nbAdd(text, source){
+  text = String(text || "").trim(); if(!text) return;
+  nbCall({ action:"add", text, colour: NB.colour, source, cols: nbCols() }).then(r => { NB.notes.push(r.note); NB.fresh = r.note.id; nbSay(source === "voice" ? "Heard you. It is on the board." : "Stuck on the board."); nbRender(); })
+    .catch(e => { nbSay(errCopy(e)); nbRender(); });
+}
+function nbSave(id, change){
+  const n = (NB.notes || []).find(x => x.id === id); if(!n) return;
+  Object.assign(n, change); if(change.top !== false) n.z = Math.max(0, ...NB.notes.map(x => x.z || 0)) + 1;
+  nbRender();
+  return nbCall({ action:"update", id, ...change }).then(r => { Object.assign(n, r.note); }).catch(e => { nbSay(errCopy(e)); nbLoad(); });
+}
+function nbRemove(id){
+  const n = (NB.notes || []).find(x => x.id === id); if(!n) return;
+  NB.notes = NB.notes.filter(x => x.id !== id); NB.undo = n; nbSay("Note thrown away."); nbRender();
+  nbCall({ action:"remove", id }).catch(e => { nbSay(errCopy(e)); nbLoad(); });
+}
+function nbRestore(){
+  const n = NB.undo; if(!n) return; NB.undo = null;
+  nbCall({ action:"restore", note:n }).then(r => { NB.notes.push(r.note); NB.fresh = r.note.id; nbSay("It is back."); nbRender(); }).catch(e => { nbSay(errCopy(e)); nbRender(); });
+}
+function nbToList(id){
+  const n = (NB.notes || []).find(x => x.id === id); if(!n) return;
+  asCall("", { action:"add", text: n.text.replace(/\s+/g, " ").slice(0, 200) }).then(() => { toast("On your My day list."); AS.data = null; })
+    .catch(e => toast(errCopy(e), "bad"));
+}
+/* Tidy up: a neat grid, oldest top left, rows as tall as their tallest note. */
+function nbTidy(){
+  const notes = (NB.notes || []).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const cols = nbCols(), spots = []; let y = 24;
+  for(let i = 0; i < notes.length; i += cols){
+    const row = notes.slice(i, i + cols); let tall = 0;
+    row.forEach((n, c) => { const el = document.querySelector('[data-nb="' + n.id + '"]'); tall = Math.max(tall, el ? el.offsetHeight : 180); spots.push({ id:n.id, x: cols === 1 ? 0 : c / (cols - 1), y }); });
+    y += tall + 34;
+  }
+  spots.forEach(p => { const n = NB.notes.find(x => x.id === p.id); n.x = p.x; n.y = p.y; });
+  nbRender();
+  nbCall({ action:"arrange", spots }).then(() => nbSay("All tidy.")).catch(e => { nbSay(errCopy(e)); nbLoad(); });
+}
+function nbTalk(){
+  if(asCannotListen()){ NB.msg = "Tap the box and press the microphone on your keyboard, say it, then press Stick it."; nbRender(); setTimeout(() => { const i = $("nbText"); if(i) i.focus(); }, 0); return; }
+  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new R(); rec.lang = "en-CA"; rec.interimResults = false; rec.maxAlternatives = 1;
+  NB.listening = true; nbRender();
+  rec.onresult = ev => { NB.listening = false; nbAdd(ev.results[0][0].transcript, "voice"); };
+  rec.onerror = ev => { NB.listening = false; NB.msg = ev.error === "not-allowed" ? "The microphone is blocked for this site. Allow it in the browser settings, or use the microphone on your keyboard." : ev.error === "no-speech" ? "I did not hear anything. Try again." : "This app cannot listen here. Tap the box and use the microphone on your keyboard."; nbRender(); };
+  rec.onend = () => { if(NB.listening){ NB.listening = false; nbRender(); } };
+  try{ rec.start(); }catch(e){ NB.listening = false; NB.msg = "This app cannot listen here. Tap the box and use the microphone on your keyboard."; nbRender(); }
+}
+const nbDay = iso8 => { const d = new Date(iso8); return isNaN(d) ? "" : d.toLocaleDateString("en-CA", { month:"short", day:"numeric" }); };
+/* On a phone the board is too narrow for notes placed on a computer, so the
+   notes flow into two columns instead, in the order they sit on the board
+   (top to bottom, then left to right). Nothing is saved by this; dragging a
+   note on a phone moves it in that order, and on a computer it lands where
+   it was dropped. */
+function nbFlow(notes){
+  if(window.innerWidth > 620) return null;
+  const cols = 2, bottom = [24, 24], at = {};
+  notes.slice().sort((a, b) => (a.y - b.y) || (a.x - b.x)).forEach(n => {
+    const want = Math.min(cols - 1, Math.round(Number(n.x) * (cols - 1)));
+    const c = bottom[want] <= Math.min(...bottom) + 160 ? want : bottom.indexOf(Math.min(...bottom));
+    const h = Math.max(140, 64 + Math.ceil(String(n.text).length / (String(n.text).length > 70 ? 15 : 12)) * 24);
+    at[n.id] = { x: c, y: bottom[c] }; bottom[c] += h + 22;
+  });
+  return { at, tall: Math.max(...bottom) + 80 };
+}
+function nbNote(n, flow){
+  const ed = NB.editing === n.id, ro = NB.viewAs, pos = flow && flow.at[n.id] ? flow.at[n.id] : { x:n.x, y:n.y };
+  const tools = ro ? "" : '<div class="nb-tools">' +
+    '<span class="nb-pal">' + NB_COLOURS.map(c => '<button type="button" class="sw c-' + c[0] + '" data-nb-colour="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '"></button>').join("") + '</span>' +
+    '<button type="button" data-nb-pal aria-label="Change colour" title="Change colour"><i class="nb-wheel"></i><span>Colour</span></button>' +
+    (CFG.tabs.includes("brief") ? '<button type="button" data-nb-list aria-label="Put it on your My day list" title="Put it on your My day list"><i>☰</i><span>To my list</span></button>' : '') +
+    '<button type="button" data-nb-del aria-label="Throw it away" title="Throw it away">✕</button></div>';
+  return '<div class="nb-note c-' + E(n.colour) + (NB.fresh === n.id ? " new" : "") + (NB.pal === n.id ? " pal" : "") + '" data-nb="' + E(n.id) + '" tabindex="0" role="note" aria-label="' + E(n.text) + '" style="--x:' + Number(pos.x) + ';top:' + Number(pos.y) + 'px;--r:' + (Number(n.rot) || 0) + 'deg;z-index:' + (Number(n.z) || 1) + '">' +
+    (ed ? '<textarea class="nb-edit" id="nbEdit" maxlength="400" aria-label="Change the note">' + E(n.text) + '</textarea>' : '<div class="nb-text' + (n.text.length > 70 ? " long" : "") + '">' + E(n.text) + '</div>') +
+    '<span class="nb-meta"' + (n.source === "voice" ? ' title="Said out loud"' : '') + '>' + E(nbDay(n.at)) + '</span>' + tools + '</div>';
+}
+VIEWS.notes = {
+  hold(){ if(NB.force) return false; const a = document.activeElement; return !!(NB.drag || NB.editing || (a && a.id === "nbText" && a.value)); },
+  render(){
+    const first = S.meName || "";
+    let h = '<div class="nb"><div class="nb-hero" data-tour="page"><div><div class="md-eyebrow">' + E(first ? first + "'s board" : "Your board") + '</div><h1>Sticky notes<span>no more paper</span></h1><p>The sticky notes off your monitor and desk, in one place. Type or talk to stick one on, drag it anywhere, tap the words to change them.</p></div></div>';
+    if(NB.err) return h + failBox(NB.err, "Sticky notes") + '</div>';
+    if(!NB.notes){ if(!NB.loading) nbLoad(); return h + wait("your sticky notes") + '</div>'; }
+    const notes = NB.notes;
+    if(!NB.viewAs){
+      h += '<div class="nb-bar" data-tour="nb-bar"><button type="button" class="mic' + (NB.listening ? " on" : "") + '" data-nb-talk aria-label="Talk">' + ico("mic") + '<span>' + (NB.listening ? "Listening…" : "Talk") + '</span></button>' +
+        '<form data-nb-form onsubmit="return false"><input id="nbText" maxlength="400" autocomplete="off" placeholder="' + (window.innerWidth < 620 ? "Write a note…" : "Write a note… call Sunbelt about the heaters") + '" aria-label="Write a sticky note"><button type="submit" class="btn">Stick it</button></form>' +
+        '<div class="nb-row"><div class="nb-sw"><span>Colour</span>' + NB_COLOURS.map(c => '<button type="button" class="nb-dot c-' + c[0] + (NB.colour === c[0] ? " on" : "") + '" data-nb-pick="' + c[0] + '" aria-label="' + c[1] + '" aria-pressed="' + (NB.colour === c[0]) + '"></button>').join("") + '</div>' +
+        '<div class="nb-acts">' + plural(notes.length, "note") + (notes.length > 1 ? ' <button type="button" class="md-pill" data-nb-tidy>Tidy up</button>' : '') + '</div></div>' +
+        (NB.msg ? '<p class="nb-msg" role="status">' + E(NB.msg) + (NB.undo ? ' <button type="button" data-nb-undo>Undo</button>' : '') + '</p>' : '') + '</div>';
+    } else h += '<div class="state">Look only: this is their board. Nothing can be moved or changed while you view as them.</div>';
+    const flow = nbFlow(notes);
+    const deep = notes.reduce((m, n) => Math.max(m, Number(n.y) || 0), 0);
+    const tall = flow ? Math.max(520, flow.tall) : Math.max(640, deep + 320);
+    h += '<div class="nb-board" id="nbBoard" style="height:' + tall + 'px">' +
+      (notes.length ? notes.map(n => nbNote(n, flow)).join("") : '<div class="nb-empty"><b>Your first sticky note goes here.</b><p>Type it in the box above, or press Talk and say it.</p><p>Drag notes anywhere. Tap the words to change them. Tidy up lines them up.</p></div>') + '</div>';
+    NB.fresh = "";
+    return h + '</div>';
+  }
+};
+/* Adding */
+document.addEventListener("submit", ev => { if(!ev.target.matches || !ev.target.matches("[data-nb-form]")) return; ev.preventDefault(); const i = $("nbText"); const t = i.value.trim(); if(!t) return; i.value = ""; nbAdd(t, "typed"); });
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-nb-talk],[data-nb-pick],[data-nb-tidy],[data-nb-undo],[data-nb-del],[data-nb-list],[data-nb-pal],[data-nb-colour]"); if(!t) return;
+  const note = t.closest("[data-nb]"), id = note && note.dataset.nb;
+  if(t.dataset.nbTalk !== undefined) return nbTalk();
+  if(t.dataset.nbPick){ NB.colour = t.dataset.nbPick; try{ localStorage.setItem("am.nb.colour", NB.colour); }catch(e){} nbRender(); setTimeout(() => { const i = $("nbText"); if(i) i.focus(); }, 0); return; }
+  if(t.dataset.nbTidy !== undefined) return nbTidy();
+  if(t.dataset.nbUndo !== undefined) return nbRestore();
+  if(t.dataset.nbDel !== undefined) return nbRemove(id);
+  if(t.dataset.nbList !== undefined) return nbToList(id);
+  if(t.dataset.nbPal !== undefined){ NB.pal = NB.pal === id ? "" : id; nbRender(); return; }
+  if(t.dataset.nbColour){ NB.pal = ""; nbSave(id, { colour: t.dataset.nbColour, top:false }); }
+});
+/* Dragging, and tapping the words to change them */
+document.addEventListener("pointerdown", ev => {
+  if(NB.viewAs || ev.button > 0) return;
+  const el = ev.target.closest && ev.target.closest(".nb-note"); if(!el || ev.target.closest(".nb-tools,.nb-edit")) return;
+  const b = $("nbBoard"); if(!b) return;
+  const br = b.getBoundingClientRect(), r = el.getBoundingClientRect();
+  NB.drag = { id: el.dataset.nb, el, sx: ev.clientX, sy: ev.clientY, ox: el.offsetLeft, oy: el.offsetTop, moved:false, pid: ev.pointerId, bw: br.width, w: el.offsetWidth };
+  try{ el.setPointerCapture(ev.pointerId); }catch(e){}
+});
+document.addEventListener("pointermove", ev => {
+  const d = NB.drag; if(!d || ev.pointerId !== d.pid) return;
+  const dx = ev.clientX - d.sx, dy = ev.clientY - d.sy;
+  if(!d.moved && Math.hypot(dx, dy) < 6) return;
+  if(!d.moved){ d.moved = true; d.el.classList.add("lift"); }
+  ev.preventDefault();
+  const left = Math.min(Math.max(0, d.ox + dx), d.bw - d.w), top = Math.max(0, d.oy + dy);
+  d.el.style.left = left + "px"; d.el.style.top = top + "px";
+  const b = $("nbBoard"); if(b && top + d.el.offsetHeight + 60 > b.offsetHeight) b.style.height = (top + d.el.offsetHeight + 120) + "px";
+}, { passive:false });
+function nbDrop(ev){
+  const d = NB.drag; if(!d || (ev.pointerId !== undefined && ev.pointerId !== d.pid)) return;
+  NB.drag = null;
+  if(!d.moved){ /* a tap: change the words */ NB.editing = d.id; nbRender(); setTimeout(() => { const t = $("nbEdit"); if(t){ t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }, 0); return; }
+  const left = parseFloat(d.el.style.left) || 0, top = parseFloat(d.el.style.top) || 0;
+  const span = d.bw - d.w - 28; const x = span > 0 ? Math.min(1, Math.max(0, (left - 14) / span)) : 0;
+  nbSave(d.id, { x: Math.round(x * 1000) / 1000, y: Math.round(top) });
+}
+document.addEventListener("pointerup", nbDrop);
+document.addEventListener("pointercancel", ev => { if(NB.drag){ NB.drag = null; nbRender(); } });
+function nbEndEdit(save){
+  const id = NB.editing; if(!id) return; const t = $("nbEdit"); const v = t ? t.value.trim() : "";
+  NB.editing = null;
+  const n = (NB.notes || []).find(x => x.id === id);
+  if(save && n && v && v !== n.text) nbSave(id, { text: v, top:false }); else if(save && n && !v) nbRemove(id); else nbRender();
+}
+document.addEventListener("focusout", ev => { if(ev.target && ev.target.id === "nbEdit") setTimeout(() => nbEndEdit(true), 0); });
+document.addEventListener("keydown", ev => {
+  if(ev.target && ev.target.id === "nbEdit"){
+    if(ev.key === "Escape"){ ev.preventDefault(); nbEndEdit(false); }
+    else if(ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)){ ev.preventDefault(); ev.target.blur(); }
+    return;
+  }
+  const el = ev.target && ev.target.classList && ev.target.classList.contains("nb-note") ? ev.target : null; if(!el || NB.viewAs) return;
+  const n = (NB.notes || []).find(x => x.id === el.dataset.nb); if(!n) return;
+  if(ev.key === "Enter"){ ev.preventDefault(); NB.editing = n.id; nbRender(); setTimeout(() => { const t = $("nbEdit"); if(t) t.focus(); }, 0); }
+  else if(ev.key === "Delete" || ev.key === "Backspace"){ ev.preventDefault(); nbRemove(n.id); }
+  else if(/^Arrow/.test(ev.key)){
+    ev.preventDefault(); const step = ev.shiftKey ? 60 : 15, b = $("nbBoard"), span = b ? b.clientWidth - el.offsetWidth - 28 : 800;
+    const ch = ev.key === "ArrowLeft" ? { x: Math.max(0, n.x - step / span) } : ev.key === "ArrowRight" ? { x: Math.min(1, n.x + step / span) } : ev.key === "ArrowUp" ? { y: Math.max(0, n.y - step) } : { y: n.y + step };
+    nbSave(n.id, ch).then(() => { const again = document.querySelector('[data-nb="' + n.id + '"]'); if(again) again.focus(); });
+    setTimeout(() => { const again = document.querySelector('[data-nb="' + n.id + '"]'); if(again) again.focus(); }, 0);
+  }
+});
 /* The project assistant, as staff will see it, for admins while it is off. */
 VIEWS.pmpreview = {
   render(){
@@ -4295,6 +4556,7 @@ var ICONS = {
   scorecards:'<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
   chevron:'<path d="m6 9 6 6 6-6"/>',
   viewas:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  notes:'<path d="M4 4h16v10l-6 6H4z"/><path d="M14 20v-6h6"/><path d="M8 9h8M8 13h4"/>',
   brief:'<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
   pmpreview:'<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
   mic:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/>',
@@ -5613,6 +5875,9 @@ const CCTOUR = (function(){
       { id:"myday", clips:["myday"], target:'[data-tour="as-talk"]', at:"brief",
         title:"My day",
         body:"My day is your own assistant. It checks in at seven, at noon and at five with what needs you, keeps your hit list in order, and sorts your work inbox into reply drafts that you check and send yourself. It never sends anything on its own. Talk or type to it here. On an iPhone, tap the box and use the microphone on your keyboard. Walk me through it, on that page, shows you the rest." },
+      { id:"notes", clips:["notes"], target:'[data-tour="nb-bar"]', at:"notes",
+        title:"Sticky notes",
+        body:"Sticky notes is your own board, so the paper notes can come off your monitor. Type a note or press Talk and say it, pick a colour, and it sticks to the board. Drag it anywhere, tap the words to change them, and Tidy up lines them all up." },
       { id:"cashflow", clips:["cashflow"], target:'[data-tour="cf-top"]', at:"cashflow",
         title:"Cash flow",
         body:"Cash flow follows Craig's weekly method: room on the line of credit now, money in and money out each week, and where it lands four weeks out. The advice underneath says what to pay and what to hold. Tick a payment once it goes out, and the weeks update." },
@@ -5750,6 +6015,8 @@ const CCTOUR = (function(){
         body:"Hi" + (S.meName ? " " + S.meName : "") + "! A few new things have arrived in the command centre. This takes about a minute." },
       { id:"new-myday", clips:["myday"], target:'[data-tour="as-talk"]', at:"brief", title:"My day",
         body:"My day is your own assistant. It checks in at seven, at noon and at five with what needs you, keeps your hit list in order, and sorts your work inbox into reply drafts that you check and send yourself. It never sends anything on its own. Talk or type to it here. On an iPhone, tap the box and use the microphone on your keyboard. Walk me through it, on that page, shows you the rest." },
+      { id:"new-notes", clips:["notes"], target:'[data-tour="nb-bar"]', at:"notes", title:"Sticky notes",
+        body:"Sticky notes is your own board, so the paper notes can come off your monitor. Type a note or press Talk and say it, pick a colour, and it sticks to the board. Drag it anywhere, tap the words to change them, and Tidy up lines them all up." },
       { id:"new-cashflow", clips:["cashflow"], target:'[data-tour="cf-top"]', at:"cashflow", title:"Cash flow",
         body:"Cash flow follows Craig's weekly method: room on the line of credit now, money in and money out each week, and where it lands four weeks out. The advice underneath says what to pay and what to hold. Tick a payment once it goes out, and the weeks update." },
       { id:"new-viewas", clips:["viewas"], target:'[data-ico="viewas"]', when: () => !!document.querySelector('[data-ico="viewas"]'), title:"View as",
@@ -5892,7 +6159,7 @@ const CCTOUR = (function(){
     if(step.at && current !== step.at && CFG.tabs.includes(step.at)) go(step.at);
     if(step.target){
       /* My day and Cash flow read live data first; give them longer to appear. */
-      const there = await waitFor(step.target, step.at === "brief" || step.at === "cashflow" ? 8000 : 2000);
+      const there = await waitFor(step.target, step.at === "brief" || step.at === "cashflow" || step.at === "notes" ? 8000 : 2000);
       /* Not on this person's screen: move on in the direction they were going. */
       if(!there) return show(n + (dir || 1), dir || 1);
       const el = q(step.target);
