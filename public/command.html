@@ -521,7 +521,7 @@ button.md-stat{cursor:pointer}button.md-stat:hover{border-color:var(--cyan)}
 @media (max-width:980px){
   .md-cols{display:flex;flex-direction:column;gap:16px}
   .md-main,.md-side{display:contents}
-  .md .o-chase{order:0}.md .o-talk{order:1}.md .o-check{order:2}.md .o-list{order:3}.md .o-cash{order:4}.md .o-inbox{order:5}.md .o-bank{order:6}.md .o-due{order:7}.md .o-jobs{order:8}.md .o-chases{order:9}
+  .md .o-chase{order:0}.md .o-talk{order:1}.md .o-check{order:2}.md .o-list{order:3}.md .o-notes{order:3}.md .o-cash{order:4}.md .o-inbox{order:5}.md .o-bank{order:6}.md .o-due{order:7}.md .o-jobs{order:8}.md .o-chases{order:9}
 }
 @media (max-width:620px){
   .md .card{padding:16px}
@@ -644,6 +644,16 @@ button,input,select,textarea,optgroup{font-family:inherit}
 .refresh[data-ico="refresh"][disabled]::before{animation:am-spin .9s linear infinite}
 @media (max-width:640px){.refresh[data-ico]{font-size:0;gap:0;padding:8px 10px}.refresh[data-ico]::before{width:18px;height:18px}}
 .btn .ico{width:15px;height:15px}
+/* Sticky notes on My day: the newest few, and a box to stick one on. */
+.md-notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px 14px;margin:14px 0 6px;padding:4px 2px}
+.md-note{--bg:#ffe98a;position:relative;background:var(--bg);color:#1a1917;min-height:104px;padding:18px 12px 12px;border-radius:2px 2px 12px 2px;transform:rotate(var(--r));box-shadow:0 1px 1px rgba(26,25,23,.12),0 8px 14px -8px rgba(26,25,23,.4);font-family:"Caveat","Segoe Print","Bradley Hand",cursive;font-weight:600;font-size:21px;line-height:1.1;overflow-wrap:anywhere;cursor:pointer}
+.md-note::before{content:"";position:absolute;top:-7px;left:40%;width:56px;height:16px;background:rgba(50,157,187,.55)}
+.md-note:hover{box-shadow:0 1px 1px rgba(26,25,23,.12),0 14px 20px -10px rgba(26,25,23,.5)}
+.md-stick{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;margin-top:12px}
+.md-stick input{height:44px;min-width:0;border:1px solid var(--rule);border-radius:10px;padding:0 12px;background:var(--panel-2);color:var(--ink);font-family:"Caveat","Segoe Print",cursive;font-weight:600;font-size:22px}
+.md-stick .btn{height:44px;border-radius:10px}
+.md-stick .nb-sw{gap:5px}.md-stick .nb-dot{width:22px;height:22px}
+@media (max-width:620px){.md-stick{grid-template-columns:minmax(0,1fr) auto}.md-stick .nb-sw{grid-column:1/-1}}
 /* Sticky notes board (2026-11-15). Each person's own board: notes in
    handwriting (Caveat, open font licence, in public/fonts) on paper colours,
    held on with a strip of A&M cyan tape, dragged anywhere. */
@@ -2339,7 +2349,7 @@ function asProject(name){
 VIEWS.brief = {
   /* Wait while someone is typing (a chase, or words not yet added); an empty
      talk box does not hold the page, so the list refreshes after each add. */
-  hold(){ const a = document.activeElement; return !!(a && a.closest && (a.closest("[data-as-form]") || (a.closest(".asbar") && a.value))); },
+  hold(){ if(NB.force) return false; const a = document.activeElement; return !!(a && a.closest && (a.closest("[data-as-form]") || ((a.closest(".asbar") || a.id === "mdStick") && a.value))); },
   alerts(){ const d = AS.data; if(!d) return []; const a = [];
     const over = (d.open || []).filter(x => x.due && x.due < iso(today()));
     if(over.length) a.push({ lvl:"caution", text: plural(over.length, "thing on your list is", "things on your list are") + " past due.", meta: over.slice(0, 3).map(x => x.text).join("; ") });
@@ -2383,6 +2393,7 @@ VIEWS.brief = {
       ((d.doneToday || []).length ? '<details style="margin-top:10px"><summary class="sm">Done today (' + d.doneToday.length + ')</summary><ul class="plain">' + d.doneToday.map(x => '<li>' + E(x.text) + (x.doneWhy ? ' <span class="sm">' + E(x.doneWhy) + '</span>' : '') + ' <button class="linkish" data-as-untick="' + E(x.id) + '">Undo</button></li>').join("") + '</ul></details>' : '') +
       '<div class="md-bar" data-tour="as-checkins"><span>Check in now:</span><button class="md-pill" data-as-checkin="morning">Morning</button><button class="md-pill" data-as-checkin="noon">Noon</button><button class="md-pill" data-as-checkin="end">End of day</button>' +
       '<label><input type="checkbox" data-as-emailme' + (d.settings.emailCheckins === false ? "" : " checked") + '> Email me each check-in</label></div></div>';
+    main += mdNotes();
     main += asInbox();
     let side = "";
     if(exec){
@@ -2414,7 +2425,7 @@ function nbLoad(){
   NB.loading = true;
   return nbCall().then(d => { NB.notes = d.notes || []; NB.viewAs = !!d.viewAs; NB.err = null; }).catch(e => { NB.err = e; }).then(() => { NB.loading = false; nbRender(); });
 }
-function nbSay(text, kind){ NB.msg = text; NB.msgKind = kind || ""; clearTimeout(NB.msgT); NB.msgT = setTimeout(() => { NB.msg = ""; NB.undo = null; if(current === "notes" && !NB.drag && !NB.editing) nbRender(); }, NB.undo ? 9000 : 5000); }
+function nbSay(text, kind){ NB.msg = text; NB.msgKind = kind || ""; clearTimeout(NB.msgT); NB.msgT = setTimeout(() => { NB.msg = ""; NB.undo = null; if((current === "notes" || current === "brief") && !NB.drag && !NB.editing) nbRender(); }, NB.undo ? 9000 : 5000); }
 function nbCols(){ const b = $("nbBoard"); const w = b ? b.clientWidth : 900; const nw = window.innerWidth <= 620 ? 156 : 212; return Math.max(1, Math.floor((w - 28 + 18) / (nw + 18))); }
 function nbAdd(text, source){
   text = String(text || "").trim(); if(!text) return;
@@ -2503,7 +2514,7 @@ VIEWS.notes = {
         '<div class="nb-row"><div class="nb-sw"><span>Colour</span>' + NB_COLOURS.map(c => '<button type="button" class="nb-dot c-' + c[0] + (NB.colour === c[0] ? " on" : "") + '" data-nb-pick="' + c[0] + '" aria-label="' + c[1] + '" aria-pressed="' + (NB.colour === c[0]) + '"></button>').join("") + '</div>' +
         '<div class="nb-acts">' + plural(notes.length, "note") + (notes.length > 1 ? ' <button type="button" class="md-pill" data-nb-tidy>Tidy up</button>' : '') + '</div></div>' +
         (NB.msg ? '<p class="nb-msg" role="status">' + E(NB.msg) + (NB.undo ? ' <button type="button" data-nb-undo>Undo</button>' : '') + '</p>' : '') + '</div>';
-    } else h += '<div class="state">Look only: this is their board. Nothing can be moved or changed while you view as them.</div>';
+    } else h += '<div class="state">Look only: this is their board, so the box and colours are hidden and nothing can be moved. Press Back to me at the top to use your own board.</div>';
     const flow = nbFlow(notes);
     const deep = notes.reduce((m, n) => Math.max(m, Number(n.y) || 0), 0);
     const tall = flow ? Math.max(520, flow.tall) : Math.max(640, deep + 320);
@@ -2519,7 +2530,7 @@ document.addEventListener("click", ev => {
   const t = ev.target.closest && ev.target.closest("[data-nb-talk],[data-nb-pick],[data-nb-tidy],[data-nb-undo],[data-nb-del],[data-nb-list],[data-nb-pal],[data-nb-colour]"); if(!t) return;
   const note = t.closest("[data-nb]"), id = note && note.dataset.nb;
   if(t.dataset.nbTalk !== undefined) return nbTalk();
-  if(t.dataset.nbPick){ NB.colour = t.dataset.nbPick; try{ localStorage.setItem("am.nb.colour", NB.colour); }catch(e){} nbRender(); setTimeout(() => { const i = $("nbText"); if(i) i.focus(); }, 0); return; }
+  if(t.dataset.nbPick){ NB.colour = t.dataset.nbPick; try{ localStorage.setItem("am.nb.colour", NB.colour); }catch(e){} nbRender(); setTimeout(() => { const i = $("nbText") || $("mdStick"); if(i) i.focus(); }, 0); return; }
   if(t.dataset.nbTidy !== undefined) return nbTidy();
   if(t.dataset.nbUndo !== undefined) return nbRestore();
   if(t.dataset.nbDel !== undefined) return nbRemove(id);
@@ -2580,6 +2591,20 @@ document.addEventListener("keydown", ev => {
     setTimeout(() => { const again = document.querySelector('[data-nb="' + n.id + '"]'); if(again) again.focus(); }, 0);
   }
 });
+function mdNotes(){
+  if(!NB.notes && !NB.loading && !NB.err) nbLoad();
+  const notes = (NB.notes || []).slice().sort((a, b) => (b.z || 0) - (a.z || 0));
+  let h = '<div class="card o-notes" data-nofold><h2>Sticky notes' + (notes.length ? ' <span class="md-count">' + notes.length + '</span>' : '') + '</h2>';
+  if(NB.err) return h + failBox(NB.err, "Sticky notes") + '</div>';
+  if(!NB.notes) return h + wait("your sticky notes") + '</div>';
+  h += notes.length ? '<div class="md-notes">' + notes.slice(0, 6).map(n => '<div class="md-note c-' + E(n.colour) + '" style="--r:' + (Number(n.rot) || 0) + 'deg" data-go="notes" title="Open the board">' + E(n.text.length > 90 ? n.text.slice(0, 88) + "…" : n.text) + '</div>').join("") + '</div>'
+    : '<p class="lede">No sticky notes yet. Stick one on here, or open the board to drag them around.</p>';
+  if(!NB.viewAs) h += '<form class="md-stick" data-md-stick onsubmit="return false"><div class="nb-sw">' + NB_COLOURS.map(c => '<button type="button" class="nb-dot c-' + c[0] + (NB.colour === c[0] ? " on" : "") + '" data-nb-pick="' + c[0] + '" aria-label="' + c[1] + '" aria-pressed="' + (NB.colour === c[0]) + '"></button>').join("") + '</div>' +
+    '<input id="mdStick" maxlength="400" autocomplete="off" placeholder="Stick a note on…" aria-label="Write a sticky note"><button type="submit" class="btn">Stick it</button></form>' +
+    (NB.msg && current === "brief" ? '<p class="sub" role="status" style="margin-top:8px">' + E(NB.msg) + '</p>' : '');
+  return h + '<div class="md-foot"><button class="btn ghost" data-go="notes">Open the board' + (notes.length > 6 ? ' (' + notes.length + ')' : '') + '</button></div></div>';
+}
+document.addEventListener("submit", ev => { if(!ev.target.matches || !ev.target.matches("[data-md-stick]")) return; ev.preventDefault(); const i = $("mdStick"); const t = i.value.trim(); if(!t) return; i.value = ""; nbAdd(t, "typed"); });
 /* The project assistant, as staff will see it, for admins while it is off. */
 VIEWS.pmpreview = {
   render(){
@@ -2612,21 +2637,34 @@ function asKeyboardMic(why){
    what happened, and when the browser gives no reason the microphone itself is
    checked so the message can say which it is. Press Talk again to stop. */
 let LISTEN = null;
+/* The computer's or phone's own voice typing, which works in every browser. */
+function dictateHint(){
+  const ua = navigator.userAgent || "", pf = navigator.platform || "";
+  if(/iPhone|iPad|iPod|Android/.test(ua) || (pf === "MacIntel" && navigator.maxTouchPoints > 1)) return "tap the box and press the microphone on your keyboard";
+  if(/Mac/.test(pf)) return "click in the box and press the Fn (globe) key twice to dictate";
+  if(/Win/.test(pf)) return "click in the box and press the Windows key and H together to dictate";
+  return "type it in the box";
+}
+function talkTip(button){ const t = dictateHint(); return t === "type it in the box" ? "Type it in the box and press " + button + "." : "To talk, " + t + ", say it, then press " + button + "."; }
 function listenOnce(h){
   if(LISTEN){ try{ LISTEN.stop(); }catch(e){} return; }
   if(asCannotListen()) return h.say("Tap the box and press the microphone on your keyboard, say it, then press " + h.button + ".", true);
+  /* Brave (Bruce, 15 Nov) offers listening but never turns speech into words:
+     it says Listening and then nothing comes. Send people to voice typing. */
+  if(navigator.brave) return h.say("Brave cannot turn speech into words. " + talkTip(h.button) + " Talk works in Chrome and Edge.", true);
   const R = window.SpeechRecognition || window.webkitSpeechRecognition;
   let rec; try{ rec = new R(); }catch(e){ return h.say("This browser cannot listen. Type it instead.", true); }
   rec.lang = "en-CA"; rec.interimResults = false; rec.maxAlternatives = 1;
-  let got = false, err = "", started = false;
+  let got = false, err = "", started = false, deaf = 0;
   LISTEN = rec; h.state("starting");
-  const done = () => { clearTimeout(slow); if(LISTEN === rec) LISTEN = null; };
+  const done = () => { clearTimeout(slow); clearTimeout(deaf); if(LISTEN === rec) LISTEN = null; };
   const slow = setTimeout(() => { if(!started){ err = "slow"; try{ rec.abort(); }catch(e){} done(); explain("slow"); } }, 6000);
   const blocked = "The microphone is blocked for this site. Click the microphone or lock icon at the left of the address bar, allow the microphone, then press Talk again. On Windows, also check Settings, Privacy, Microphone.";
   const nomic = "No microphone was found on this computer. Plug one in or switch it on, then press Talk again. Or type it instead.";
   function explain(code){
     h.state("");
     if(code === "aborted") return h.say("");
+    if(code === "deaf") return h.say("This browser listened but did not turn your words into text. " + talkTip(h.button) + " Talk works best in Chrome and Edge.", true);
     if(code === "not-allowed" || code === "service-not-allowed") return h.say(blocked);
     if(code === "audio-capture") return h.say(nomic);
     if(code === "network") return h.say("The browser could not reach its speech service (Chrome and Edge send speech away to turn it into words). Check the internet connection, or type it instead.");
@@ -2638,7 +2676,8 @@ function listenOnce(h){
     md.getUserMedia({ audio:true }).then(st => { st.getTracks().forEach(t => t.stop()); h.say("I did not hear anything. Your microphone is on, so press Talk and speak straight away, a little closer. Or type it instead."); })
       .catch(e => h.say(e && e.name === "NotFoundError" ? nomic : e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? blocked : "I did not hear anything, and the microphone did not answer (" + E(e && e.name || "unknown") + "). Type it instead."));
   }
-  rec.onstart = () => { started = true; h.state("on"); };
+  /* Listening with no words after 15 seconds: the browser is not turning speech into words. */
+  rec.onstart = () => { started = true; h.state("on"); deaf = setTimeout(() => { if(LISTEN === rec && !got){ err = "deaf"; try{ rec.abort(); }catch(e){} done(); explain("deaf"); } }, 15000); };
   rec.onresult = ev => { got = true; const t = ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : ""; done(); h.state(""); if(t.trim()) h.text(t.trim()); else explain("silent"); };
   rec.onerror = ev => { if(got || err) return; err = ev.error || "unknown"; done(); explain(err); };
   rec.onend = () => { const was = LISTEN === rec; done(); if(got || err) return; if(was) explain("silent"); };
