@@ -44,6 +44,21 @@ export const PRESETS = {
   field:      { label: "Field",         areas: ["field"] }
 };
 export const IDLE_CHOICES = [1, 4, 8, 12];
+/* Personal assistants (Bruce's brief, 2026-11-15). "exec" for leadership,
+   "project" for project managers and field leads (built, held back until
+   Craig and Amir switch it on for staff), "none". Craig and Amir start as
+   executive assistants and open on their briefing. */
+export const ASSISTANTS = ["exec", "project", "none"];
+export const LANDINGS = ["brief", "overview"];
+const EXEC_START = ["craig@amabatement.com", "amir@amabatement.com"];
+export function assistantOf(a) {
+  if (a && ASSISTANTS.includes(a.assistant)) return a.assistant;
+  return a && EXEC_START.includes(String(a.email || "").toLowerCase()) ? "exec" : "none";
+}
+export function landingOf(a) {
+  if (a && LANDINGS.includes(a.landing)) return a.landing;
+  return assistantOf(a) === "exec" ? "brief" : "overview";
+}
 const ITER = Number(process.env.PW_ITER || 600000);
 const ACCOUNT_DAYS = Number(process.env.ACCOUNT_DAYS || 14);
 export const MIN_PW = 10;
@@ -153,7 +168,7 @@ export function publicAccount(a) {
     id: a.id, email: a.email, name: a.name, title: a.title || "", areas: a.areas || [], level: a.level,
     responsibility: presetOf(a.areas), responsibilityLabel: presetLabel(a.areas),
     active: a.active !== false, mustChange: !!a.mustChange, createdAt: a.createdAt || "", createdBy: a.createdBy || "",
-    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || "", claude: !!a.claude,
+    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || "", claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a),
     /* The invite's dates only. The link itself is never stored, only a scramble of it. */
     invite: a.invite ? { sentAt: a.invite.at || "", expires: a.invite.exp || "", by: a.invite.by || "", emailed: !!a.invite.emailed } : null
   };
@@ -210,7 +225,7 @@ export function userOf(a, settings = {}) {
     kind: "account", id: a.id, name: a.name, email: a.email, title: a.title || "", areas, level: a.level,
     edit: a.level === "edit" || a.level === "admin", admin: a.level === "admin",
     office: areas.includes("office"), mustChange: !!a.mustChange, idleHours: settings.idleHours,
-    claude: !!a.claude
+    claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), projectLive: !!settings.projectAssistantLive
   };
   u.role = areas.includes("office") && areas.includes("field") ? "owner" : areas.includes("office") ? "office" : areas.includes("field") ? "field" : "none";
   return u;

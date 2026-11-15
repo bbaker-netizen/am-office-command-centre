@@ -403,6 +403,25 @@ main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-p
 .kpi.drag-hole{opacity:.25;outline:2px dashed var(--cyan);outline-offset:-2px}
 .kpi-hint{font-size:11px;color:var(--ink-3);margin:-8px 0 14px;display:flex;gap:10px;align-items:center}
 .kpi-hint button{font:inherit;font-size:11px;background:none;border:0;color:var(--cyan-deep);cursor:pointer;padding:0;text-decoration:underline}
+/* My day */
+.asbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.asbar .mic{display:flex;align-items:center;gap:8px;font:inherit;font-weight:700;font-size:15px;border:0;border-radius:999px;background:var(--cyan);color:#fff;padding:12px 20px;cursor:pointer}
+.asbar .mic svg{width:22px;height:22px}.asbar .mic.on{background:var(--stop);animation:am-ring 1.2s infinite}
+.asbar form{display:flex;gap:8px;flex:1;min-width:240px}.asbar input{flex:1;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--rule);border-radius:8px;background:var(--panel);color:var(--ink)}
+.asbar .asmore{width:100%;font-size:13px}
+.aslist{list-style:none;margin:0;padding:0;counter-reset:as}
+.asit{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid var(--rule)}
+.asit.pin{background:linear-gradient(90deg,rgba(50,157,187,.08),transparent)}
+.asit .tick{width:28px;height:28px;border-radius:50%;border:2px solid var(--rule);background:var(--panel);cursor:pointer;display:flex;align-items:center;justify-content:center;color:transparent}
+.asit .tick:hover{border-color:var(--cyan);color:var(--cyan)}.asit .tick svg{width:16px;height:16px}
+.asit .sm{display:block;font-size:11px;color:var(--ink-3)}
+.ascheck pre{white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.5;margin:0}
+.asmail summary{cursor:pointer;padding:6px 0}.asmail ul{list-style:none;margin:0;padding:0}
+.asmail li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule)}.asmail .sm{font-size:11px;color:var(--ink-3)}
+.asmail .ac{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.row-btns{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.two .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+ul.plain{list-style:none;margin:4px 0 10px;padding:0}ul.plain li{padding:4px 0;border-bottom:1px solid var(--rule)}
 /* cash flow */
 .cftop{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px}
 .cftop .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
@@ -586,7 +605,9 @@ const ROLES = {
             tabs:["overview","projects","sites","closeout","equipment"], qb:false, gmail:false }
 };
 const TABS = {
+  brief:     { label:"My day",       group:"My day" },
   overview:  { label:"Overview",     group:"" },
+  pmpreview: { label:"Project assistant (preview)", group:"Admin" },
   estimating:{ label:"Estimating",   group:"Office" },
   dispatch:  { label:"Dispatch",     group:"Office" },
   tm:        { label:"T&M and extras", group:"Office" },
@@ -851,6 +872,7 @@ function head(title, lede){ return '<div class="tabhead" data-tour="page"><h1>' 
    Field, Assistants, and inside the app, Shop and settings). The row under it
    holds the pages of whichever section is open. */
 const SECTIONS = [
+  { key:"My day",     label:"My day" },
   { key:"",           label:"Overview" },
   { key:"Office",     label:"Office" },
   { key:"Field",      label:"Field" },
@@ -1392,6 +1414,7 @@ function api(part, fresh){
 function appLoad(fresh){
   const waits = [];
   if(CFG.tabs.includes("cashflow")) waits.push(cfLoad(fresh));
+  if(CFG.tabs.includes("brief") && (fresh || !AS.data)) waits.push(asLoad());
   /* The first answer carries up to about seven seconds' worth of jobs. If
      there are more, keep asking with the nextPage it hands back, and show the
      list growing as it comes. */
@@ -1472,7 +1495,8 @@ async function startApp(){
   CAN_EDIT = !!me.edit;
   if(VIEW_AS && !me.viewAs){ try{ sessionStorage.removeItem("am.viewAs"); }catch(e){} VIEW_AS = null; }
   if(me.viewAs){ CAN_EDIT = false; viewAsBanner(me); }
-  const tabs = ["overview"];
+  const asLive = me.assistant === "exec" || (me.assistant === "project" && (me.projectLive || me.admin));
+  const tabs = asLive ? ["brief", "overview"] : ["overview"];
   if(has("office")) tabs.push("estimating", "dispatch", "tm");
   if(has("money")) tabs.push("money", "cashflow");
   if(has("payroll")) tabs.push("payroll", "expenses");
@@ -1484,6 +1508,7 @@ async function startApp(){
   if(has("field")) tabs.push("equipment");
   if(has("assistants")) tabs.push("drafts");
   if(me.admin) tabs.push("people", "connections", "scorecards");
+  if(me.admin && !me.projectLive) tabs.push("pmpreview");
   const first = String(me.name || "").split(" ")[0];
   CFG = { title: (first ? first + "'s" : "Your") + " command centre", who: [me.title, respLabel(me.areas), LEVEL_INFO[me.level] ? LEVEL_INFO[me.level].label : ""].filter(Boolean).join(" · "), tabs, qb: has("money"), gmail:false };
   S.meName = first;
@@ -1494,7 +1519,8 @@ async function startApp(){
   if(me.admin){ const set = document.createElement("button"); set.className = "refresh"; set.textContent = "Settings"; set.dataset.ico = "settings"; set.setAttribute("aria-label", "Settings"); set.title = "Connect JobTread and QuickBooks"; set.onclick = () => go("connections"); const tb = $("refresh").parentNode.querySelector('[data-ico="tour"]') || $("refresh"); tb.parentNode.insertBefore(set, tb); sizeTop(); }
   if(me.claude && !me.viewAs) CLAUDE.mount();
   const h = (location.hash || "").replace("#", "");
-  current = CFG.tabs.includes(h) ? h : (CFG.tabs.includes(store("tab." + ROLE)) ? store("tab." + ROLE) : "overview");
+  /* Opens on My day for people who chose it (Craig and Amir to start). */
+  current = CFG.tabs.includes(h) ? h : (me.landing === "brief" && CFG.tabs.includes("brief")) ? "brief" : (CFG.tabs.includes(store("tab." + ROLE)) ? store("tab." + ROLE) : "overview");
   render();
   appLoad(false).then(() => { try{ CCTOUR.ready(); }catch(e){} });
   $("refresh").disabled = false;
@@ -1910,6 +1936,209 @@ function worstTable(list, who){
     '<tr><td>' + E(r.name) + '</td><td class="r num">' + M(r.total) + '</td><td class="r num">' + M(r.late) + '</td><td class="r num">' + (r.b["91+"] ? '<span class="tag stop">' + M(r.b["91+"]) + '</span>' : '') + '</td></tr>');
   return tbl('<th>' + who + '</th><th class="r">Owed</th><th class="r">Late</th><th class="r">Over 90 days</th>', rows, "Nobody is late.", 10);
 }
+/* ---------- My day: each person's own assistant ----------
+   The executive assistant for Craig and Amir; the project assistant for
+   project managers and field leads (built, off for staff until Craig and Amir
+   switch it on). Read from /api/assistant. It pushes only this person's own
+   mail, list and asks; Ask Claude still answers anything about the command
+   centre. */
+const AS = { data:null, err:null, loading:false, msg:"", busy:false, bank:null, bankErr:null, inbox:null, chaseFor:null, listening:false, show:{} };
+function asCall(q, body){
+  const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
+  return fetch("/api/assistant" + (q ? "?" + q : ""), opts).then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || ("The app answered " + r.status + ".") }; return b; });
+}
+function asLoad(){
+  AS.loading = true;
+  const inbox = fetch("/api/inbox", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(d => { AS.inbox = d; }).catch(() => {});
+  return Promise.all([asCall("").then(d => { AS.data = d; AS.err = null; }).catch(e => { AS.err = e; }), inbox]).then(() => { AS.loading = false; render(); });
+}
+function asDo(body, ok){
+  if(AS.busy) return Promise.resolve(); AS.busy = true; AS.msg = ""; render();
+  return asCall("", body).then(r => { AS.busy = false; if(ok) AS.msg = typeof ok === "function" ? ok(r) : ok; return asLoad().then(() => r); })
+    .catch(e => { AS.busy = false; AS.msg = errCopy(e); render(); });
+}
+const AS_KIND = { todo:"To do", pay:"Pay", expect:"Coming in", call:"Call", ask:"Asked", chase:"Chase" };
+function asItem(it){
+  return '<li class="asit' + (it.pinned ? " pin" : "") + '"><button type="button" class="tick" data-as-tick="' + E(it.id) + '" aria-label="Done">' + ico("check") + '</button>' +
+    '<div class="tx"><b>' + E(it.text) + '</b><span class="sm">' + E([AS_KIND[it.kind] || "", it.who && !String(it.text).includes(it.who) ? it.who : "", it.amount ? M(it.amount) : "", it.due ? (it.due < iso(today()) ? "was due " : "due ") + it.due : "", it.source === "voice" ? "said" : it.source === "photo" ? "from your paper list" : it.source === "chase" ? "from a chase" : "", it.cfItemId ? "in the cash flow" : ""].filter(Boolean).join(" · ")) + '</span></div>' +
+    '<div class="ac"><button type="button" class="linkish" data-as-pin="' + E(it.id) + '">' + (it.pinned ? "Unpin" : "Top") + '</button> <button type="button" class="linkish" data-as-remove="' + E(it.id) + '">Remove</button></div></li>';
+}
+function asInbox(){
+  const d = AS.data, ib = (AS.inbox && AS.inbox.inboxes) || d.inboxes || [];
+  let h = '<div class="card wide"><h2>Your inbox</h2>';
+  if(d.triage && d.triage.hidden) return h + '<p class="lede">Mail is not shown while you view as someone else.</p></div>';
+  if(!ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what is someone else\'s (estimating mail stays out of your way). It drafts replies for you to check and send yourself. It never sends anything.</p>' +
+    (AS.inbox && AS.inbox.ready === false ? '<div class="state wait">Google sign-in is not set up in Netlify yet.</div>' : '<button class="btn" data-as-connect>Connect my inbox</button>') + '</div>';
+  const t = d.triage || {}, items = t.items || [];
+  const group = (b, title, open) => { const g = items.filter(x => x.bucket === b); if(!g.length) return "";
+    return '<details class="asmail"' + (open ? " open" : "") + '><summary><b>' + E(title) + '</b> <span class="tag ' + (b === "needs_you" ? "stop" : b === "payment" ? "clear" : "mute") + '">' + g.length + '</span></summary><ul>' + g.map(x =>
+      '<li><div><b>' + E(x.who || x.address) + '</b> <span class="sm">' + E(x.inbox) + '</span><div>' + E(x.subject) + '</div><span class="sm">' + E([x.why, x.action, x.payment ? (x.payment.direction === "in" ? "Money in: " : "Money out: ") + x.payment.name + " " + M(x.payment.amount) : ""].filter(Boolean).join(" · ")) + '</span></div>' +
+      '<div class="ac">' + (x.draft ? '<a class="btn ghost sm" href="' + E(x.draft.link || "https://mail.google.com/mail/u/0/#drafts") + '" target="_blank" rel="noopener">Draft is in Gmail</a>' : b === "needs_you" ? '<button type="button" class="btn ghost sm" data-as-draft="' + E(x.id) + '">Draft a reply</button>' : '') +
+      '<a class="linkish" href="https://mail.google.com/mail/u/0/#inbox/' + E(x.threadId || x.id) + '" target="_blank" rel="noopener">Open</a> <button type="button" class="linkish" data-as-handled="' + E(x.id) + '">Done</button></div></li>').join("") + '</ul></details>'; };
+  h += '<p class="lede">' + (t.at ? "Sorted " + whenSeen(t.at) + ". " : "Not sorted yet. ") + plural(ib.length, "inbox", "inboxes") + ': ' + E(ib.map(x => x.email).join(", ")) + '.</p>' +
+    '<div class="row-btns"><button class="btn ghost" data-as-triage>' + (AS.busy ? "Working…" : "Sort new mail now") + '</button><button class="linkish" data-as-connect>Add another inbox</button></div>' +
+    ((t.errors || []).length ? '<div class="state wait">' + t.errors.map(E).join("<br>") + '</div>' : '') +
+    group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", "Someone else's (estimating and the like)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true);
+  return h + '</div>';
+}
+function asMoney(){
+  if(!CFG.qb) return "";
+  const cf = S.cf; let h = '<div class="card"><h2>Bank since you last looked</h2>';
+  if(!AS.bank && !AS.bankErr){ asCall("action=bank").then(b => { AS.bank = b; render(); }).catch(e => { AS.bankErr = e; render(); }); AS.bank = null; }
+  if(AS.bankErr) h += failBox(AS.bankErr, "Bank");
+  else if(!AS.bank) h += wait("payments since you last looked");
+  else { const b = AS.bank, tin = b.in.reduce((x, p) => x + p.amount, 0), tout = b.out.reduce((x, p) => x + p.amount, 0);
+    h += '<p class="lede">Since ' + E(b.since) + ', as recorded in QuickBooks. Brenda enters payments as they arrive; the BMO import is Danielle\'s, on Tuesdays.</p>' +
+      '<div class="two"><div><span class="k">In</span><div class="big num">' + M(tin) + '</div>' + b.in.slice(0, 6).map(p => '<div class="sm">' + E(p.name) + ' ' + M(p.amount) + ' · ' + E(p.date) + '</div>').join("") + '</div>' +
+      '<div><span class="k">Out</span><div class="big num">' + M(tout) + '</div>' + b.out.slice(0, 6).map(p => '<div class="sm">' + E(p.name) + ' ' + M(p.amount) + ' · ' + E(p.date) + '</div>').join("") + '</div></div>' +
+      (b.balances.length ? '<p class="sub">Balances you typed: ' + b.balances.map(x => E(x.date) + " " + M(x.amount)).join(", ") + '</p>' : '') +
+      '<button class="btn ghost sm" data-as-seenbank>I have looked</button>'; }
+  h += '</div>';
+  h += '<div class="card"><h2>Cash flow</h2>';
+  if(!cf) h += S.cfErr ? failBox(S.cfErr, "Cash flow") : wait("the cash flow");
+  else h += '<p class="lede">Room on the line now ' + M(cf.roomNow) + '. End of this week ' + M(cf.weeks[0].close) + '.</p>' + cf.advice.lines.slice(0, 4).map(l => '<p class="sub">' + E(l) + '</p>').join("") + '<button class="btn ghost sm" data-go="cashflow">Open Cash flow</button>';
+  h += '</div>';
+  const tb = S.jobs ? live().filter(j => TOBILL.includes(st(j))) : [];
+  const pay = cf ? cf.weeks[0].out.slice(0, 8) : [];
+  h += '<div class="card"><h2>Due this week</h2><p class="lede">To invoice at Thursday billing, and to pay.</p><h3>To invoice</h3>' + (tb.length ? '<ul class="plain">' + tb.slice(0, 8).map(j => '<li data-job="' + E(j._id) + '" tabindex="0">' + E(j._number + " " + (j._name || "")) + ' <span class="sm">' + E(st(j)) + '</span></li>').join("") + '</ul>' : '<p class="sub">Nothing finished and unbilled.</p>') +
+    '<h3>To pay</h3>' + (pay.length ? '<ul class="plain">' + pay.map(x => '<li>' + E(x.name) + ' <b class="num">' + M(x.amount) + '</b>' + (x.rolled ? ' <span class="tag caution">rolled</span>' : '') + '</li>').join("") + '</ul>' : '<p class="sub">Nothing planned.</p>') + '</div>';
+  return h;
+}
+/* Jobs that cannot be invoiced yet, why, and who they wait on (Amir). */
+const AS_WAIT = { "Loose Ends Required":["Loose ends on site","Site supervisor"], "Job Complete by A&M":["Finished; costs and paperwork into JobTread","Project manager"], "PM Approvals":["Waiting on the PM's approval","Project manager"], "Invoicing":["Ready for Thursday billing","Office"], "Job Post Mortem":["Invoiced; post mortem due","Project manager"] };
+function asJobs(){
+  if(!S.jobs) return "";
+  const chases = (AS.data && AS.data.chases) || [];
+  const byJob = id => chases.filter(c => c.jobId === id);
+  const rows = live().filter(j => TOBILL.includes(st(j)) || st(j) === "Job Post Mortem").map(j => { const w = AS_WAIT[st(j)] || [st(j), ""]; const ch = byJob(j._id);
+    return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(w[0]) + '<span class="sm">Waiting on ' + E(w[1] === "Project manager" && pm(j) ? pm(j) : w[1]) + '</span></td><td>' + (ch.length ? ch.map(c => '<span class="tag ' + (c.step === "call" ? "stop" : "caution") + '">' + E(c.status) + '</span>').join(" ") : '<button type="button" class="linkish" data-as-chasefor="' + E(j._id) + '">Chase</button>') + '</td></tr>'; });
+  const won = live().filter(j => POST.includes(st(j)) && !TOBILL.includes(st(j)));
+  return '<div class="card wide"><h2>Done, not billed</h2><p class="lede">Every job that cannot be invoiced yet, why, and who it is waiting on. Press Chase when a site or a subcontractor owes something: your assistant drafts a note each day for three days, then tells you to call.</p>' +
+    tbl('<th>Job</th><th>Why it is stuck</th><th>Chase</th>', rows, "Nothing is stuck.") + '<p class="sub">' + plural(won.length, "more job is", "more jobs are") + ' won and not finished. <button class="linkish" data-go="projects">See them on Projects</button></p></div>';
+}
+function asChaseForm(){
+  const j = AS.chaseFor && (S.jobs || []).find(x => x._id === AS.chaseFor);
+  if(!AS.chaseFor) return "";
+  const ib = (AS.inbox && AS.inbox.inboxes) || [];
+  return '<div class="card wide" data-as-form><h2>Start a chase' + (j ? ': ' + E(j._number + " " + (j._name || "")) : '') + '</h2><div class="cfform">' +
+    '<label>Who owes it<input name="who" placeholder="Name, company"></label><label>Their email<input name="email" type="email" placeholder="name@company.com"></label>' +
+    '<label class="wide">What is missing<input name="what" placeholder="the signed site safety plan"></label>' +
+    '<label>Draft from<select name="from"><option value="me"' + (ib.length ? "" : " disabled") + '>My own inbox' + (ib.length ? "" : " (connect it first)") + '</option><option value="robots"' + (ib.length ? "" : " selected") + '>The robots\' mailbox (replies come to me)</option></select></label>' +
+    '<button type="button" class="btn" data-as-chasego>Start</button><button type="button" class="btn ghost" data-as-chasecancel>Cancel</button></div><p class="sub">Nothing is sent by the app. Each day\'s note waits as a draft for you to send.</p></div>';
+}
+function asChases(){
+  const list = (AS.data && AS.data.chases) || []; if(!list.length) return "";
+  return '<div class="card wide"><h2>Chases</h2>' + tbl('<th>Who and what</th><th>Status</th><th></th>', list.map(c => '<tr><td><b>' + E(c.who) + '</b>: ' + E(c.what) + (c.jobNumber ? '<span class="sm">Job ' + E(c.jobNumber + " " + c.jobName) + '</span>' : '') + '</td><td>' + E(c.status) + (c.nextStep ? '<span class="sm">Next: ' + E(c.nextStep) + '</span>' : '') + (c.lastError ? '<span class="sm">' + E(c.lastError) + '</span>' : '') + '</td><td>' +
+    (c.step === "call" ? '<div data-as-form><input name="outcome" placeholder="How did the call go?" style="font:inherit;padding:5px;border:1px solid var(--rule);border-radius:6px"><button type="button" class="btn ghost sm" data-as-called="' + E(c.id) + '">Log the call</button></div>' : '') + '<button type="button" class="linkish" data-as-chaseclose="' + E(c.id) + '">Close</button></td></tr>')) + '</div>';
+}
+/* The project assistant: closeout for the jobs a PM runs (7-day rule before Thursday billing). */
+function asProject(name){
+  if(!S.jobs) return wait("your jobs");
+  const first = String(name || "").split(" ")[0];
+  const mine = live().filter(j => !first || (pm(j) || "").toLowerCase() === first.toLowerCase());
+  const close = mine.filter(j => stageOf(st(j)) === "close");
+  return '<div class="card wide"><h2>Closeout</h2><p class="lede">Every purchase order, approved quote and subcontractor invoice goes into JobTread within 7 days of the job finishing, before Thursday billing. Post mortems run straight after the Thursday invoice meeting.</p>' +
+    tbl('<th>Job</th><th>Status</th><th>Next</th>', close.map(j => '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + E((AS_WAIT[st(j)] || [""])[0]) + '</td></tr>'), "Nothing closing out.") + '</div>';
+}
+VIEWS.brief = {
+  /* Wait while someone is typing (a chase, or words not yet added); an empty
+     talk box does not hold the page, so the list refreshes after each add. */
+  hold(){ const a = document.activeElement; return !!(a && a.closest && (a.closest("[data-as-form]") || (a.closest(".asbar") && a.value))); },
+  alerts(){ const d = AS.data; if(!d) return []; const a = [];
+    const over = (d.open || []).filter(x => x.due && x.due < iso(today()));
+    if(over.length) a.push({ lvl:"caution", text: plural(over.length, "thing on your list is", "things on your list are") + " past due.", meta: over.slice(0, 3).map(x => x.text).join("; ") });
+    const needs = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
+    if(needs) a.push({ lvl:"info", text: plural(needs, "email needs", "emails need") + " you.", meta:"Under Your inbox." });
+    return a; },
+  render(){
+    const first = S.meName || "";
+    let h = head((new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening") + (first ? ", " + first : ""), "Your day: your list, your mail and the things only you can do. Ask Claude still answers anything about the command centre.");
+    if(AS.err) return h + failBox(AS.err, "My day");
+    if(!AS.data){ if(!AS.loading) asLoad(); return h + wait("your day"); }
+    const d = AS.data, c = (d.checkins || [])[0];
+    h += '<div class="asbar card wide"><button type="button" class="mic' + (AS.listening ? " on" : "") + '" data-as-talk aria-label="Talk">' + ico("mic") + '<span>' + (AS.listening ? "Listening…" : "Talk") + '</span></button>' +
+      '<form data-as-say onsubmit="return false"><input id="asText" placeholder="Put this on my list… or: I just paid Aces" autocomplete="off"><button type="submit" class="btn">Add</button></form>' +
+      '<div class="asmore"><button type="button" class="linkish" data-as-log>Log a walk-in or call</button> · <label class="linkish">Photo of a paper list<input type="file" accept="image/*" capture="environment" data-as-photo hidden></label></div>' +
+      (AS.msg ? '<p class="sub" role="status">' + E(AS.msg) + '</p>' : '') + (d.claude ? '' : '<p class="sub">Claude is not set up, so sayings are read simply and photos cannot be read.</p>') + '</div>';
+    if(c) h += '<div class="card wide ascheck"><h2>' + E({ morning:"This morning", noon:"Noon check-in", end:"End of day" }[c.slot] || "Check-in") + ' <span class="sm">' + E(showWhen(c.at)) + '</span></h2><pre>' + E(c.text) + '</pre></div>';
+    h += '<div class="grid"><div class="card wide"><h2>Your hit list</h2><p class="lede">Most pressing first. Tick it when it is done; it drops off and, if it is a payment, the cash flow updates.</p>' +
+      ((d.open || []).length ? '<ol class="aslist">' + d.open.map(asItem).join("") + '</ol>' : '<p class="sub">Nothing on your list.</p>') +
+      ((d.held || []).length ? '<p class="sub"><b>Logged today, joins at the next check-in:</b> ' + d.held.map(x => E(x.text)).join("; ") + '</p>' : '') +
+      ((d.doneToday || []).length ? '<details><summary class="sm">Done today (' + d.doneToday.length + ')</summary><ul class="plain">' + d.doneToday.map(x => '<li>' + E(x.text) + (x.doneWhy ? ' <span class="sm">' + E(x.doneWhy) + '</span>' : '') + ' <button class="linkish" data-as-untick="' + E(x.id) + '">Undo</button></li>').join("") + '</ul></details>' : '') +
+      '<div class="row-btns"><span class="sm">Check in now:</span><button class="linkish" data-as-checkin="morning">Morning</button><button class="linkish" data-as-checkin="noon">Noon</button><button class="linkish" data-as-checkin="end">End of day</button>' +
+      '<label class="sm" style="margin-left:auto"><input type="checkbox" data-as-emailme' + (d.settings.emailCheckins === false ? "" : " checked") + '> Email me each check-in</label></div></div></div>';
+    h += asInbox();
+    if(d.role === "exec"){
+      if(CFG.qb) h += '<div class="grid">' + asMoney() + '</div>';
+      if(ME.areas.includes("field") || ME.areas.includes("office")) h += asChaseForm() + asJobs();
+    } else h += asChaseForm() + asProject(ME.name);
+    h += asChases();
+    return h;
+  }
+};
+/* The project assistant, as staff will see it, for admins while it is off. */
+VIEWS.pmpreview = {
+  render(){
+    let h = head("Project assistant (preview)", "What project managers and field leads will get once you switch it on for staff on People and access. Phone first: talk or type to it, and it keeps closeout on track.");
+    const pms = [...new Set((S.jobs || []).map(pm).filter(Boolean))].sort();
+    AS.preview = AS.preview || pms[0] || "";
+    h += '<div class="actions">' + pms.map(p => '<button class="btn ' + (p === AS.preview ? "" : "ghost") + ' sm" data-as-preview="' + E(p) + '">' + E(p) + '</button>').join(" ") + '</div>';
+    return h + '<div class="state">Each PM gets the same talk bar, hit list, three check-ins, inbox sort and chase as My day, plus this:</div>' + asProject(AS.preview);
+  }
+};
+function asSpeak(){
+  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!R){ const i = $("asText"); if(i) i.focus(); AS.msg = "This browser cannot listen. Use the microphone on your keyboard instead."; render(); return; }
+  const rec = new R(); rec.lang = "en-CA"; rec.interimResults = false; rec.maxAlternatives = 1;
+  AS.listening = true; render();
+  rec.onresult = ev => { const text = ev.results[0][0].transcript; AS.listening = false; asDo({ action:"say", text, voice:true }, r => (r.reply || "Done.") + (r.added && r.added.length ? " Added: " + r.added.join("; ") + "." : "") + (r.ticked && r.ticked.length ? " Ticked: " + r.ticked.join("; ") + "." : "")); };
+  rec.onerror = ev => { AS.listening = false; AS.msg = ev.error === "not-allowed" ? "The microphone is blocked for this site. Allow it in the browser settings." : "I did not catch that. Try again."; render(); };
+  rec.onend = () => { if(AS.listening){ AS.listening = false; render(); } };
+  rec.start();
+}
+function asPhoto(file){
+  if(!file) return;
+  const img = new Image(), fr = new FileReader();
+  fr.onload = () => { img.onload = () => { const k = Math.min(1, 1600 / Math.max(img.width, img.height)); const cv = document.createElement("canvas"); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k); cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    asDo({ action:"photo", image: cv.toDataURL("image/jpeg", 0.85) }, r => "From your paper list: " + (r.added.length ? r.added.length + " added" : "nothing new") + (r.ticked.length ? ", " + r.ticked.length + " ticked" : "") + "." + (r.unclear && r.unclear.length ? " Could not read: " + r.unclear.join("; ") : "")); }; img.src = fr.result; };
+  fr.readAsDataURL(file);
+}
+document.addEventListener("submit", ev => { if(!ev.target.matches || !ev.target.matches("[data-as-say]")) return; ev.preventDefault(); const i = $("asText"); const text = i.value.trim(); if(!text) return; i.value = ""; asDo({ action:"say", text }, r => (r.reply || "Done.") + (r.added && r.added.length ? " Added: " + r.added.join("; ") + "." : "") + (r.ticked && r.ticked.length ? " Ticked: " + r.ticked.join("; ") + "." : "")); });
+document.addEventListener("change", ev => { const t = ev.target;
+  if(t.matches && t.matches("[data-as-photo]")) { asPhoto(t.files && t.files[0]); t.value = ""; }
+  if(t.matches && t.matches("[data-as-emailme]")) asDo({ action:"settings", emailCheckins: t.checked }, t.checked ? "Check-ins will be emailed to you." : "Check-ins stay in the app only.");
+});
+document.addEventListener("click", ev => {
+  const p = ev.target.closest && ev.target.closest("[data-ac-pmlive]"); if(!p) return;
+  p.disabled = true;
+  acctCall("", { action:"settings", projectAssistantLive: p.dataset.acPmlive === "1" }).then(() => { toast(p.dataset.acPmlive === "1" ? "The project assistant is on for staff with a project assistant set." : "The project assistant is off for staff."); loadAccounts(); }).catch(e => { p.disabled = false; toast(errCopy(e), "bad"); });
+});
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-as-talk],[data-as-tick],[data-as-untick],[data-as-pin],[data-as-remove],[data-as-log],[data-as-connect],[data-as-triage],[data-as-draft],[data-as-handled],[data-as-seenbank],[data-as-checkin],[data-as-chasefor],[data-as-chasego],[data-as-chasecancel],[data-as-called],[data-as-chaseclose],[data-as-preview]");
+  if(!t) return;
+  const D = t.dataset;
+  if(D.asTalk !== undefined) return asSpeak();
+  if(D.asTick) return asDo({ action:"tick", id: D.asTick }, "Done. It is off your list.");
+  if(D.asUntick) return asDo({ action:"untick", id: D.asUntick }, "Back on your list.");
+  if(D.asPin) return asDo({ action:"pin", id: D.asPin });
+  if(D.asRemove) return asDo({ action:"remove", id: D.asRemove }, "Removed.");
+  if(D.asLog !== undefined){ const i = $("asText"); const text = i && i.value.trim(); if(!text){ AS.msg = "Type what happened in the box first (someone at the door, a phone call), then press Log."; render(); setTimeout(() => { const x = $("asText"); if(x) x.focus(); }, 0); return; } i.value = ""; return asDo({ action:"log", text }, "Logged. It joins your list at the next check-in."); }
+  if(D.asConnect !== undefined) return fetch("/api/inbox?action=start", { headers:{ authorization:"Bearer " + TOKEN } }).then(r => r.json()).then(b => { if(b.url) location.href = b.url; else { AS.msg = b.message || "Could not start the Google sign-in."; render(); } });
+  if(D.asTriage !== undefined) return asDo({ action:"triage" }, r => r.count ? "Sorted " + plural(r.count, "new email") + "." : "No new mail since the last sort.");
+  if(D.asDraft) return asDo({ action:"draft", id: D.asDraft }, "Drafted. It is in your Gmail drafts for you to check and send.");
+  if(D.asHandled) return asDo({ action:"handled", id: D.asHandled });
+  if(D.asSeenbank !== undefined) return asDo({ action:"seenBank" }, "Noted. Next time it shows what moved after now.").then(() => { AS.bank = null; AS.bankErr = null; render(); });
+  if(D.asCheckin) return asDo({ action:"checkin", slot: D.asCheckin }, "Checked in.");
+  if(D.asChasefor){ AS.chaseFor = D.asChasefor; render(); return; }
+  if(D.asChasecancel !== undefined){ AS.chaseFor = null; if(document.activeElement) document.activeElement.blur(); render(); return; }
+  if(D.asChasego !== undefined){ const f = t.closest("[data-as-form]"), v = n => (f.querySelector('[name="' + n + '"]') || {}).value || ""; const j = (S.jobs || []).find(x => x._id === AS.chaseFor) || {};
+    const body = { action:"chase", jobId: j._id || "", jobNumber: j._number || "", jobName: j._name || "", who: v("who"), email: v("email"), what: v("what"), from: v("from") };
+    AS.chaseFor = null; if(document.activeElement) document.activeElement.blur(); return asDo(body, r => "Chase started. " + ((r.notes || [])[0] || "")); }
+  if(D.asCalled){ const f = t.closest("[data-as-form]"); const outcome = f.querySelector('[name="outcome"]').value; return asDo({ action:"chaseCall", id: D.asCalled, outcome }, r => "Logged. Suggested next step: " + r.nextStep); }
+  if(D.asChaseclose) return asDo({ action:"chaseClose", id: D.asChaseclose }, "Chase closed.");
+  if(D.asPreview){ AS.preview = D.asPreview; render(); }
+});
+
 /* ---------- Cash flow (Craig's weekly method) ----------
    Read from /api/cashflow, worked out on the server (_cashflow.mjs). Room on
    the line, money in, money out, week by week, with what to pay, hold and
@@ -3122,6 +3351,8 @@ VIEWS.people = {
     h += '<div class="card"><h2>What each level can do</h2><p class="lede">Separate from what they see. A field lead can make changes in Field without seeing Money.</p><dl class="facts">' +
       ["view", "edit", "admin"].map(k => '<dt>' + E(LEVEL_INFO[k].label) + '</dt><dd>' + E(LEVEL_INFO[k].what) + '</dd>').join("") + '</dl></div>';
 
+    h += '<div class="card"><h2>Project assistant for staff</h2><p class="lede">Built and ready for project managers and field leads, but held back until Craig and Amir have used theirs and vouch for it. Preview it under Admin first.</p>' +
+      '<div class="ac-row"><span class="tag ' + (ADM.settings.projectAssistantLive ? "clear" : "mute") + '">' + (ADM.settings.projectAssistantLive ? "On for staff" : "Off for staff") + '</span><button class="btn ghost" data-ac-pmlive="' + (ADM.settings.projectAssistantLive ? "0" : "1") + '">' + (ADM.settings.projectAssistantLive ? "Switch off" : "Switch on for staff") + '</button></div></div>';
     h += '<div class="card"><h2>Signing out on its own</h2><p class="lede">A computer or phone left open asks for the password again after this long without use. Everybody, on every device.</p>' +
       '<div class="ac-row"><label class="fld"><span>Ask again after</span><select id="acIdle">' + ADM.idleChoices.map(n => '<option value="' + n + '"' + (n === ADM.settings.idleHours ? " selected" : "") + '>' + plural(n, "hour") + ' without use</option>').join("") + '</select></label>' +
       '<button class="btn ghost" data-ac-idle>Save</button></div><p class="sub" id="acIdleMsg"></p></div>';
@@ -3160,6 +3391,8 @@ function acForm(a){
     '<fieldset class="ac-set"><legend>Sees</legend>' + AREA_KEYS.map(k => '<label class="ac-check"><input type="checkbox" name="area" value="' + k + '"' + (a.areas.includes(k) ? " checked" : "") + '><span><b>' + E(AREA_INFO[k].label) + '</b> ' + E(AREA_INFO[k].what) + '</span></label>').join("") + '</fieldset>' +
     '<fieldset class="ac-set"><legend>Can do</legend>' + ["view", "edit", "admin"].map(k => '<label class="ac-check"><input type="radio" name="level" value="' + k + '"' + (a.level === k ? " checked" : "") + (me && k !== "admin" ? " disabled" : "") + '><span><b>' + E(LEVEL_INFO[k].label) + '</b> ' + E(LEVEL_INFO[k].what) + '</span></label>').join("") +
     (me ? '<p class="sub">You cannot take admin away from yourself. Another admin can.</p>' : '') + '</fieldset>' +
+    '<fieldset class="ac-set"><legend>Personal assistant</legend><label class="fld"><span>Assistant</span><select name="assistant">' + [["exec","Executive (leadership)"],["project","Project (PMs and field leads)"],["none","None"]].map(o => '<option value="' + o[0] + '"' + ((a.assistant || "none") === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
+      '<label class="fld"><span>Opens on</span><select name="landing"><option value="brief"' + (a.landing === "brief" ? " selected" : "") + '>My day</option><option value="overview"' + (a.landing !== "brief" ? " selected" : "") + '>Overview</option></select></label><p class="sub">The project assistant stays off for staff until it is switched on below the list of people.</p></fieldset>' +
     '<fieldset class="ac-set"><legend>Claude</legend><label class="ac-check"><input type="checkbox" name="claude"' + (a.claude ? " checked" : "") + '><span><b>Can ask Claude</b> Opens the Ask Claude panel on every page, which answers from what that person can already see. For people with a Claude account, it also hands the question over to their own Claude.</span></label></fieldset>' +
     '<div class="actions">' + (isNew ? '<button type="button" class="btn" data-ac-save="invite">Add and send an invite</button><button type="button" class="btn ghost" data-ac-save="temp">Add with a temporary password</button>' : '<button type="button" class="btn" data-ac-save>Save the changes</button>') + '</div>' +
     (isNew ? '<p class="sub">An invite emails them a link that works once, for seven days, to choose their own password. No password is ever emailed.</p>' : '') + '<p class="sub" id="acMsg" role="status"></p></form>';
@@ -3182,7 +3415,7 @@ function acOpen(id){
 function acRead(){
   const f = $("acForm"); const v = n => (f.querySelector('[name="' + n + '"]') || {}).value || "";
   const lv = f.querySelector('[name="level"]:checked');
-  return { name: v("name").trim(), email: v("email").trim(), title: v("title").trim(), areas: [...f.querySelectorAll('[name="area"]:checked')].map(x => x.value), level: lv ? lv.value : "", claude: !!(f.querySelector('[name="claude"]') || {}).checked };
+  return { name: v("name").trim(), email: v("email").trim(), title: v("title").trim(), areas: [...f.querySelectorAll('[name="area"]:checked')].map(x => x.value), level: lv ? lv.value : "", claude: !!(f.querySelector('[name="claude"]') || {}).checked, assistant: v("assistant") || "none", landing: v("landing") || "overview" };
 }
 function acTemp(a, temp, why){
   const first = a.name.split(" ")[0];
@@ -3797,10 +4030,14 @@ var ICONS = {
   clients:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
   scorecards:'<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
   chevron:'<path d="m6 9 6 6 6-6"/>',
-  viewas:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'
+  viewas:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  brief:'<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
+  pmpreview:'<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+  mic:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/>',
+  check:'<path d="M5 12l5 5L20 7"/>'
 };
 function ico(n, cls){ return ICONS[n] ? '<svg class="ico' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + ICONS[n] + '</svg>' : ""; }
-var SEC_ICO = { "":"overview", Office:"office", Field:"field", Assistants:"assistants", Admin:"admin" };
+var SEC_ICO = { "My day":"brief", "":"overview", Office:"office", Field:"field", Assistants:"assistants", Admin:"admin" };
 function kpiIco(label){
   const l = String(label).toLowerCase();
   return /cash/.test(l) ? "bank" : /owed to/.test(l) ? "up" : /owes/.test(l) ? "down" : /quote/.test(l) ? "quote" : /won/.test(l) ? "projects"
@@ -4041,6 +4278,7 @@ var CLAUDE = (function(){
   const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/></svg>';
   const CHIPS = {
     overview:["What needs me first today?", "Explain the top alert in plain words", "What does the SOP say happens next?"],
+    brief:["What should I do first today?", "What did I promise this week?", "Who am I waiting on?"],
     cashflow:["What can I pay this week?", "Who should I chase first?", "What if our biggest customer pays a week late?"],
     money:["Who should we chase for payment first?", "How far behind are we paying suppliers?", "Explain cash in the bank"],
     payroll:["What do I fix before payroll closes?", "Who still has hours to approve?", "Explain how the split works"],
