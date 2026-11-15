@@ -419,6 +419,128 @@ main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-p
 .asmail summary{cursor:pointer;padding:6px 0}.asmail ul{list-style:none;margin:0;padding:0}
 .asmail li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule)}.asmail .sm{font-size:11px;color:var(--ink-3)}
 .asmail .ac{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+/* My day, redesigned 2026-11-15 (Bruce: "squashed, hard to read").
+   Bigger type, room to breathe, one clear summary at the top, and the money
+   in a column of its own on a computer. On a phone everything stacks in the
+   order it matters: talk, check-in, list, money, inbox, jobs. */
+.md .card{border-radius:12px;padding:20px 22px}
+.md .card h2{font-size:18px;font-weight:700;letter-spacing:-.01em;text-transform:none;color:var(--ink);margin:0 0 4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.md .card .lede{font-size:14px;color:var(--ink-3);margin:0 0 14px;max-width:72ch;line-height:1.55}
+.md .card .sub{font-size:14px}
+.md-hero{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px 24px;margin:2px 0 18px}
+.md-eyebrow{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan-deep)}
+.md-hero h1{font-size:34px;font-weight:800;letter-spacing:-.025em;line-height:1.1;margin:6px 0 8px}
+.md-summary{font-size:17px;line-height:1.5;color:var(--ink-2);margin:0;max-width:62ch}
+.md-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 20px}
+.md-stat{display:block;text-align:left;font:inherit;color:inherit;background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+button.md-stat{cursor:pointer}button.md-stat:hover{border-color:var(--cyan)}
+.md-stat b{display:block;font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.md-stat span{display:block;font-size:13px;color:var(--ink-3);margin-top:3px}
+.md-stat.stop b{color:var(--stop)}.md-stat.good b{color:var(--clear)}
+.md-cols{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:20px;align-items:start}
+.md-cols.one{grid-template-columns:minmax(0,1fr)}
+.md-main,.md-side{display:flex;flex-direction:column;gap:18px;min-width:0}
+.md-count{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:700;background:var(--cyan-wash);color:var(--cyan-deep);font-variant-numeric:tabular-nums}
+.md-count.stop{background:var(--stop-wash);color:var(--stop)}
+/* talk */
+.md .asbar.md-talk{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center}
+.md-talk form{display:contents}
+.md .asbar .mic{height:56px;padding:0 24px;font-size:16px;border-radius:999px}
+.md .asbar input{font-size:17px;padding:0 16px;height:56px;border-radius:12px;min-width:0}
+.md .asbar .btn{height:56px;padding:0 22px;font-size:15px;border-radius:12px}
+.md .asbar .asmore{grid-column:1/-1;font-size:14px;display:flex;flex-wrap:wrap;gap:6px 18px}
+.md-status{grid-column:1/-1;margin:0;background:var(--cyan-wash);color:var(--cyan-deep);padding:10px 14px;border-radius:10px;font-size:14px;font-weight:600}
+/* check-in */
+.md-checkin{border-left:5px solid var(--cyan)!important}
+.md-checkin .when{font-size:13px;font-weight:600;color:var(--ink-3);margin-left:auto}
+.md-checkin p{font-size:16px;line-height:1.6;margin:0 0 8px}
+.md-checkin ol,.md-checkin ul{margin:4px 0 8px;padding-left:24px}
+.md-checkin li{font-size:16px;line-height:1.6;margin:0 0 4px}
+.md-checkin li::marker{color:var(--cyan-deep);font-weight:700}
+/* hit list */
+.md .aslist{margin-top:4px}
+.md .asit{grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 6px;border-bottom:1px solid var(--rule-soft);border-radius:8px}
+.md .asit:last-child{border-bottom:0}
+.md .asit.pin{background:var(--cyan-wash)}
+.md .asit .tick{width:32px;height:32px}
+.md .asit .tx b{display:block;font-size:16px;font-weight:700;line-height:1.35}
+.md-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.md-chip{display:inline-block;font-size:12px;font-weight:600;line-height:1.5;padding:1px 10px;border-radius:999px;background:var(--rule-soft);color:var(--ink-2)}
+.md-chip.stop{background:var(--stop-wash);color:var(--stop)}.md-chip.cy{background:var(--cyan-wash);color:var(--cyan-deep)}.md-chip.good{background:var(--clear-wash);color:var(--clear)}.md-chip.warn{background:var(--caution-wash);color:var(--caution)}
+.md .asit .ac{display:flex;gap:14px;white-space:nowrap}
+.md .asit .ac button{font-size:13px;color:var(--ink-3)}
+.md .asit .ac button:hover{color:var(--cyan-deep)}
+.md-empty{text-align:center;padding:22px 12px 10px;color:var(--ink-3);font-size:15px}
+.md-empty b{display:block;font-size:17px;color:var(--ink);margin-bottom:4px}
+.md-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--rule-soft);font-size:14px;color:var(--ink-3)}
+.md-pill{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 14px;cursor:pointer}
+.md-pill:hover{border-color:var(--cyan);color:var(--cyan-deep)}
+.md-pill.on{background:var(--ink);border-color:var(--ink);color:var(--panel)}
+.md-bar label{margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--ink-2)}
+.md-held{font-size:14px;color:var(--ink-2);background:var(--panel-2);border-radius:10px;padding:10px 14px;margin-top:10px}
+/* inbox */
+.md .asmail summary{font-size:16px;padding:10px 0}
+.md .asmail li{padding:12px 0;border-bottom:1px solid var(--rule-soft)}
+.md .asmail li b{font-size:15px}
+.md .asmail li div div{font-size:15px;margin:2px 0}
+.md .asmail .sm{font-size:13px}
+/* money and lists of rows */
+.md-big2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 14px}
+.md-big2>div{background:var(--panel-2);border-radius:10px;padding:12px 14px}
+.md-big2 b{display:block;font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.15;font-variant-numeric:tabular-nums}
+.md-big2 b.stop{color:var(--stop)}
+.md-big2 span{display:block;font-size:12px;color:var(--ink-3);margin-top:2px}
+.md-advice{margin:0 0 14px;padding-left:18px}
+.md-advice li{font-size:14px;line-height:1.55;margin:0 0 8px;color:var(--ink-2)}
+.md-sec{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:16px 0 2px;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3)}
+.md-sec:first-of-type{margin-top:6px}
+.md-sec b{font-size:17px;letter-spacing:-.01em;text-transform:none;color:var(--ink);font-variant-numeric:tabular-nums}
+.md-sec b.in{color:var(--clear)}
+.md-rows{list-style:none;margin:0;padding:0}
+.md-rows li{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--rule-soft)}
+.md-rows li:last-child{border-bottom:0}
+.md-rows li[data-job]{cursor:pointer}.md-rows li[data-job]:hover .nm{color:var(--cyan-deep)}
+.md-rows .nm{font-size:15px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.md-rows .nm small{display:block;font-size:12px;font-weight:400;color:var(--ink-3);margin-top:1px}
+.md-rows .amt{font-size:15px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.md-rows .more{justify-content:flex-start;color:var(--ink-3);font-size:13px}
+.md-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+/* done, not billed */
+.md-filter{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 6px}
+.md-filter .md-pill b{margin-left:6px;font-variant-numeric:tabular-nums}
+.md-job{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;gap:6px 18px;align-items:start;padding:14px 6px;border-bottom:1px solid var(--rule-soft)}
+.md-job:last-child{border-bottom:0}
+.md-job .jn{font-size:15px;font-weight:700;cursor:pointer}
+.md-job .jn:hover{color:var(--cyan-deep)}
+.md-job .jn small,.md-job .why small{display:block;font-size:13px;font-weight:400;color:var(--ink-3);margin-top:1px}
+.md-job .why{font-size:14px}
+.md-job .paper{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.md-job .paper .sm{font-size:12px;color:var(--ink-3)}
+.md-job .paper .sm.miss{display:inline-block;font-weight:600;line-height:1.5;padding:1px 10px;border-radius:999px;background:var(--stop-wash);color:var(--stop)}
+.md-job .act{text-align:right}
+@media (max-width:980px){
+  .md-cols{display:flex;flex-direction:column;gap:16px}
+  .md-main,.md-side{display:contents}
+  .md .o-chase{order:0}.md .o-talk{order:1}.md .o-check{order:2}.md .o-list{order:3}.md .o-cash{order:4}.md .o-inbox{order:5}.md .o-bank{order:6}.md .o-due{order:7}.md .o-jobs{order:8}.md .o-chases{order:9}
+}
+@media (max-width:620px){
+  .md .card{padding:16px}
+  .md-hero h1{font-size:27px}
+  .md-summary{font-size:16px}
+  .md-stats{grid-template-columns:1fr 1fr;gap:10px}
+  .md-stat{padding:12px 14px}.md-stat b{font-size:21px}.md-stat.md-wide{display:none}
+  .md .asbar.md-talk{grid-template-columns:auto minmax(0,1fr) auto;gap:8px}
+  .md .asbar .mic{width:52px;height:52px;padding:0;justify-content:center}
+  .md .asbar .mic span{display:none}
+  .md .asbar input{height:52px;font-size:16px}
+  .md .asbar .btn{height:52px;padding:0 16px}
+  .md .asit{grid-template-columns:auto minmax(0,1fr)}
+  .md .asit .ac{grid-column:2;gap:18px}
+  .md-job{grid-template-columns:1fr}
+  .md-job .act{text-align:left}
+  .md-bar label{margin-left:0;width:100%}
+}
+
 .row-btns{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.two .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 ul.plain{list-style:none;margin:4px 0 10px;padding:0}ul.plain li{padding:4px 0;border-bottom:1px solid var(--rule)}
@@ -1959,13 +2081,43 @@ function asDo(body, ok){
 }
 const AS_KIND = { todo:"To do", pay:"Pay", expect:"Coming in", call:"Call", ask:"Asked", chase:"Chase" };
 function asItem(it){
-  return '<li class="asit' + (it.pinned ? " pin" : "") + '"><button type="button" class="tick" data-as-tick="' + E(it.id) + '" aria-label="Done">' + ico("check") + '</button>' +
-    '<div class="tx"><b>' + E(it.text) + '</b><span class="sm">' + E([AS_KIND[it.kind] || "", it.who && !String(it.text).includes(it.who) ? it.who : "", it.amount ? M(it.amount) : "", it.due ? (it.due < iso(today()) ? "was due " : "due ") + it.due : "", it.source === "voice" ? "said" : it.source === "photo" ? "from your paper list" : it.source === "chase" ? "from a chase" : "", it.cfItemId ? "in the cash flow" : ""].filter(Boolean).join(" · ")) + '</span></div>' +
-    '<div class="ac"><button type="button" class="linkish" data-as-pin="' + E(it.id) + '">' + (it.pinned ? "Unpin" : "Top") + '</button> <button type="button" class="linkish" data-as-remove="' + E(it.id) + '">Remove</button></div></li>';
+  const past = it.due && it.due < iso(today());
+  const chips = [
+    AS_KIND[it.kind] ? '<span class="md-chip' + (it.kind === "pay" ? " warn" : it.kind === "expect" ? " good" : it.kind === "call" ? " cy" : "") + '">' + E(AS_KIND[it.kind]) + '</span>' : "",
+    it.amount ? '<span class="md-chip">' + E(M(it.amount)) + '</span>' : "",
+    it.due ? '<span class="md-chip' + (past ? " stop" : "") + '">' + (past ? "Was due " : "Due ") + E(mdDay(it.due)) + '</span>' : "",
+    it.who && !String(it.text).includes(it.who) ? '<span class="md-chip">' + E(it.who) + '</span>' : "",
+    it.source === "voice" ? '<span class="md-chip">You said it</span>' : it.source === "photo" ? '<span class="md-chip">From your paper list</span>' : it.source === "chase" ? '<span class="md-chip">From a chase</span>' : "",
+    it.cfItemId ? '<span class="md-chip cy">In the cash flow</span>' : ""
+  ].filter(Boolean).join("");
+  return '<li class="asit' + (it.pinned ? " pin" : "") + '"><button type="button" class="tick" data-as-tick="' + E(it.id) + '" aria-label="Done: ' + E(it.text) + '">' + ico("check") + '</button>' +
+    '<div class="tx"><b>' + E(it.text) + '</b>' + (chips ? '<div class="md-chips">' + chips + '</div>' : '') + '</div>' +
+    '<div class="ac"><button type="button" class="linkish" data-as-pin="' + E(it.id) + '">' + (it.pinned ? "Unpin" : "Move to top") + '</button><button type="button" class="linkish" data-as-remove="' + E(it.id) + '">Remove</button></div></li>';
+}
+/* "2026-11-21" as "Sat, Nov 21"; today and tomorrow by name. */
+function mdDay(d){
+  const t = iso(today()), x = dOnly(d); if(!x) return d;
+  if(d === t) return "today";
+  const tm = new Date(today()); tm.setDate(tm.getDate() + 1); if(d === iso(tm)) return "tomorrow";
+  return x.toLocaleDateString("en-CA", { weekday:"short", month:"short", day:"numeric" });
+}
+/* A check-in is plain text. Numbered lines become a numbered list, dashes a list. */
+function mdCheckinText(text){
+  const lines = String(text || "").split(/\n+/).map(l => l.trim()).filter(Boolean);
+  let h = "", list = null;
+  const close = () => { if(list){ h += "</" + list + ">"; list = null; } };
+  for(const l of lines){
+    const num = l.match(/^\d+[.)]\s+(.*)$/), dash = l.match(/^[-•*]\s+(.*)$/);
+    if(num){ if(list !== "ol"){ close(); h += "<ol>"; list = "ol"; } h += "<li>" + E(num[1]) + "</li>"; }
+    else if(dash){ if(list !== "ul"){ close(); h += "<ul>"; list = "ul"; } h += "<li>" + E(dash[1]) + "</li>"; }
+    else { close(); h += "<p>" + E(l) + "</p>"; }
+  }
+  close(); return h;
 }
 function asInbox(){
   const d = AS.data, ib = (AS.inbox && AS.inbox.inboxes) || d.inboxes || [];
-  let h = '<div class="card wide" data-tour="as-inbox"><h2>Your inbox</h2>';
+  const needN = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
+  let h = '<div class="card wide o-inbox" data-nofold data-tour="as-inbox"><h2>Your inbox' + (needN ? ' <span class="md-count stop">' + needN + ' need you</span>' : '') + '</h2>';
   if(d.triage && d.triage.hidden) return h + '<p class="lede">Their mail stays private. Only the master admin can see another person\'s mail.</p></div>';
   if(!ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what is someone else\'s (estimating mail stays out of your way). It drafts replies for you to check and send yourself. It never sends anything.</p>' +
     (AS.inbox && AS.inbox.ready === false ? '<div class="state wait">Google sign-in is not set up in Netlify yet.</div>' : '<button class="btn" data-as-connect>Connect my inbox</button>') + '</div>';
@@ -1981,28 +2133,42 @@ function asInbox(){
     group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", "Someone else's (estimating and the like)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true);
   return h + '</div>';
 }
-function asMoney(){
-  if(!CFG.qb) return "";
-  const cf = S.cf; let h = '<div class="card"><h2>Bank since you last looked</h2>';
+function asMoney(){ return mdCash() + mdBank() + mdDue(); }
+function mdCash(){
+  const cf = S.cf; let h = '<div class="card o-cash" data-nofold><h2>Cash flow</h2>';
+  if(!cf) return h + (S.cfErr ? failBox(S.cfErr, "Cash flow") : wait("the cash flow")) + '</div>';
+  const w = cf.weeks[0];
+  h += '<div class="md-big2"><div><b class="' + (cf.roomNow !== null && cf.roomNow < cf.floor ? "stop" : "") + '">' + M(cf.roomNow) + '</b><span>Room on the line now</span></div>' +
+    '<div><b class="' + (w.close !== null && w.close < 0 ? "stop" : "") + '">' + M(w.close) + '</b><span>End of this week</span></div></div>';
+  const lines = (cf.advice.lines || []).filter(l => !/^You start the week/.test(l)).slice(0, 3);
+  if(lines.length) h += '<ul class="md-advice">' + lines.map(l => '<li>' + E(l) + '</li>').join("") + '</ul>';
+  return h + '<button class="btn ghost" data-go="cashflow">Open Cash flow</button></div>';
+}
+function mdBank(){
+  let h = '<div class="card o-bank" data-nofold><h2>Bank since you last looked</h2>';
   if(!AS.bank && !AS.bankErr){ asCall("action=bank").then(b => { AS.bank = b; render(); }).catch(e => { AS.bankErr = e; render(); }); AS.bank = null; }
-  if(AS.bankErr) h += failBox(AS.bankErr, "Bank");
-  else if(!AS.bank) h += wait("payments since you last looked");
-  else { const b = AS.bank, tin = b.in.reduce((x, p) => x + p.amount, 0), tout = b.out.reduce((x, p) => x + p.amount, 0);
-    h += '<p class="lede">Since ' + E(b.since) + ', as recorded in QuickBooks. Brenda enters payments as they arrive; the BMO import is Danielle\'s, on Tuesdays.</p>' +
-      '<div class="two"><div><span class="k">In</span><div class="big num">' + M(tin) + '</div>' + b.in.slice(0, 6).map(p => '<div class="sm">' + E(p.name) + ' ' + M(p.amount) + ' · ' + E(p.date) + '</div>').join("") + '</div>' +
-      '<div><span class="k">Out</span><div class="big num">' + M(tout) + '</div>' + b.out.slice(0, 6).map(p => '<div class="sm">' + E(p.name) + ' ' + M(p.amount) + ' · ' + E(p.date) + '</div>').join("") + '</div></div>' +
-      (b.balances.length ? '<p class="sub">Balances you typed: ' + b.balances.map(x => E(x.date) + " " + M(x.amount)).join(", ") + '</p>' : '') +
-      '<button class="btn ghost sm" data-as-seenbank>I have looked</button>'; }
-  h += '</div>';
-  h += '<div class="card"><h2>Cash flow</h2>';
-  if(!cf) h += S.cfErr ? failBox(S.cfErr, "Cash flow") : wait("the cash flow");
-  else h += '<p class="lede">Room on the line now ' + M(cf.roomNow) + '. End of this week ' + M(cf.weeks[0].close) + '.</p>' + cf.advice.lines.slice(0, 4).map(l => '<p class="sub">' + E(l) + '</p>').join("") + '<button class="btn ghost sm" data-go="cashflow">Open Cash flow</button>';
-  h += '</div>';
-  const tb = S.jobs ? live().filter(j => TOBILL.includes(st(j))) : [];
-  const pay = cf ? cf.weeks[0].out.slice(0, 8) : [];
-  h += '<div class="card"><h2>Due this week</h2><p class="lede">To invoice at Thursday billing, and to pay.</p><h3>To invoice</h3>' + (tb.length ? '<ul class="plain">' + tb.slice(0, 8).map(j => '<li data-job="' + E(j._id) + '" tabindex="0">' + E(j._number + " " + (j._name || "")) + ' <span class="sm">' + E(st(j)) + '</span></li>').join("") + '</ul>' : '<p class="sub">Nothing finished and unbilled.</p>') +
-    '<h3>To pay</h3>' + (pay.length ? '<ul class="plain">' + pay.map(x => '<li>' + E(x.name) + ' <b class="num">' + M(x.amount) + '</b>' + (x.rolled ? ' <span class="tag caution">rolled</span>' : '') + '</li>').join("") + '</ul>' : '<p class="sub">Nothing planned.</p>') + '</div>';
-  return h;
+  if(AS.bankErr) return h + failBox(AS.bankErr, "Bank") + '</div>';
+  if(!AS.bank) return h + wait("payments since you last looked") + '</div>';
+  const b = AS.bank, tin = b.in.reduce((x, p) => x + p.amount, 0), tout = b.out.reduce((x, p) => x + p.amount, 0);
+  const rows = (list, n) => list.length ? '<ul class="md-rows">' + list.slice(0, n).map(p => '<li><span class="nm">' + E(p.name) + '<small>' + E(mdDay(p.date)) + '</small></span><span class="amt">' + M(p.amount) + '</span></li>').join("") +
+    (list.length > n ? '<li class="more">and ' + (list.length - n) + ' more</li>' : '') + '</ul>' : '<p class="sub">None.</p>';
+  h += '<p class="lede">Since ' + E(mdDay(b.since)) + ', as recorded in QuickBooks. The BMO import is Danielle\'s, on Tuesdays.</p>' +
+    '<div class="md-sec">Money in <b class="in">' + M(tin) + '</b></div>' + rows(b.in, 5) +
+    '<div class="md-sec">Money out <b>' + M(tout) + '</b></div>' + rows(b.out, 5) +
+    (b.balances.length ? '<p class="sub" style="margin-top:10px">Bank balance you typed for ' + b.balances.slice(-1).map(x => E(mdDay(x.date)) + ": " + M(x.amount)).join("") + '</p>' : '') +
+    '<div class="md-foot"><button class="btn ghost" data-as-seenbank>I have looked</button></div>';
+  return h + '</div>';
+}
+function mdDue(){
+  const cf = S.cf, tb = S.jobs ? live().filter(j => TOBILL.includes(st(j))) : [], pay = cf ? cf.weeks[0].out : [];
+  const ready = tb.filter(j => st(j) === "Invoicing"), rest = tb.filter(j => st(j) !== "Invoicing");
+  const list = ready.concat(rest), tpay = pay.reduce((x, p) => x + (p.amount || 0), 0);
+  let h = '<div class="card o-due" data-nofold><h2>Due this week</h2><p class="lede">To invoice at Thursday billing, and to pay.</p>';
+  h += '<div class="md-sec">To invoice <b>' + list.length + '</b></div>' + (list.length ? '<ul class="md-rows">' + list.slice(0, 6).map(j => '<li data-job="' + E(j._id) + '" tabindex="0"><span class="nm">' + E(j._number) + ' ' + E(j._name || "") + '<small>' + E((AS_WAIT[st(j)] || [st(j)])[0]) + '</small></span></li>').join("") +
+    (list.length > 6 ? '<li class="more">and ' + (list.length - 6) + ' more, under Done, not billed</li>' : '') + '</ul>' : '<p class="sub">Nothing finished and unbilled.</p>');
+  h += '<div class="md-sec">To pay <b>' + M(tpay) + '</b></div>' + (pay.length ? '<ul class="md-rows">' + pay.slice(0, 8).map(x => '<li><span class="nm">' + E(x.name) + (x.rolled ? '<small>Rolled from an earlier week</small>' : '') + '</span><span class="amt">' + M(x.amount) + '</span></li>').join("") +
+    (pay.length > 8 ? '<li class="more">and ' + (pay.length - 8) + ' more on Cash flow</li>' : '') + '</ul>' : '<p class="sub">Nothing planned.</p>');
+  return h + '</div>';
 }
 /* Closeout checks from JobTread (quotes, POs, bills, last day worked) for
    jobs that have finished on site. See netlify/functions/_closeout.mjs. */
@@ -2016,7 +2182,7 @@ function coFor(jobs){
 }
 function coCell(j){
   const c = CO.data[j._id]; if(!c) return '<span class="sm">Checking JobTread…</span>';
-  return (c.ok ? '<span class="tag clear">Paperwork in</span>' : c.missing.map(m => '<span class="sm">' + E(m) + '</span>').join("")) +
+  return (c.ok ? '<span class="tag clear">Paperwork in</span>' : c.missing.map(m => '<span class="sm miss">' + E(m) + '</span>').join("")) +
     (c.finished ? '<span class="sm">Last worked ' + E(c.finished) + (c.late ? ', <b>past the 7 days</b>' : '') + '. Billing ' + E(c.billing) + '</span>' : '');
 }
 function coUpload(j){
@@ -2038,23 +2204,42 @@ document.addEventListener("change", ev => {
 });
 /* Jobs that cannot be invoiced yet, why, and who they wait on (Amir). */
 const AS_WAIT = { "Loose Ends Required":["Loose ends on site","Site supervisor"], "Job Complete by A&M":["Finished; costs and paperwork into JobTread","Project manager"], "PM Approvals":["Waiting on the PM's approval","Project manager"], "Invoicing":["Ready for Thursday billing","Office"], "Job Post Mortem":["Invoiced; post mortem due","Project manager"] };
+const AS_ORDER = ["Invoicing", "PM Approvals", "Job Complete by A&M", "Loose Ends Required", "Job Post Mortem"];
 function asJobs(){
   if(!S.jobs) return "";
   const chases = (AS.data && AS.data.chases) || [];
   const byJob = id => chases.filter(c => c.jobId === id);
-  const stuck = live().filter(j => TOBILL.includes(st(j)) || st(j) === "Job Post Mortem");
+  const stuck = live().filter(j => TOBILL.includes(st(j)) || st(j) === "Job Post Mortem")
+    .sort((x, y) => (AS_ORDER.indexOf(st(x)) + 9) % 9 - (AS_ORDER.indexOf(st(y)) + 9) % 9);
   coFor(stuck.filter(j => TOBILL.includes(st(j))));
-  const rows = stuck.map(j => { const w = AS_WAIT[st(j)] || [st(j), ""]; const ch = byJob(j._id);
-    return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(w[0]) + '<span class="sm">Waiting on ' + E(w[1] === "Project manager" && pm(j) ? pm(j) : w[1]) + '</span></td><td>' + (TOBILL.includes(st(j)) ? coCell(j) : '<span class="sm">Post mortem after Thursday\'s invoice meeting</span>') + '</td><td>' + (ch.length ? ch.map(c => '<span class="tag ' + (c.step === "call" ? "stop" : "caution") + '">' + E(c.status) + '</span>').join(" ") : '<button type="button" class="linkish" data-as-chasefor="' + E(j._id) + '">Chase</button>') + '</td></tr>'; });
+  const counts = {}; stuck.forEach(j => counts[st(j)] = (counts[st(j)] || 0) + 1);
+  const pick = AS.jobsWhy && counts[AS.jobsWhy] ? AS.jobsWhy : "";
+  const shown = stuck.filter(j => !pick || st(j) === pick), lim = AS.jobsAll ? shown.length : 8;
   const won = live().filter(j => POST.includes(st(j)) && !TOBILL.includes(st(j)));
-  return '<div class="card wide" data-tour="as-jobs"><h2>Done, not billed</h2><p class="lede">Every job that cannot be invoiced yet, why, and who it is waiting on. Press Chase when a site or a subcontractor owes something: your assistant drafts a note each day for three days, then tells you to call.</p>' +
-    tbl('<th>Job</th><th>Why it is stuck</th><th>Paperwork in JobTread</th><th>Chase</th>', rows, "Nothing is stuck.") + '<p class="sub">' + plural(won.length, "more job is", "more jobs are") + ' won and not finished. <button class="linkish" data-go="projects">See them on Projects</button></p></div>';
+  const row = j => { const w = AS_WAIT[st(j)] || [st(j), ""]; const ch = byJob(j._id);
+    return '<div class="md-job"><div class="jn" data-job="' + E(j._id) + '" tabindex="0">' + E(j._number) + ' ' + E(j._name || "") + '<small>' + E([j._cust, pm(j) ? "PM " + pm(j) : ""].filter(Boolean).join(" · ")) + '</small></div>' +
+      '<div class="why">' + E(w[0]) + '<small>Waiting on ' + E(w[1] === "Project manager" && pm(j) ? pm(j) : w[1]) + '</small></div>' +
+      '<div class="act">' + (ch.length ? ch.map(c => '<span class="md-chip ' + (c.step === "call" ? "stop" : "warn") + '">' + E(c.status) + '</span>').join(" ") : '<button type="button" class="btn ghost sm" data-as-chasefor="' + E(j._id) + '">Chase</button>') + '</div>' +
+      '<div class="paper">' + (TOBILL.includes(st(j)) ? coCell(j) : '<span class="sm">Post mortem after Thursday\'s invoice meeting</span>') + '</div></div>'; };
+  return '<div class="card o-jobs" data-nofold data-tour="as-jobs"><h2>Done, not billed <span class="md-count">' + stuck.length + '</span></h2>' +
+    '<p class="lede">Finished jobs that cannot be invoiced yet, closest to billing first. Press Chase when a site or a subcontractor owes something: your assistant drafts a note each day for three days, then tells you to call.</p>' +
+    (stuck.length ? '<div class="md-filter"><button type="button" class="md-pill' + (pick ? "" : " on") + '" data-as-why="">All<b>' + stuck.length + '</b></button>' +
+      AS_ORDER.filter(k => counts[k]).map(k => '<button type="button" class="md-pill' + (pick === k ? " on" : "") + '" data-as-why="' + E(k) + '">' + E(AS_WAIT[k][0]) + '<b>' + counts[k] + '</b></button>').join("") + '</div>' +
+      shown.slice(0, lim).map(row).join("") +
+      (shown.length > lim ? '<div class="md-foot"><button type="button" class="btn ghost" data-as-jobsall>Show all ' + shown.length + '</button></div>' : '')
+    : '<div class="md-empty"><b>Nothing is stuck.</b>Every finished job is billed.</div>') +
+    '<p class="sub" style="margin-top:12px">' + plural(won.length, "more job is", "more jobs are") + ' won and not finished. <button class="linkish" data-go="projects">See them on Projects</button></p></div>';
 }
+document.addEventListener("click", ev => {
+  const w = ev.target.closest && ev.target.closest("[data-as-why],[data-as-jobsall]"); if(!w) return;
+  if(w.dataset.asJobsall !== undefined) AS.jobsAll = true; else { AS.jobsWhy = w.dataset.asWhy; AS.jobsAll = false; }
+  render();
+});
 function asChaseForm(){
   const j = AS.chaseFor && (S.jobs || []).find(x => x._id === AS.chaseFor);
   if(!AS.chaseFor) return "";
   const ib = (AS.inbox && AS.inbox.inboxes) || [];
-  return '<div class="card wide" data-as-form><h2>Start a chase' + (j ? ': ' + E(j._number + " " + (j._name || "")) : '') + '</h2><div class="cfform">' +
+  return '<div class="card wide o-chase" data-nofold data-as-form><h2>Start a chase' + (j ? ': ' + E(j._number + " " + (j._name || "")) : '') + '</h2><div class="cfform">' +
     '<label>Who owes it<input name="who" placeholder="Name, company"></label><label>Their email<input name="email" type="email" placeholder="name@company.com"></label>' +
     '<label class="wide">What is missing<input name="what" placeholder="the signed site safety plan"></label>' +
     '<label>Draft from<select name="from"><option value="me"' + (ib.length ? "" : " disabled") + '>My own inbox' + (ib.length ? "" : " (connect it first)") + '</option><option value="robots"' + (ib.length ? "" : " selected") + '>The robots\' mailbox (replies come to me)</option></select></label>' +
@@ -2062,7 +2247,7 @@ function asChaseForm(){
 }
 function asChases(){
   const list = (AS.data && AS.data.chases) || []; if(!list.length) return "";
-  return '<div class="card wide"><h2>Chases</h2>' + tbl('<th>Who and what</th><th>Status</th><th></th>', list.map(c => '<tr><td><b>' + E(c.who) + '</b>: ' + E(c.what) + (c.jobNumber ? '<span class="sm">Job ' + E(c.jobNumber + " " + c.jobName) + '</span>' : '') + '</td><td>' + E(c.status) + (c.nextStep ? '<span class="sm">Next: ' + E(c.nextStep) + '</span>' : '') + (c.lastError ? '<span class="sm">' + E(c.lastError) + '</span>' : '') + '</td><td>' +
+  return '<div class="card wide o-chases" data-nofold><h2>Chases <span class="md-count">' + list.length + '</span></h2>' + tbl('<th>Who and what</th><th>Status</th><th></th>', list.map(c => '<tr><td><b>' + E(c.who) + '</b>: ' + E(c.what) + (c.jobNumber ? '<span class="sm">Job ' + E(c.jobNumber + " " + c.jobName) + '</span>' : '') + '</td><td>' + E(c.status) + (c.nextStep ? '<span class="sm">Next: ' + E(c.nextStep) + '</span>' : '') + (c.lastError ? '<span class="sm">' + E(c.lastError) + '</span>' : '') + '</td><td>' +
     (c.step === "call" ? '<div data-as-form><input name="outcome" placeholder="How did the call go?" style="font:inherit;padding:5px;border:1px solid var(--rule);border-radius:6px"><button type="button" class="btn ghost sm" data-as-called="' + E(c.id) + '">Log the call</button></div>' : '') + '<button type="button" class="linkish" data-as-chaseclose="' + E(c.id) + '">Close</button></td></tr>')) + '</div>';
 }
 /* The project assistant: closeout for the jobs a PM runs (7-day rule before Thursday billing). */
@@ -2072,7 +2257,7 @@ function asProject(name){
   const mine = live().filter(j => !first || (pm(j) || "").toLowerCase() === first.toLowerCase());
   const close = mine.filter(j => stageOf(st(j)) === "close");
   coFor(close.filter(j => st(j) !== "Job Post Mortem"));
-  return '<div class="card wide" data-tour="as-closeout"><h2>Closeout</h2><p class="lede">Every purchase order, approved quote and subcontractor invoice goes into JobTread within 7 days of the job finishing, before Thursday billing. Post mortems run straight after the Thursday invoice meeting. Add a document from your phone and it lands in the job\'s Files in JobTread. Site photos go in Encircle, which keeps them for the job.</p>' +
+  return '<div class="card wide o-jobs" data-nofold data-tour="as-closeout"><h2>Closeout</h2><p class="lede">Every purchase order, approved quote and subcontractor invoice goes into JobTread within 7 days of the job finishing, before Thursday billing. Post mortems run straight after the Thursday invoice meeting. Add a document from your phone and it lands in the job\'s Files in JobTread. Site photos go in Encircle, which keeps them for the job.</p>' +
     (CO.err ? failBox(CO.err, "Closeout checks") : '') +
     tbl('<th>Job</th><th>Status</th><th>Paperwork in JobTread</th><th></th>', close.map(j => '<tr><td data-job="' + E(j._id) + '" tabindex="0">' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + (st(j) === "Job Post Mortem" ? '<span class="sm">Post mortem after Thursday\'s invoice meeting</span>' : coCell(j)) + '</td><td>' + coUpload(j) + '</td></tr>'), "Nothing closing out.") + '</div>';
 }
@@ -2087,30 +2272,51 @@ VIEWS.brief = {
     if(needs) a.push({ lvl:"info", text: plural(needs, "email needs", "emails need") + " you.", meta:"Under Your inbox." });
     return a; },
   render(){
-    const first = S.meName || "";
-    let h = head((new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening") + (first ? ", " + first : ""), "Your day: your list, your mail and the things only you can do. Ask Claude still answers anything about the command centre.");
-    h += '<div class="actions"><button class="btn ghost sm" data-walk="myday">' + ico("tour") + 'Walk me through it</button></div>';
-    if(AS.err) return h + failBox(AS.err, "My day");
-    if(!AS.data){ if(!AS.loading) asLoad(); return h + wait("your day"); }
-    const d = AS.data, c = (d.checkins || [])[0];
-    h += '<div class="asbar card wide" data-tour="as-talk"><button type="button" class="mic' + (AS.listening ? " on" : "") + '" data-as-talk aria-label="Talk">' + ico("mic") + '<span>' + (AS.listening ? "Listening…" : "Talk") + '</span></button>' +
-      '<form data-as-say onsubmit="return false"><input id="asText" placeholder="Put this on my list… or: I just paid Aces" autocomplete="off"><button type="submit" class="btn">Add</button></form>' +
-      '<div class="asmore"><button type="button" class="linkish" data-as-log>Log a walk-in or call</button> · <label class="linkish">Photo of a paper list<input type="file" accept="image/*" capture="environment" data-as-photo hidden></label></div>' +
-      (AS.msg ? '<p class="sub" role="status">' + E(AS.msg) + '</p>' : '') + (d.claude ? '' : '<p class="sub">Claude is not set up, so sayings are read simply and photos cannot be read.</p>') + '</div>';
-    if(c) h += '<div class="card wide ascheck"><h2>' + E({ morning:"This morning", noon:"Noon check-in", end:"End of day" }[c.slot] || "Check-in") + ' <span class="sm">' + E(showWhen(c.at)) + '</span></h2><pre>' + E(c.text) + '</pre></div>';
-    h += '<div class="grid"><div class="card wide" data-tour="as-list"><h2>Your hit list</h2><p class="lede">Most pressing first. Tick it when it is done; it drops off and, if it is a payment, the cash flow updates.</p>' +
-      ((d.open || []).length ? '<ol class="aslist">' + d.open.map(asItem).join("") + '</ol>' : '<p class="sub">Nothing on your list.</p>') +
-      ((d.held || []).length ? '<p class="sub"><b>Logged today, joins at the next check-in:</b> ' + d.held.map(x => E(x.text)).join("; ") + '</p>' : '') +
-      ((d.doneToday || []).length ? '<details><summary class="sm">Done today (' + d.doneToday.length + ')</summary><ul class="plain">' + d.doneToday.map(x => '<li>' + E(x.text) + (x.doneWhy ? ' <span class="sm">' + E(x.doneWhy) + '</span>' : '') + ' <button class="linkish" data-as-untick="' + E(x.id) + '">Undo</button></li>').join("") + '</ul></details>' : '') +
-      '<div class="row-btns" data-tour="as-checkins"><span class="sm">Check in now:</span><button class="linkish" data-as-checkin="morning">Morning</button><button class="linkish" data-as-checkin="noon">Noon</button><button class="linkish" data-as-checkin="end">End of day</button>' +
-      '<label class="sm" style="margin-left:auto"><input type="checkbox" data-as-emailme' + (d.settings.emailCheckins === false ? "" : " checked") + '> Email me each check-in</label></div></div></div>';
-    h += asInbox();
-    if(d.role === "exec"){
-      if(CFG.qb) h += '<div class="grid">' + asMoney() + '</div>';
-      if(ME.areas.includes("field") || ME.areas.includes("office")) h += asChaseForm() + asJobs();
-    } else h += asChaseForm() + asProject(ME.name);
-    h += asChases();
-    return h;
+    const first = S.meName || "", hr = new Date().getHours();
+    const hello = (hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening") + (first ? ", " + first : "");
+    const dateLine = new Date().toLocaleDateString("en-CA", { weekday:"long", month:"long", day:"numeric" });
+    const top = s => '<div class="md-hero"><div><div class="md-eyebrow">' + E(dateLine) + '</div><h1>' + E(hello) + '</h1><p class="md-summary">' + s + '</p></div>' +
+      '<button class="btn ghost" data-walk="myday">' + ico("tour") + 'Walk me through it</button></div>';
+    if(AS.err) return '<div class="md">' + top("Your day could not be read just now.") + failBox(AS.err, "My day") + '</div>';
+    if(!AS.data){ if(!AS.loading) asLoad(); return '<div class="md">' + top("Getting your day ready…") + wait("your day") + '</div>'; }
+    const d = AS.data, c = (d.checkins || [])[0], open = d.open || [];
+    const over = open.filter(x => x.due && x.due < iso(today())).length;
+    const needs = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
+    const calls = (d.chases || []).filter(x => x.step === "call").length;
+    const exec = d.role === "exec", cf = S.cf;
+    const said = [open.length ? plural(open.length, "thing") + " on your list" + (over ? ", " + over + " past due" : "") + "." : "Your list is clear.",
+      needs ? plural(needs, "email needs", "emails need") + " you." : "",
+      calls ? plural(calls, "chase is", "chases are") + " ready for a phone call." : ""].filter(Boolean).join(" ");
+    let h = '<div class="md">' + top(E(said));
+    const stats = [
+      '<div class="md-stat"><b>' + open.length + '</b><span>On your list</span></div>',
+      '<div class="md-stat' + (over ? " stop" : " good") + '"><b>' + over + '</b><span>Past due</span></div>',
+      d.triage && !d.triage.hidden && (d.inboxes || []).length ? '<div class="md-stat' + (needs ? " stop" : "") + '"><b>' + needs + '</b><span>' + (needs === 1 ? "Email needs you" : "Emails need you") + '</span></div>' : '',
+      exec && CFG.qb && cf ? '<button type="button" class="md-stat' + (cf.roomNow !== null && cf.roomNow < cf.floor ? " stop" : "") + '" data-go="cashflow"><b>' + M(cf.roomNow) + '</b><span>Room on the line</span></button>' : '',
+      exec && CFG.qb && cf ? '<button type="button" class="md-stat md-wide' + (cf.weeks[0].close < 0 ? " stop" : "") + '" data-go="cashflow"><b>' + M(cf.weeks[0].close) + '</b><span>End of this week</span></button>' : ''
+    ].filter(Boolean);
+    h += '<div class="md-stats">' + stats.join("") + '</div>';
+    let main = asChaseForm();
+    main += '<div class="card asbar md-talk o-talk" data-nofold data-tour="as-talk"><button type="button" class="mic' + (AS.listening ? " on" : "") + '" data-as-talk aria-label="Talk">' + ico("mic") + '<span>' + (AS.listening ? "Listening…" : "Talk") + '</span></button>' +
+      '<form data-as-say onsubmit="return false"><input id="asText" placeholder="' + (window.innerWidth < 620 ? "Type here, or tap the mic" : "Put this on my list… or: I just paid Aces") + '" autocomplete="off" aria-label="Tell your assistant"><button type="submit" class="btn">Add</button></form>' +
+      '<div class="asmore"><button type="button" class="linkish" data-as-log>Log a walk-in or call</button><label class="linkish">Photo of a paper list<input type="file" accept="image/*" capture="environment" data-as-photo hidden></label></div>' +
+      (AS.msg ? '<p class="md-status" role="status">' + E(AS.msg) + '</p>' : '') + (d.claude ? '' : '<p class="sub" style="grid-column:1/-1">Claude is not set up, so sayings are read simply and photos cannot be read.</p>') + '</div>';
+    if(c) main += '<div class="card md-checkin o-check" data-nofold><h2>' + E({ morning:"This morning's check-in", noon:"Noon check-in", end:"End of day check-in" }[c.slot] || "Check-in") + '<span class="when">' + E(showWhen(c.at)) + '</span></h2>' + mdCheckinText(c.text) + '</div>';
+    main += '<div class="card o-list" data-nofold data-tour="as-list"><h2>Your hit list' + (open.length ? ' <span class="md-count">' + open.length + '</span>' : '') + '</h2><p class="lede">Most pressing first. Tick it when it is done. If it is a payment, the cash flow updates too.</p>' +
+      (open.length ? '<ol class="aslist">' + open.map(asItem).join("") + '</ol>' : '<div class="md-empty"><b>Nothing on your list.</b>Say or type something above, and it lands here.</div>') +
+      ((d.held || []).length ? '<div class="md-held"><b>Logged today, joins at the next check-in:</b> ' + d.held.map(x => E(x.text)).join("; ") + '</div>' : '') +
+      ((d.doneToday || []).length ? '<details style="margin-top:10px"><summary class="sm">Done today (' + d.doneToday.length + ')</summary><ul class="plain">' + d.doneToday.map(x => '<li>' + E(x.text) + (x.doneWhy ? ' <span class="sm">' + E(x.doneWhy) + '</span>' : '') + ' <button class="linkish" data-as-untick="' + E(x.id) + '">Undo</button></li>').join("") + '</ul></details>' : '') +
+      '<div class="md-bar" data-tour="as-checkins"><span>Check in now:</span><button class="md-pill" data-as-checkin="morning">Morning</button><button class="md-pill" data-as-checkin="noon">Noon</button><button class="md-pill" data-as-checkin="end">End of day</button>' +
+      '<label><input type="checkbox" data-as-emailme' + (d.settings.emailCheckins === false ? "" : " checked") + '> Email me each check-in</label></div></div>';
+    main += asInbox();
+    let side = "";
+    if(exec){
+      if(CFG.qb) side += asMoney();
+      if(ME.areas.includes("field") || ME.areas.includes("office")) main += asJobs();
+    } else main += asProject(ME.name);
+    main += asChases();
+    h += '<div class="md-cols' + (side ? "" : " one") + '"><div class="md-main">' + main + '</div>' + (side ? '<div class="md-side">' + side + '</div>' : '') + '</div>';
+    return h + '</div>';
   }
 };
 /* The project assistant, as staff will see it, for admins while it is off. */
