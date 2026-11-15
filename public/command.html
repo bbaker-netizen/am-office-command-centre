@@ -678,7 +678,7 @@ button,input,select,textarea,optgroup{font-family:inherit}
   background:var(--bg);color:#1a1917;border-radius:3px 3px 14px 3px;transform:rotate(var(--r));
   box-shadow:0 1px 1px rgba(26,25,23,.12),0 10px 18px -10px rgba(26,25,23,.45),inset 0 -14px 18px -16px rgba(26,25,23,.25);
   cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;transition:box-shadow .18s ease,transform .18s ease}
-.nb-note::before{content:"";position:absolute;top:-9px;left:50%;width:82px;height:22px;transform:translateX(-50%) rotate(-2deg);background:rgba(50,157,187,.55);box-shadow:0 1px 2px rgba(26,25,23,.15);border-left:1px dashed rgba(255,255,255,.5);border-right:1px dashed rgba(255,255,255,.5)}
+.nb-note::before{content:"";position:absolute;top:-9px;left:45%;width:82px;height:22px;transform:translateX(-50%) rotate(-2deg);background:rgba(50,157,187,.55);box-shadow:0 1px 2px rgba(26,25,23,.15);border-left:1px dashed rgba(255,255,255,.5);border-right:1px dashed rgba(255,255,255,.5)}
 .nb-note:hover{box-shadow:0 1px 1px rgba(26,25,23,.12),0 16px 26px -12px rgba(26,25,23,.5),inset 0 -14px 18px -16px rgba(26,25,23,.25)}
 .nb-note:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
 .nb-note.lift{cursor:grabbing;transform:rotate(0deg) scale(1.05);box-shadow:0 2px 3px rgba(26,25,23,.15),0 28px 40px -14px rgba(26,25,23,.55);transition:none;z-index:9999!important}
@@ -2487,7 +2487,7 @@ function nbNote(n, flow){
     '<button type="button" data-nb-del aria-label="Throw it away" title="Throw it away">✕</button></div>';
   return '<div class="nb-note c-' + E(n.colour) + (NB.fresh === n.id ? " new" : "") + (NB.pal === n.id ? " pal" : "") + '" data-nb="' + E(n.id) + '" tabindex="0" role="note" aria-label="' + E(n.text) + '" style="--x:' + Number(pos.x) + ';top:' + Number(pos.y) + 'px;--r:' + (Number(n.rot) || 0) + 'deg;z-index:' + (Number(n.z) || 1) + '">' +
     (ed ? '<textarea class="nb-edit" id="nbEdit" maxlength="400" aria-label="Change the note">' + E(n.text) + '</textarea>' : '<div class="nb-text' + (n.text.length > 70 ? " long" : "") + '">' + E(n.text) + '</div>') +
-    '<span class="nb-meta">' + E(nbDay(n.at)) + (n.source === "voice" ? " · said" : "") + '</span>' + tools + '</div>';
+    '<span class="nb-meta"' + (n.source === "voice" ? ' title="Said out loud"' : '') + '>' + E(nbDay(n.at)) + '</span>' + tools + '</div>';
 }
 VIEWS.notes = {
   hold(){ if(NB.force) return false; const a = document.activeElement; return !!(NB.drag || NB.editing || (a && a.id === "nbText" && a.value)); },
