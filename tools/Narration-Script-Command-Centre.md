@@ -324,3 +324,7 @@ Payroll now builds the workbook for Danielle: wages split by city and division, 
 ## new-done
 
 That's it! My day and Cash flow each have a Walk me through it button if you want the longer version. Enjoy!
+
+## notes
+
+Sticky notes is your own board, so the paper notes can come off your monitor. Type a note or press Talk and say it, pick a colour, and it sticks to the board. Drag it anywhere, tap the words to change them, and Tidy up lines them all up.
