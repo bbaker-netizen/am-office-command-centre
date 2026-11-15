@@ -240,3 +240,89 @@ The first time, open Payroll settings and pick the QuickBooks account for each b
 > Closing step of the payroll walkthrough.
 
 That's it! Check the box at the top, download or post, and you're done. If anything looks off, press the round Claude button and ask, or press Walk me through it to see this again.
+
+---
+
+# Added 2026-11-15: My day, Cash flow, View as and what is new
+
+The captions on screen can add the person's name after "Hi"; the clips do not.
+
+## myday
+
+My day is your own assistant. It checks in at seven, at noon and at five with what needs you, keeps your hit list in order, and sorts your work inbox into reply drafts that you check and send yourself. It never sends anything on its own. Talk or type to it here. On an iPhone, tap the box and use the microphone on your keyboard. Walk me through it, on that page, shows you the rest.
+
+## cashflow
+
+Cash flow follows Craig's weekly method: room on the line of credit now, money in and money out each week, and where it lands four weeks out. The advice underneath says what to pay and what to hold. Tick a payment once it goes out, and the weeks update.
+
+## viewas
+
+View as shows you the command centre exactly as someone else sees it, so you can check their access or help them over the phone. It is look only: nothing can be saved, sent or changed. Their email stays private.
+
+## md-intro
+
+Hi! This is your own assistant. It keeps one list of what needs you, in order, and checks in three times a day. Let's walk through it once.
+
+## md-talk
+
+Say or type anything here, like: call Integricon about the holdback on Friday, or: I just paid Aces. It goes on your list, or ticks off what you've done. On an iPhone, tap the box and press the microphone on your keyboard, then press Add. Log a walk-in keeps a note of a visitor or a call, and Photo of a paper list reads a handwritten list onto this one.
+
+## md-list
+
+This is your hit list, most pressing first. Press the tick when something is done and it drops off. If it was a payment, the cash flow updates too. Done today, at the bottom, lets you undo a tick.
+
+## md-checkins
+
+At seven, noon and five on weekdays, your assistant looks at everything again and writes you a short check-in. It shows at the top of this page, and it's emailed to you unless you untick that box. You can also ask for one now.
+
+## md-inbox
+
+Connect your own work inbox here, once. Your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what belongs to someone else. It writes reply drafts that sit in your Gmail drafts. You read them and send them yourself. It never sends anything, and nobody else sees your mail.
+
+## md-jobs
+
+Done, not billed lists every finished job that can't be invoiced yet, and why: a missing purchase order, a quote not approved, or a supplier bill still to come. Press Chase when someone owes us something. Your assistant drafts a note each day for three days, then tells you to pick up the phone.
+
+## md-closeout
+
+Closeout keeps finished jobs on track for Thursday billing. Every purchase order, approved quote and subcontractor invoice goes into JobTread within seven days. Add a document from your phone and it lands in the job's Files in JobTread. Site photos go in Encircle.
+
+## md-done
+
+That's it! Talk to it, tick things off, and read the check-ins. If something looks off, press the round Claude button and ask, or press Walk me through it to see this again.
+
+## cf-intro
+
+Hi! This page is Craig's weekly cash flow sheet, kept up to date for you. Money owed to us and by us comes from QuickBooks. The planned payments, like payroll, WCB and loans, are kept here. Let's walk through it once.
+
+## cf-top
+
+The first number is room on the line of credit right now: the bank balance plus the seven hundred and fifty thousand dollar overdraft. Next is where it ends this week, and where it ends four weeks out. The last one is: if everyone paid me today, and I paid everyone. Type Sunday's bank balance under Money, Cash position, so the weeks start from a real number.
+
+## cf-advice
+
+This is the plain advice. It finds the tightest week ahead and says what to pay now and what to hold, so the line never goes over and your reserve is kept every week.
+
+## cf-view
+
+Switch between this week, line by line, and all four weeks side by side. Tick a payment once it has gone out. Anything not ticked by the end of its week rolls into the next week, so nothing quietly disappears.
+
+## cf-plan
+
+Open Planned payments to add, change or remove the regular lines: payroll, source deductions, WCB, insurance, loans. Lines marked Check were copied from the sheet and want a second look.
+
+## cf-done
+
+That's it! Glance at the top numbers, read the advice, and tick payments as they go. Ask Claude can go deeper, for example: what if a client pays a week late?
+
+## new-intro
+
+Hi! A few new things have arrived in the command centre. This takes about a minute.
+
+## new-payroll
+
+Payroll now builds the workbook for Danielle: wages split by city and division, with overtime counted at time and a half, and expenses split the same way. Press Workbook for Danielle at the top.
+
+## new-done
+
+That's it! My day and Cash flow each have a Walk me through it button if you want the longer version. Enjoy!

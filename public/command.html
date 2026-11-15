@@ -1965,7 +1965,7 @@ function asItem(it){
 }
 function asInbox(){
   const d = AS.data, ib = (AS.inbox && AS.inbox.inboxes) || d.inboxes || [];
-  let h = '<div class="card wide"><h2>Your inbox</h2>';
+  let h = '<div class="card wide" data-tour="as-inbox"><h2>Your inbox</h2>';
   if(d.triage && d.triage.hidden) return h + '<p class="lede">Their mail stays private. Only the master admin can see another person\'s mail.</p></div>';
   if(!ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what is someone else\'s (estimating mail stays out of your way). It drafts replies for you to check and send yourself. It never sends anything.</p>' +
     (AS.inbox && AS.inbox.ready === false ? '<div class="state wait">Google sign-in is not set up in Netlify yet.</div>' : '<button class="btn" data-as-connect>Connect my inbox</button>') + '</div>';
@@ -2047,7 +2047,7 @@ function asJobs(){
   const rows = stuck.map(j => { const w = AS_WAIT[st(j)] || [st(j), ""]; const ch = byJob(j._id);
     return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td>' + E(w[0]) + '<span class="sm">Waiting on ' + E(w[1] === "Project manager" && pm(j) ? pm(j) : w[1]) + '</span></td><td>' + (TOBILL.includes(st(j)) ? coCell(j) : '<span class="sm">Post mortem after Thursday\'s invoice meeting</span>') + '</td><td>' + (ch.length ? ch.map(c => '<span class="tag ' + (c.step === "call" ? "stop" : "caution") + '">' + E(c.status) + '</span>').join(" ") : '<button type="button" class="linkish" data-as-chasefor="' + E(j._id) + '">Chase</button>') + '</td></tr>'; });
   const won = live().filter(j => POST.includes(st(j)) && !TOBILL.includes(st(j)));
-  return '<div class="card wide"><h2>Done, not billed</h2><p class="lede">Every job that cannot be invoiced yet, why, and who it is waiting on. Press Chase when a site or a subcontractor owes something: your assistant drafts a note each day for three days, then tells you to call.</p>' +
+  return '<div class="card wide" data-tour="as-jobs"><h2>Done, not billed</h2><p class="lede">Every job that cannot be invoiced yet, why, and who it is waiting on. Press Chase when a site or a subcontractor owes something: your assistant drafts a note each day for three days, then tells you to call.</p>' +
     tbl('<th>Job</th><th>Why it is stuck</th><th>Paperwork in JobTread</th><th>Chase</th>', rows, "Nothing is stuck.") + '<p class="sub">' + plural(won.length, "more job is", "more jobs are") + ' won and not finished. <button class="linkish" data-go="projects">See them on Projects</button></p></div>';
 }
 function asChaseForm(){
@@ -2072,7 +2072,7 @@ function asProject(name){
   const mine = live().filter(j => !first || (pm(j) || "").toLowerCase() === first.toLowerCase());
   const close = mine.filter(j => stageOf(st(j)) === "close");
   coFor(close.filter(j => st(j) !== "Job Post Mortem"));
-  return '<div class="card wide"><h2>Closeout</h2><p class="lede">Every purchase order, approved quote and subcontractor invoice goes into JobTread within 7 days of the job finishing, before Thursday billing. Post mortems run straight after the Thursday invoice meeting. Add a document from your phone and it lands in the job\'s Files in JobTread. Site photos go in Encircle, which keeps them for the job.</p>' +
+  return '<div class="card wide" data-tour="as-closeout"><h2>Closeout</h2><p class="lede">Every purchase order, approved quote and subcontractor invoice goes into JobTread within 7 days of the job finishing, before Thursday billing. Post mortems run straight after the Thursday invoice meeting. Add a document from your phone and it lands in the job\'s Files in JobTread. Site photos go in Encircle, which keeps them for the job.</p>' +
     (CO.err ? failBox(CO.err, "Closeout checks") : '') +
     tbl('<th>Job</th><th>Status</th><th>Paperwork in JobTread</th><th></th>', close.map(j => '<tr><td data-job="' + E(j._id) + '" tabindex="0">' + jobCell(j) + '</td><td>' + stTag(j) + '</td><td>' + (st(j) === "Job Post Mortem" ? '<span class="sm">Post mortem after Thursday\'s invoice meeting</span>' : coCell(j)) + '</td><td>' + coUpload(j) + '</td></tr>'), "Nothing closing out.") + '</div>';
 }
@@ -2089,19 +2089,20 @@ VIEWS.brief = {
   render(){
     const first = S.meName || "";
     let h = head((new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening") + (first ? ", " + first : ""), "Your day: your list, your mail and the things only you can do. Ask Claude still answers anything about the command centre.");
+    h += '<div class="actions"><button class="btn ghost sm" data-walk="myday">' + ico("tour") + 'Walk me through it</button></div>';
     if(AS.err) return h + failBox(AS.err, "My day");
     if(!AS.data){ if(!AS.loading) asLoad(); return h + wait("your day"); }
     const d = AS.data, c = (d.checkins || [])[0];
-    h += '<div class="asbar card wide"><button type="button" class="mic' + (AS.listening ? " on" : "") + '" data-as-talk aria-label="Talk">' + ico("mic") + '<span>' + (AS.listening ? "Listening…" : "Talk") + '</span></button>' +
+    h += '<div class="asbar card wide" data-tour="as-talk"><button type="button" class="mic' + (AS.listening ? " on" : "") + '" data-as-talk aria-label="Talk">' + ico("mic") + '<span>' + (AS.listening ? "Listening…" : "Talk") + '</span></button>' +
       '<form data-as-say onsubmit="return false"><input id="asText" placeholder="Put this on my list… or: I just paid Aces" autocomplete="off"><button type="submit" class="btn">Add</button></form>' +
       '<div class="asmore"><button type="button" class="linkish" data-as-log>Log a walk-in or call</button> · <label class="linkish">Photo of a paper list<input type="file" accept="image/*" capture="environment" data-as-photo hidden></label></div>' +
       (AS.msg ? '<p class="sub" role="status">' + E(AS.msg) + '</p>' : '') + (d.claude ? '' : '<p class="sub">Claude is not set up, so sayings are read simply and photos cannot be read.</p>') + '</div>';
     if(c) h += '<div class="card wide ascheck"><h2>' + E({ morning:"This morning", noon:"Noon check-in", end:"End of day" }[c.slot] || "Check-in") + ' <span class="sm">' + E(showWhen(c.at)) + '</span></h2><pre>' + E(c.text) + '</pre></div>';
-    h += '<div class="grid"><div class="card wide"><h2>Your hit list</h2><p class="lede">Most pressing first. Tick it when it is done; it drops off and, if it is a payment, the cash flow updates.</p>' +
+    h += '<div class="grid"><div class="card wide" data-tour="as-list"><h2>Your hit list</h2><p class="lede">Most pressing first. Tick it when it is done; it drops off and, if it is a payment, the cash flow updates.</p>' +
       ((d.open || []).length ? '<ol class="aslist">' + d.open.map(asItem).join("") + '</ol>' : '<p class="sub">Nothing on your list.</p>') +
       ((d.held || []).length ? '<p class="sub"><b>Logged today, joins at the next check-in:</b> ' + d.held.map(x => E(x.text)).join("; ") + '</p>' : '') +
       ((d.doneToday || []).length ? '<details><summary class="sm">Done today (' + d.doneToday.length + ')</summary><ul class="plain">' + d.doneToday.map(x => '<li>' + E(x.text) + (x.doneWhy ? ' <span class="sm">' + E(x.doneWhy) + '</span>' : '') + ' <button class="linkish" data-as-untick="' + E(x.id) + '">Undo</button></li>').join("") + '</ul></details>' : '') +
-      '<div class="row-btns"><span class="sm">Check in now:</span><button class="linkish" data-as-checkin="morning">Morning</button><button class="linkish" data-as-checkin="noon">Noon</button><button class="linkish" data-as-checkin="end">End of day</button>' +
+      '<div class="row-btns" data-tour="as-checkins"><span class="sm">Check in now:</span><button class="linkish" data-as-checkin="morning">Morning</button><button class="linkish" data-as-checkin="noon">Noon</button><button class="linkish" data-as-checkin="end">End of day</button>' +
       '<label class="sm" style="margin-left:auto"><input type="checkbox" data-as-emailme' + (d.settings.emailCheckins === false ? "" : " checked") + '> Email me each check-in</label></div></div></div>';
     h += asInbox();
     if(d.role === "exec"){
@@ -2122,15 +2123,32 @@ VIEWS.pmpreview = {
     return h + '<div class="state">Each PM gets the same talk bar, hit list, three check-ins, inbox sort and chase as My day, plus this:</div>' + asProject(AS.preview);
   }
 };
+/* Talking to it. Apple does not let an app added to an iPhone or iPad home
+   screen use the browser's listening (it works in a Safari tab, not in the
+   installed app), and some browsers claim to listen and then fail. In all of
+   those cases, open the talk box and point to the microphone key on the
+   keyboard: it does the same job everywhere. */
+function asCannotListen(){
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const installed = navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+  return !(window.SpeechRecognition || window.webkitSpeechRecognition) || (ios && installed);
+}
+function asKeyboardMic(why){
+  AS.listening = false;
+  AS.msg = (why ? why + " " : "") + "Tap the box and press the microphone on your keyboard, say it, then press Add.";
+  render(); setTimeout(() => { const i = $("asText"); if(i) i.focus(); }, 0);
+}
 function asSpeak(){
   const R = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!R){ const i = $("asText"); if(i) i.focus(); AS.msg = "This browser cannot listen. Use the microphone on your keyboard instead."; render(); return; }
+  if(asCannotListen()) return asKeyboardMic("");
   const rec = new R(); rec.lang = "en-CA"; rec.interimResults = false; rec.maxAlternatives = 1;
   AS.listening = true; render();
   rec.onresult = ev => { const text = ev.results[0][0].transcript; AS.listening = false; asDo({ action:"say", text, voice:true }, r => (r.reply || "Done.") + (r.added && r.added.length ? " Added: " + r.added.join("; ") + "." : "") + (r.ticked && r.ticked.length ? " Ticked: " + r.ticked.join("; ") + "." : "")); };
-  rec.onerror = ev => { AS.listening = false; AS.msg = ev.error === "not-allowed" ? "The microphone is blocked for this site. Allow it in the browser settings." : "I did not catch that. Try again."; render(); };
+  rec.onerror = ev => {
+    if(ev.error === "service-not-allowed" || ev.error === "audio-capture" || ev.error === "language-not-supported") return asKeyboardMic("This app cannot listen here.");
+    AS.listening = false; AS.msg = ev.error === "not-allowed" ? "The microphone is blocked for this site. Allow it in the browser settings, or tap the box and use the microphone on your keyboard." : "I did not catch that. Try again, or tap the box and use the microphone on your keyboard."; render(); };
   rec.onend = () => { if(AS.listening){ AS.listening = false; render(); } };
-  rec.start();
+  try{ rec.start(); }catch(e){ asKeyboardMic("This app cannot listen here."); }
 }
 function asPhoto(file){
   if(!file) return;
@@ -2249,7 +2267,7 @@ function cfPlan(){
     '<button type="button" class="btn" data-cf-save="' + E(it ? it.id : "") + '">' + (it ? "Save" : "Add") + '</button><button type="button" class="btn ghost" data-cf-cancel>Cancel</button></div>';
   const next = it => { const a = (cf.weeks || []).flatMap(w => w.out.concat(w.in)).find(x => x.itemId === it.id); return a ? a.date : (it.every === "once" ? it.start : ""); };
   const shown = items.filter(it => it.every !== "once" || it.start >= addDaysIso(cf.weekZero, -56)).sort((a, b) => (a.cat || "").localeCompare(b.cat || "") || a.name.localeCompare(b.name) || a.start.localeCompare(b.start));
-  let h = '<details class="card wide cfplan"' + (CF.edit ? " open" : "") + '><summary><h2>Planned payments</h2><span class="sm">' + plural(shown.length, "line") + '. Payroll, source deductions, WCB, loans and the rest. Copied once from Craig\'s sheet (' + E(cf.seededFrom || "") + ').</span></summary>';
+  let h = '<details class="card wide cfplan" data-tour="cf-plan"' + (CF.edit ? " open" : "") + '><summary><h2>Planned payments</h2><span class="sm">' + plural(shown.length, "line") + '. Payroll, source deductions, WCB, loans and the rest. Copied once from Craig\'s sheet (' + E(cf.seededFrom || "") + ').</span></summary>';
   if(CAN_EDIT) h += CF.edit === "new" ? form(null) : '<button type="button" class="btn" data-cf-new>Add a payment</button>';
   if(ed) h += form(ed);
   h += tbl('<th>What</th><th>Group</th><th>How often</th><th>Next</th><th class="r">Amount</th><th></th>', shown.map(it => '<tr><td>' + E(it.name) + (it.estimate ? ' <span class="tag caution">Check</span>' : '') + (it.note ? '<span class="sm">' + E(it.note) + '</span>' : '') + '</td><td>' + E((C[it.cat] || {}).label || "") + '</td><td>' + E({ once:"Once", week:"Every week", "2weeks":"Every two weeks", month:"Every month" }[it.every] || "") + '</td><td>' + E(next(it) || it.start) + '</td><td class="r num">' + M(it.amount) + '</td><td>' + (CAN_EDIT ? '<button type="button" class="linkish" data-cf-edit="' + E(it.id) + '">Change</button> <button type="button" class="linkish" data-cf-remove="' + E(it.id) + '" data-cf-label="' + E(it.name) + '">Remove</button>' : '') + '</td></tr>'));
@@ -2273,15 +2291,16 @@ VIEWS.cashflow = {
   },
   render(){
     let h = head("Cash flow", "Craig's weekly method: room on the line of credit, money in, money out, week by week. Owed money comes from QuickBooks with its due dates. The plan is kept here.");
+    h += '<div class="actions"><button class="btn ghost sm" data-walk="cashflow">' + ico("tour") + 'Walk me through it</button></div>';
     if(!S.cf) return h + (S.cfErr ? failBox(S.cfErr, "Cash flow") : wait("the cash flow"));
     const cf = S.cf, w = cf.weeks[0], o = cf.opening;
     h += verdictHtml(this.alerts(), "All four weeks stay inside the line, with your reserve kept.", "");
-    h += '<div class="card wide cftop"><div><span class="k">Room on the line now</span><div class="big num' + (cf.roomNow !== null && cf.roomNow < cf.floor ? " stop" : "") + '">' + (cf.roomNow === null ? "n/a" : M(cf.roomNow)) + '</div><p class="sub">' + (o.amount === null ? "No bank balance yet. Type Sunday's balance under Money, Cash position." : "Bank " + M(o.amount) + " (" + (o.source === "you" ? "you typed it for " + o.date : "QuickBooks" + (o.date ? ", bank entered to " + o.date : "")) + ") plus the " + M(cf.limit) + " line.") + '</p></div>' +
+    h += '<div class="card wide cftop" data-tour="cf-top"><div><span class="k">Room on the line now</span><div class="big num' + (cf.roomNow !== null && cf.roomNow < cf.floor ? " stop" : "") + '">' + (cf.roomNow === null ? "n/a" : M(cf.roomNow)) + '</div><p class="sub">' + (o.amount === null ? "No bank balance yet. Type Sunday's balance under Money, Cash position." : "Bank " + M(o.amount) + " (" + (o.source === "you" ? "you typed it for " + o.date : "QuickBooks" + (o.date ? ", bank entered to " + o.date : "")) + ") plus the " + M(cf.limit) + " line.") + '</p></div>' +
       '<div><span class="k">End of this week</span><div class="big num' + (w.close !== null && w.close < 0 ? " stop" : "") + '">' + M(w.close) + '</div><p class="sub">' + M(w.totalIn) + ' in, ' + M(w.totalOut) + ' out.</p></div>' +
       '<div><span class="k">End of four weeks</span><div class="big num' + (cf.weeks[3].close !== null && cf.weeks[3].close < 0 ? " stop" : "") + '">' + M(cf.weeks[3].close) + '</div><p class="sub">Week of ' + E(cfWeekLabel(cf.weeks[3].start)) + '.</p></div>' +
       (cf.everyone ? '<div><span class="k">If everyone paid me and I paid everyone</span><div class="big num' + (cf.everyone.result < 0 ? " stop" : "") + '">' + M(cf.everyone.result) + '</div><p class="sub">Every invoice and bill settled today.</p></div>' : '') + '</div>';
-    h += '<div class="card wide cfadvice"><h2>What to do this week</h2>' + cf.advice.lines.map(l => '<p>' + E(l) + '</p>').join("") + '<p class="sm">Ask Claude can go deeper: "What if Chandos pays a week late?" or "Can I pay Aces in full?"</p></div>';
-    h += '<div class="seg" role="tablist"><button type="button" data-cf-view="week" aria-selected="' + (CF.view === "week") + '">This week</button><button type="button" data-cf-view="four" aria-selected="' + (CF.view === "four") + '">Four weeks</button></div>';
+    h += '<div class="card wide cfadvice" data-tour="cf-advice"><h2>What to do this week</h2>' + cf.advice.lines.map(l => '<p>' + E(l) + '</p>').join("") + '<p class="sm">Ask Claude can go deeper: "What if Chandos pays a week late?" or "Can I pay Aces in full?"</p></div>';
+    h += '<div class="seg" role="tablist" data-tour="cf-view"><button type="button" data-cf-view="week" aria-selected="' + (CF.view === "week") + '">This week</button><button type="button" data-cf-view="four" aria-selected="' + (CF.view === "four") + '">Four weeks</button></div>';
     h += CF.view === "four" ? '<div class="card wide">' + cfFour() + '</div>' : cfWeek();
     h += cfPlan();
     h += '<p class="sm">QuickBooks read ' + E(whenSeen(new Date(cf.readAt).toISOString())) + '. Invoices and bills you tick stay off until QuickBooks shows them paid.</p>';
@@ -3960,6 +3979,7 @@ function pyEditSettings(){
 }
 document.addEventListener("click", ev => {
   if(ev.target.closest && ev.target.closest("[data-py-tour]")){ CCTOUR.payroll(); return; }
+  { const w = ev.target.closest && ev.target.closest("[data-walk]"); if(w){ CCTOUR.walk(w.dataset.walk); return; } }
   if(ev.target.closest && ev.target.closest("[data-py-xlsx]")){ pyWorkbook(); return; }
   if(ev.target.closest && ev.target.closest("[data-ex-split]")){ exSplitWorkbook(); return; }
   const t = ev.target.closest && ev.target.closest("[data-py-go],[data-py-csv],[data-py-preview],[data-py-post],[data-py-forget],[data-py-lists],[data-py-save]");
@@ -5365,7 +5385,7 @@ function hrSlotCard(){
    clip needs recording again; until then that line falls back to the device's
    own voice if its clip is missing. */
 const CCTOUR = (function(){
-  const SEEN = "am-command-tour-seen.v1", MUTE = "am-command-tour-muted", RELEASE_MS = 45000;
+  const SEEN = "am-command-tour-seen.v1", NEW_SEEN = "am-command-whatsnew-2026-11", MUTE = "am-command-tour-muted", RELEASE_MS = 45000;
   const q = s => document.querySelector(s);
   const has = sec => CFG.tabs.some(t => secOf(t) === sec);
 
@@ -5384,6 +5404,15 @@ const CCTOUR = (function(){
       { id:"pages", clips:["pages"], target:"#tabs",
         title:"The pages in that section",
         body:"Nice! The row underneath shows the pages in that section. Each page gets its own number when something on it needs you. And each section remembers where you were, so you'll always pick up right where you left off." },
+      { id:"myday", clips:["myday"], target:'[data-tour="as-talk"]', at:"brief",
+        title:"My day",
+        body:"My day is your own assistant. It checks in at seven, at noon and at five with what needs you, keeps your hit list in order, and sorts your work inbox into reply drafts that you check and send yourself. It never sends anything on its own. Talk or type to it here. On an iPhone, tap the box and use the microphone on your keyboard. Walk me through it, on that page, shows you the rest." },
+      { id:"cashflow", clips:["cashflow"], target:'[data-tour="cf-top"]', at:"cashflow",
+        title:"Cash flow",
+        body:"Cash flow follows Craig's weekly method: room on the line of credit now, money in and money out each week, and where it lands four weeks out. The advice underneath says what to pay and what to hold. Tick a payment once it goes out, and the weeks update." },
+      { id:"viewas", clips:["viewas"], target:'[data-ico="viewas"]', when: () => !!document.querySelector('[data-ico="viewas"]'),
+        title:"View as",
+        body:"View as shows you the command centre exactly as someone else sees it, so you can check their access or help them over the phone. It is look only: nothing can be saved, sent or changed. Their email stays private." },
       { id:"shop", clips:["shop"], target:'[data-tour="shop"]', at:"projects",
         title:"The shop is part of Field",
         body:"Shop opens the shop screens: gear going out to a job and coming back, transfers between sites, the shelf, ordering and filter certificates. It's the same app, and you sign in there with your name and four-digit PIN, just like always. The Command centre button brings you right back here." },
@@ -5466,6 +5495,63 @@ const CCTOUR = (function(){
         body:"The first time, open Payroll settings and pick the QuickBooks account for each bucket. After that you shouldn't need to touch it." },
       { id:"pay-done", clips:["pay-done"], bookend:true, at:"payroll", title:"That's payroll",
         body:"That's it! Check the box at the top, download or post, and you're done. If anything looks off, press the round Claude button and ask, or press Walk me through it to see this again." }
+    ];
+  }
+
+  /* My day, step by step. From the Walk me through it button on My day. */
+  function mydayChapters(){
+    return [
+      { id:"md-intro", clips:["md-intro"], bookend:true, at:"brief", title:"My day, step by step",
+        body:"Hi" + (S.meName ? " " + S.meName : "") + "! This is your own assistant. It keeps one list of what needs you, in order, and checks in three times a day. Let's walk through it once." },
+      { id:"md-talk", clips:["md-talk"], target:'[data-tour="as-talk"]', at:"brief", title:"Talk or type to it",
+        body:"Say or type anything here, like: call Integricon about the holdback on Friday, or: I just paid Aces. It goes on your list, or ticks off what you've done. On an iPhone, tap the box and press the microphone on your keyboard, then press Add. Log a walk-in keeps a note of a visitor or a call, and Photo of a paper list reads a handwritten list onto this one." },
+      { id:"md-list", clips:["md-list"], target:'[data-tour="as-list"]', at:"brief", title:"Your hit list",
+        body:"This is your hit list, most pressing first. Press the tick when something is done and it drops off. If it was a payment, the cash flow updates too. Done today, at the bottom, lets you undo a tick." },
+      { id:"md-checkins", clips:["md-checkins"], target:'[data-tour="as-checkins"]', at:"brief", title:"Three check-ins",
+        body:"At seven, noon and five on weekdays, your assistant looks at everything again and writes you a short check-in. It shows at the top of this page, and it's emailed to you unless you untick that box. You can also ask for one now." },
+      { id:"md-inbox", clips:["md-inbox"], target:'[data-tour="as-inbox"]', at:"brief", title:"Your inbox",
+        body:"Connect your own work inbox here, once. Your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what belongs to someone else. It writes reply drafts that sit in your Gmail drafts. You read them and send them yourself. It never sends anything, and nobody else sees your mail." },
+      { id:"md-jobs", clips:["md-jobs"], target:'[data-tour="as-jobs"]', at:"brief", when: () => !AS.data || AS.data.role === "exec", title:"Done, not billed",
+        body:"Done, not billed lists every finished job that can't be invoiced yet, and why: a missing purchase order, a quote not approved, or a supplier bill still to come. Press Chase when someone owes us something. Your assistant drafts a note each day for three days, then tells you to pick up the phone." },
+      { id:"md-closeout", clips:["md-closeout"], target:'[data-tour="as-closeout"]', at:"brief", when: () => !!AS.data && AS.data.role !== "exec", title:"Closeout",
+        body:"Closeout keeps finished jobs on track for Thursday billing. Every purchase order, approved quote and subcontractor invoice goes into JobTread within seven days. Add a document from your phone and it lands in the job's Files in JobTread. Site photos go in Encircle." },
+      { id:"md-done", clips:["md-done"], bookend:true, at:"brief", title:"That's My day",
+        body:"That's it! Talk to it, tick things off, and read the check-ins. If something looks off, press the round Claude button and ask, or press Walk me through it to see this again." }
+    ];
+  }
+  /* Cash flow, step by step. From the Walk me through it button on Cash flow. */
+  function cashflowChapters(){
+    return [
+      { id:"cf-intro", clips:["cf-intro"], bookend:true, at:"cashflow", title:"Cash flow, step by step",
+        body:"Hi" + (S.meName ? " " + S.meName : "") + "! This page is Craig's weekly cash flow sheet, kept up to date for you. Money owed to us and by us comes from QuickBooks. The planned payments, like payroll, WCB and loans, are kept here. Let's walk through it once." },
+      { id:"cf-top", clips:["cf-top"], target:'[data-tour="cf-top"]', at:"cashflow", title:"Room on the line",
+        body:"The first number is room on the line of credit right now: the bank balance plus the seven hundred and fifty thousand dollar overdraft. Next is where it ends this week, and where it ends four weeks out. The last one is: if everyone paid me today, and I paid everyone. Type Sunday's bank balance under Money, Cash position, so the weeks start from a real number." },
+      { id:"cf-advice", clips:["cf-advice"], target:'[data-tour="cf-advice"]', at:"cashflow", title:"What to do this week",
+        body:"This is the plain advice. It finds the tightest week ahead and says what to pay now and what to hold, so the line never goes over and your reserve is kept every week." },
+      { id:"cf-view", clips:["cf-view"], target:'[data-tour="cf-view"]', at:"cashflow", title:"This week, or four weeks",
+        body:"Switch between this week, line by line, and all four weeks side by side. Tick a payment once it has gone out. Anything not ticked by the end of its week rolls into the next week, so nothing quietly disappears." },
+      { id:"cf-plan", clips:["cf-plan"], target:'[data-tour="cf-plan"]', at:"cashflow", title:"Planned payments",
+        body:"Open Planned payments to add, change or remove the regular lines: payroll, source deductions, WCB, insurance, loans. Lines marked Check were copied from the sheet and want a second look." },
+      { id:"cf-done", clips:["cf-done"], bookend:true, at:"cashflow", title:"That's cash flow",
+        body:"That's it! Glance at the top numbers, read the advice, and tick payments as they go. Ask Claude can go deeper, for example: what if a client pays a week late?" }
+    ];
+  }
+  /* What's new, once, for anyone who already took the tour before these pages
+     came in (November 2026). New people get the same steps in the full tour. */
+  function whatsNewChapters(){
+    return [
+      { id:"new-intro", clips:["new-intro"], bookend:true, title:"What's new",
+        body:"Hi" + (S.meName ? " " + S.meName : "") + "! A few new things have arrived in the command centre. This takes about a minute." },
+      { id:"new-myday", clips:["myday"], target:'[data-tour="as-talk"]', at:"brief", title:"My day",
+        body:"My day is your own assistant. It checks in at seven, at noon and at five with what needs you, keeps your hit list in order, and sorts your work inbox into reply drafts that you check and send yourself. It never sends anything on its own. Talk or type to it here. On an iPhone, tap the box and use the microphone on your keyboard. Walk me through it, on that page, shows you the rest." },
+      { id:"new-cashflow", clips:["cashflow"], target:'[data-tour="cf-top"]', at:"cashflow", title:"Cash flow",
+        body:"Cash flow follows Craig's weekly method: room on the line of credit now, money in and money out each week, and where it lands four weeks out. The advice underneath says what to pay and what to hold. Tick a payment once it goes out, and the weeks update." },
+      { id:"new-viewas", clips:["viewas"], target:'[data-ico="viewas"]', when: () => !!document.querySelector('[data-ico="viewas"]'), title:"View as",
+        body:"View as shows you the command centre exactly as someone else sees it, so you can check their access or help them over the phone. It is look only: nothing can be saved, sent or changed. Their email stays private." },
+      { id:"new-payroll", clips:["new-payroll"], target:'[data-tour="page"]', at:"payroll", title:"Payroll workbook",
+        body:"Payroll now builds the workbook for Danielle: wages split by city and division, with overtime counted at time and a half, and expenses split the same way. Press Workbook for Danielle at the top." },
+      { id:"new-done", clips:["new-done"], bookend:true, title:"That's what's new",
+        body:"That's it! My day and Cash flow each have a Walk me through it button if you want the longer version. Enjoy!" }
     ];
   }
   let SET = "";
@@ -5599,7 +5685,8 @@ const CCTOUR = (function(){
     if(!step.keepDrawer && drawerState) closeDrawer();
     if(step.at && current !== step.at && CFG.tabs.includes(step.at)) go(step.at);
     if(step.target){
-      const there = await waitFor(step.target);
+      /* My day and Cash flow read live data first; give them longer to appear. */
+      const there = await waitFor(step.target, step.at === "brief" || step.at === "cashflow" ? 8000 : 2000);
       /* Not on this person's screen: move on in the direction they were going. */
       if(!there) return show(n + (dir || 1), dir || 1);
       const el = q(step.target);
@@ -5614,7 +5701,10 @@ const CCTOUR = (function(){
     if(liveTour) return;
     liveTour = true; SET = set || "";
     try{ muted = localStorage.getItem(MUTE) === "1"; }catch(e){ muted = false; }
-    steps = (SET === "payroll" ? payrollChapters() : chapters()).filter(s => !s.at || CFG.tabs.includes(s.at));
+    const BY = { payroll: payrollChapters, myday: mydayChapters, cashflow: cashflowChapters, whatsnew: whatsNewChapters };
+    steps = (BY[SET] || chapters)().filter(s => (!s.at || CFG.tabs.includes(s.at)) && (!s.when || s.when()));
+    /* A short set with nothing left for this person but its bookends is not worth showing. */
+    if(SET === "whatsnew" && !steps.some(s => !s.bookend)){ liveTour = false; SET = ""; try{ localStorage.setItem(NEW_SEEN, "1"); }catch(e){} return; }
     if(!q("#ccTour")){
       const d = document.createElement("div"); d.id = "ccTour";
       d.innerHTML = '<div id="ccSpot"></div><div id="ccCard" role="dialog" aria-live="polite" aria-label="Walkthrough"></div>';
@@ -5628,8 +5718,9 @@ const CCTOUR = (function(){
     const d = q("#ccTour"); if(d) d.remove();
     document.body.classList.remove("cct-on");
     if(drawerState) closeDrawer();
-    if(SET !== "payroll"){ try{ localStorage.setItem(SEEN, "1"); }catch(e){} }
-    go(SET === "payroll" ? "payroll" : "overview"); SET = "";
+    const home = { payroll:"payroll", myday:"brief", cashflow:"cashflow" }[SET];
+    if(!home){ try{ localStorage.setItem(SEEN, "1"); localStorage.setItem(NEW_SEEN, "1"); }catch(e){} }
+    go(home && CFG.tabs.includes(home) ? home : (CFG.tabs.includes("brief") && ME.landing === "brief" ? "brief" : "overview")); SET = "";
   }
   window.addEventListener("resize", () => { if(liveTour) paint(); });
   window.addEventListener("scroll", () => { if(liveTour) paint(); }, true);
@@ -5640,9 +5731,16 @@ const CCTOUR = (function(){
 
   return {
     start,
-    ready(){ if(VIEW_AS) return; try{ if(localStorage.getItem(SEEN) === "1") return; }catch(e){ return; } start(); },
+    ready(){
+      if(VIEW_AS) return;
+      try{
+        if(localStorage.getItem(SEEN) !== "1") return start();
+        if(localStorage.getItem(NEW_SEEN) !== "1") return start("whatsnew");
+      }catch(e){}
+    },
     replay(){ try{ localStorage.removeItem(SEEN); }catch(e){} start(); },
-    payroll(){ start("payroll"); }
+    payroll(){ start("payroll"); },
+    walk(set){ start(set); }
   };
 })();
 
