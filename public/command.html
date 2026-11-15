@@ -2372,7 +2372,7 @@ VIEWS.brief = {
     ].filter(Boolean);
     h += '<div class="md-stats">' + stats.join("") + '</div>';
     let main = asChaseForm();
-    main += '<div class="card asbar md-talk o-talk" data-nofold data-tour="as-talk"><button type="button" class="mic' + (AS.listening ? " on" : "") + '" data-as-talk aria-label="Talk">' + ico("mic") + '<span>' + (AS.listening ? "Listening…" : "Talk") + '</span></button>' +
+    main += '<div class="card asbar md-talk o-talk" data-nofold data-tour="as-talk"><button type="button" class="mic' + (AS.listening ? " on" : "") + '" data-as-talk aria-label="' + (AS.listening ? "Stop listening" : "Talk") + '">' + ico("mic") + '<span>' + (AS.listening === "on" ? "Listening… speak now" : AS.listening ? "Starting…" : "Talk") + '</span></button>' +
       '<form data-as-say onsubmit="return false"><input id="asText" placeholder="' + (window.innerWidth < 620 ? "Type here, or tap the mic" : "Put this on my list… or: I just paid Aces") + '" autocomplete="off" aria-label="Tell your assistant"><button type="submit" class="btn">Add</button></form>' +
       '<div class="asmore"><button type="button" class="linkish" data-as-log>Log a walk-in or call</button><label class="linkish">Photo of a paper list<input type="file" accept="image/*" capture="environment" data-as-photo hidden></label></div>' +
       (AS.msg ? '<p class="md-status" role="status">' + E(AS.msg) + '</p>' : '') + (d.claude ? '' : '<p class="sub" style="grid-column:1/-1">Claude is not set up, so sayings are read simply and photos cannot be read.</p>') + '</div>';
@@ -2404,8 +2404,11 @@ try{ const c = localStorage.getItem("am.nb.colour"); if(c) NB.colour = c; }catch
 /* The board's own redraws go through even while a note is being moved or changed. */
 function nbRender(){ NB.force = true; try{ render(); } finally { NB.force = false; } }
 function nbCall(body){
-  const opts = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
-  return fetch("/api/notes", opts).then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || ("The app answered " + r.status + ".") }; return b; });
+  const ctl = window.AbortController ? new AbortController() : null; const tm = ctl ? setTimeout(() => ctl.abort(), 20000) : 0;
+  const opts0 = body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" };
+  const opts = ctl ? { ...opts0, signal: ctl.signal } : opts0;
+  return fetch("/api/notes", opts).then(async r => { clearTimeout(tm); const b = await r.json().catch(() => ({})); if(!r.ok) throw { code: b.error || "http_" + r.status, message: b.message || ("The sticky notes service answered " + r.status + ". Try again in a minute.") }; return b; },
+    e => { clearTimeout(tm); throw { code:"net", message: e && e.name === "AbortError" ? "The sticky notes service did not answer in 20 seconds. Try again." : "Could not reach the sticky notes service. Check the connection and try again." }; });
 }
 function nbLoad(){
   NB.loading = true;
@@ -2415,6 +2418,7 @@ function nbSay(text, kind){ NB.msg = text; NB.msgKind = kind || ""; clearTimeout
 function nbCols(){ const b = $("nbBoard"); const w = b ? b.clientWidth : 900; const nw = window.innerWidth <= 620 ? 156 : 212; return Math.max(1, Math.floor((w - 28 + 18) / (nw + 18))); }
 function nbAdd(text, source){
   text = String(text || "").trim(); if(!text) return;
+  NB.msg = source === "voice" ? "Heard: “" + text + "”. Sticking it on…" : "Sticking it on…"; nbRender();
   nbCall({ action:"add", text, colour: NB.colour, source, cols: nbCols() }).then(r => { NB.notes.push(r.note); NB.fresh = r.note.id; nbSay(source === "voice" ? "Heard you. It is on the board." : "Stuck on the board."); nbRender(); })
     .catch(e => { nbSay(errCopy(e)); nbRender(); });
 }
@@ -2452,14 +2456,10 @@ function nbTidy(){
   nbCall({ action:"arrange", spots }).then(() => nbSay("All tidy.")).catch(e => { nbSay(errCopy(e)); nbLoad(); });
 }
 function nbTalk(){
-  if(asCannotListen()){ NB.msg = "Tap the box and press the microphone on your keyboard, say it, then press Stick it."; nbRender(); setTimeout(() => { const i = $("nbText"); if(i) i.focus(); }, 0); return; }
-  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const rec = new R(); rec.lang = "en-CA"; rec.interimResults = false; rec.maxAlternatives = 1;
-  NB.listening = true; nbRender();
-  rec.onresult = ev => { NB.listening = false; nbAdd(ev.results[0][0].transcript, "voice"); };
-  rec.onerror = ev => { NB.listening = false; NB.msg = ev.error === "not-allowed" ? "The microphone is blocked for this site. Allow it in the browser settings, or use the microphone on your keyboard." : ev.error === "no-speech" ? "I did not hear anything. Try again." : "This app cannot listen here. Tap the box and use the microphone on your keyboard."; nbRender(); };
-  rec.onend = () => { if(NB.listening){ NB.listening = false; nbRender(); } };
-  try{ rec.start(); }catch(e){ NB.listening = false; NB.msg = "This app cannot listen here. Tap the box and use the microphone on your keyboard."; nbRender(); }
+  listenOnce({ button:"Stick it",
+    state: st => { NB.listening = st; nbRender(); },
+    say: (m, focus) => { NB.listening = ""; NB.msg = m; nbRender(); if(focus) setTimeout(() => { const i = $("nbText"); if(i) i.focus(); }, 0); },
+    text: t => nbAdd(t, "voice") });
 }
 const nbDay = iso8 => { const d = new Date(iso8); return isNaN(d) ? "" : d.toLocaleDateString("en-CA", { month:"short", day:"numeric" }); };
 /* On a phone the board is too narrow for notes placed on a computer, so the
@@ -2498,7 +2498,7 @@ VIEWS.notes = {
     if(!NB.notes){ if(!NB.loading) nbLoad(); return h + wait("your sticky notes") + '</div>'; }
     const notes = NB.notes;
     if(!NB.viewAs){
-      h += '<div class="nb-bar" data-tour="nb-bar"><button type="button" class="mic' + (NB.listening ? " on" : "") + '" data-nb-talk aria-label="Talk">' + ico("mic") + '<span>' + (NB.listening ? "Listening…" : "Talk") + '</span></button>' +
+      h += '<div class="nb-bar" data-tour="nb-bar"><button type="button" class="mic' + (NB.listening ? " on" : "") + '" data-nb-talk aria-label="' + (NB.listening ? "Stop listening" : "Talk") + '">' + ico("mic") + '<span>' + (NB.listening === "on" ? "Listening… speak now" : NB.listening ? "Starting…" : "Talk") + '</span></button>' +
         '<form data-nb-form onsubmit="return false"><input id="nbText" maxlength="400" autocomplete="off" placeholder="' + (window.innerWidth < 620 ? "Write a note…" : "Write a note… call Sunbelt about the heaters") + '" aria-label="Write a sticky note"><button type="submit" class="btn">Stick it</button></form>' +
         '<div class="nb-row"><div class="nb-sw"><span>Colour</span>' + NB_COLOURS.map(c => '<button type="button" class="nb-dot c-' + c[0] + (NB.colour === c[0] ? " on" : "") + '" data-nb-pick="' + c[0] + '" aria-label="' + c[1] + '" aria-pressed="' + (NB.colour === c[0]) + '"></button>').join("") + '</div>' +
         '<div class="nb-acts">' + plural(notes.length, "note") + (notes.length > 1 ? ' <button type="button" class="md-pill" data-nb-tidy>Tidy up</button>' : '') + '</div></div>' +
@@ -2605,17 +2605,50 @@ function asKeyboardMic(why){
   AS.msg = (why ? why + " " : "") + "Tap the box and press the microphone on your keyboard, say it, then press Add.";
   render(); setTimeout(() => { const i = $("asText"); if(i) i.focus(); }, 0);
 }
-function asSpeak(){
+/* One go at listening, shared by My day and Sticky notes. Bruce, 15 Nov:
+   "nothing at all" happened in Chrome. A browser can start listening and stop
+   again with no words and no error (microphone off, blocked by Windows, or no
+   microphone at all), which looked like nothing. Now every way it can end says
+   what happened, and when the browser gives no reason the microphone itself is
+   checked so the message can say which it is. Press Talk again to stop. */
+let LISTEN = null;
+function listenOnce(h){
+  if(LISTEN){ try{ LISTEN.stop(); }catch(e){} return; }
+  if(asCannotListen()) return h.say("Tap the box and press the microphone on your keyboard, say it, then press " + h.button + ".", true);
   const R = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(asCannotListen()) return asKeyboardMic("");
-  const rec = new R(); rec.lang = "en-CA"; rec.interimResults = false; rec.maxAlternatives = 1;
-  AS.listening = true; render();
-  rec.onresult = ev => { const text = ev.results[0][0].transcript; AS.listening = false; asDo({ action:"say", text, voice:true }, r => (r.reply || "Done.") + (r.added && r.added.length ? " Added: " + r.added.join("; ") + "." : "") + (r.ticked && r.ticked.length ? " Ticked: " + r.ticked.join("; ") + "." : "")); };
-  rec.onerror = ev => {
-    if(ev.error === "service-not-allowed" || ev.error === "audio-capture" || ev.error === "language-not-supported") return asKeyboardMic("This app cannot listen here.");
-    AS.listening = false; AS.msg = ev.error === "not-allowed" ? "The microphone is blocked for this site. Allow it in the browser settings, or tap the box and use the microphone on your keyboard." : "I did not catch that. Try again, or tap the box and use the microphone on your keyboard."; render(); };
-  rec.onend = () => { if(AS.listening){ AS.listening = false; render(); } };
-  try{ rec.start(); }catch(e){ asKeyboardMic("This app cannot listen here."); }
+  let rec; try{ rec = new R(); }catch(e){ return h.say("This browser cannot listen. Type it instead.", true); }
+  rec.lang = "en-CA"; rec.interimResults = false; rec.maxAlternatives = 1;
+  let got = false, err = "", started = false;
+  LISTEN = rec; h.state("starting");
+  const done = () => { clearTimeout(slow); if(LISTEN === rec) LISTEN = null; };
+  const slow = setTimeout(() => { if(!started){ err = "slow"; try{ rec.abort(); }catch(e){} done(); explain("slow"); } }, 6000);
+  const blocked = "The microphone is blocked for this site. Click the microphone or lock icon at the left of the address bar, allow the microphone, then press Talk again. On Windows, also check Settings, Privacy, Microphone.";
+  const nomic = "No microphone was found on this computer. Plug one in or switch it on, then press Talk again. Or type it instead.";
+  function explain(code){
+    h.state("");
+    if(code === "aborted") return h.say("");
+    if(code === "not-allowed" || code === "service-not-allowed") return h.say(blocked);
+    if(code === "audio-capture") return h.say(nomic);
+    if(code === "network") return h.say("The browser could not reach its speech service (Chrome and Edge send speech away to turn it into words). Check the internet connection, or type it instead.");
+    if(code === "language-not-supported") return h.say("This browser cannot listen in Canadian English. Type it instead.", true);
+    if(code === "slow") return h.say("The browser did not start listening. Look for a microphone question at the top of the window and press Allow, then press Talk again. Or type it instead.");
+    /* No words and no reason (or "no-speech"): check the microphone itself. */
+    const md = navigator.mediaDevices;
+    if(!md || !md.getUserMedia) return h.say("I did not hear anything. Press Talk, then speak straight away. Or type it instead.");
+    md.getUserMedia({ audio:true }).then(st => { st.getTracks().forEach(t => t.stop()); h.say("I did not hear anything. Your microphone is on, so press Talk and speak straight away, a little closer. Or type it instead."); })
+      .catch(e => h.say(e && e.name === "NotFoundError" ? nomic : e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? blocked : "I did not hear anything, and the microphone did not answer (" + E(e && e.name || "unknown") + "). Type it instead."));
+  }
+  rec.onstart = () => { started = true; h.state("on"); };
+  rec.onresult = ev => { got = true; const t = ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : ""; done(); h.state(""); if(t.trim()) h.text(t.trim()); else explain("silent"); };
+  rec.onerror = ev => { if(got || err) return; err = ev.error || "unknown"; done(); explain(err); };
+  rec.onend = () => { const was = LISTEN === rec; done(); if(got || err) return; if(was) explain("silent"); };
+  try{ rec.start(); }catch(e){ done(); h.state(""); h.say("This browser could not start listening. Type it instead.", true); }
+}
+function asSpeak(){
+  listenOnce({ button:"Add",
+    state: st => { AS.listening = st; render(); },
+    say: (m, focus) => { AS.listening = ""; AS.msg = m; render(); if(focus) setTimeout(() => { const i = $("asText"); if(i) i.focus(); }, 0); },
+    text: text => asDo({ action:"say", text, voice:true }, r => (r.reply || "Done.") + (r.added && r.added.length ? " Added: " + r.added.join("; ") + "." : "") + (r.ticked && r.ticked.length ? " Ticked: " + r.ticked.join("; ") + "." : "")) });
 }
 function asPhoto(file){
   if(!file) return;
