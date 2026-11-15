@@ -3377,6 +3377,78 @@ function pyBuckets(rep){
   /* Only the buckets that have hours this period, cost of sales first, then general payroll. */
   return rep.buckets.filter(b => rep.totals.byBucket[b]);
 }
+/* Every pay period since 19 September, and whether it is in QuickBooks yet. */
+function pyCatchUp(d){
+  const list = (d.periods || []).slice().reverse(); if(!list.length) return "";
+  const cur = d.report.period.start;
+  const rows = list.map(p => '<tr' + (p.start === cur ? ' style="background:var(--rule-soft)"' : '') + '><td>' + E(p.start) + ' to ' + E(p.end) + '</td><td>' + E(p.paid) + '</td><td>' +
+    (p.posted ? '<span class="tag clear">Posted</span> ' + E(p.posted.outside ? "by Danielle from Craig\'s 6 Nov workbook" : "by " + p.posted.by + ", " + showDate(p.posted.at)) + (p.posted.moved ? ' · ' + D2(p.posted.moved) : '')
+      : p.ended ? '<span class="tag caution">To do</span> Ready for Danielle' : '<span class="tag mute">Running</span> Still open') + '</td><td>' + (p.start === cur ? '<span class="sm">Showing</span>' : '<button class="btn ghost sm" data-py-go="' + E(p.start) + '">Open</button>') + '</td></tr>');
+  const todo = list.filter(p => p.ended && !p.posted).length;
+  return '<div class="card wide" style="margin-top:12px"><h2>Pay periods since 19 September</h2><p class="lede">' + (todo ? plural(todo, "period has", "periods have") + ' ended and not been moved into cost of sales yet. Open each one, type the net pay from the pay stubs, then download the workbook for Danielle or post it.' : 'Every period that has ended is in QuickBooks.') + ' Periods run Saturday to Friday, two weeks, paid the Friday after.</p>' +
+    tbl('<th>Work dates</th><th>Paid</th><th>Status</th><th></th>', rows) + '</div>';
+}
+/* Danielle's workbook, in the layout of Craig's 6 November "Payroll net labour
+   by cost code": Journal entry, By cost code, By employee, Net pay by cost
+   code, Hours data, and who was left out. One pay period. */
+function pyLoadXlsx(){ return window.XLSX ? Promise.resolve() : new Promise((ok, bad) => { const sc = document.createElement("script"); sc.src = "/xlsx-lite.js"; sc.onload = ok; sc.onerror = () => bad({ message:"The workbook maker did not load. Check for signal and try again." }); document.head.appendChild(sc); }); }
+function pyWorkbook(){
+  const d = PY.data; if(!d) return; const r = d.report, p = r.period, j = PY.journal, st = d.settings;
+  const bs = pyBuckets(r), num2 = v => Math.round((Number(v) || 0) * 100) / 100;
+  const paid = (d.periods || []).find(x => x.start === p.start);
+  const head = "Pay period " + p.start + " to " + p.end + (paid ? ", paid " + paid.paid : "");
+  const je = [["Adjusting journal entry, hourly crew net pay to cost of sales"], ["Moves hourly crew net pay out of wages and into labour cost of sales, by service line and city."], ["Journal date", p.end], ["Memo", "Reclass hourly net pay, " + p.start + " to " + p.end], ["Source", "Net pay from pay stubs, hours from JobTread"], [],
+    ["Account", "Bucket", "Debit", "Credit", "Line description"]];
+  if(j && j.lines && j.lines.length){
+    j.lines.forEach(l => je.push([l.accountName || "", l.bucket, l.posting === "Debit" ? num2(l.amount) : null, l.posting === "Credit" ? num2(l.amount) : null, l.posting === "Debit" ? "Net labour, " + l.bucket + ", " + p.start + " to " + p.end : "Net labour moved to cost of sales"]));
+    const dr = j.lines.filter(l => l.posting === "Debit").reduce((x, l) => x + l.amount, 0), cr = j.lines.filter(l => l.posting === "Credit").reduce((x, l) => x + l.amount, 0);
+    je.push(["Totals", "", num2(dr), num2(cr)], ["Difference (must be zero)", "", num2(dr - cr)]);
+    if(j.errors && j.errors.length){ je.push([], ["Still to sort out"]); j.errors.forEach(e => je.push([e])); }
+  } else {
+    je.push(["Not worked out yet: type each person's net pay on the Payroll page, press Show the entry, then download again."]);
+  }
+  je.push([], ["Stays in wages (not cost of sales)"], ["Shop and office time, people left out (salaried, subcontractors) and agency temps."]);
+  const sumBy = (b, k) => r.employees.reduce((x, e) => x + (e.byBucket[b] ? e.byBucket[b][k] : 0), 0);
+  const bycode = [["Hourly payroll hours by cost code"], [head], [], ["Bucket", "Regular", "Overtime", "Total"]].concat(bs.map(b => [b, num2(sumBy(b, "reg")), num2(sumBy(b, "ot")), num2(sumBy(b, "total"))]));
+  bycode.push(["Total hours", num2(bs.reduce((x, b) => x + sumBy(b, "reg"), 0)), num2(bs.reduce((x, b) => x + sumBy(b, "ot"), 0)), num2(r.totals.hours)]);
+  const byemp = [["Hours by employee and cost code"], [head], [], ["Employee"].concat(bs, ["Regular", "Overtime", "Total"])].concat(r.employees.map(e => [e.name].concat(bs.map(b => num2(e.byBucket[b] ? e.byBucket[b].total : 0)), [num2(e.regular), num2(e.overtime), num2(e.total)])));
+  const net = [["Net pay spread across cost codes"], ["Each employee's net pay is split by their share of pay hours (overtime counted at " + r.otMultiplier + ")."], [head], [], ["Employee", "Net pay", "Pay hours"].concat(bs, ["Total spread"])];
+  if(j && j.perEmployee && j.perEmployee.length) j.perEmployee.forEach(x => { const e = r.employees.find(y => y.name === x.name) || {}; net.push([x.name, num2(x.cost), num2(e.payHours)].concat(bs.map(b => num2(x.buckets[b] || 0)), [num2(x.cost)])); });
+  else net.push(["Type the net pay on the Payroll page and press Show the entry first."]);
+  const hours = [["Hourly payroll hours, from JobTread timesheets"], [head], [], ["Employee", "Job", "Job name", "Cost code", "Bucket", "Regular", "Overtime", "Total", "Not yet approved", "City from address"]]
+    .concat(r.detail.map(x => [x.person, x.job, x.jobName, x.costCode, x.bucket, num2(x.reg), num2(x.ot), num2(x.total), num2(x.unapproved), x.assumed ? "Yes" : ""]));
+  const left = [["Left out of the split"], [head], [], ["Person", "Why", "Hours in JobTread"]].concat((r.leftOut || []).map(l => [l.name, l.reason, num2(l.total)]), (r.temps || []).map(t => [t.name, "Agency temp", num2(t.total)]));
+  if(r.crewOnCalgary && r.crewOnCalgary.length){ left.push([], ["Edmonton crew on Calgary jobs, counted as " + (st.crewRule === "crew" ? "Edmonton" : "Calgary")], ["Person", "Job", "Hours"]); r.crewOnCalgary.forEach(c => left.push([c.person, c.job + " " + c.jobName, num2(c.hours)])); }
+  pyLoadXlsx().then(() => {
+    const blob = XLSX.make([
+      { name:"Journal entry", rows: je, widths:[34, 26, 14, 14, 48], bold:[0, 6] },
+      { name:"By cost code", rows: bycode, widths:[30, 12, 12, 12], bold:[0, 3, bycode.length - 1] },
+      { name:"By employee", rows: byemp, widths:[28].concat(bs.map(() => 16), [12, 12, 12]), bold:[0, 3] },
+      { name:"Net pay by cost code", rows: net, widths:[28, 12, 12].concat(bs.map(() => 16), [14]), bold:[0, 4] },
+      { name:"Hours data", rows: hours, widths:[26, 12, 30, 22, 22, 10, 10, 10, 12, 12], bold:[0, 3] },
+      { name:"Left out", rows: left, widths:[30, 30, 16], bold:[0, 3] }
+    ]);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Payroll journal by cost code - " + p.end + ".xlsx";
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }).catch(e => toast(errCopy(e), "bad"));
+}
+/* Expenses, km and supplies by city and division, one sheet a month. */
+function exSplitWorkbook(){
+  const d = EX.data; if(!d || !d.months) return;
+  const cats = Object.keys(EX_CAT), num2 = v => Math.round((Number(v) || 0) * 100) / 100;
+  const sheets = d.months.filter(m => m.split && m.month !== "No date").slice(0, 6).map(m => {
+    const rows = [["Expenses, km and supplies by city and division"], [exMonth(m.month) + ". Approved claims and logged card bills, by trip or purchase date."], [], ["City and division"].concat(cats.map(k => EX_CAT[k]), ["Total"])];
+    Object.entries(m.split).sort((a, b) => a[0].localeCompare(b[0])).forEach(([b, v]) => rows.push([b].concat(cats.map(k => num2(v[k])), [num2(v.total)])));
+    rows.push(["Total"].concat(cats.map(k => num2(Object.values(m.split).reduce((x, v) => x + (v[k] || 0), 0))), [num2(Object.values(m.split).reduce((x, v) => x + v.total, 0))]));
+    return { name: m.month, rows, widths:[30, 14, 16, 16, 14, 14], bold:[0, 3, rows.length - 1] };
+  });
+  if(!sheets.length) return toast("No months to download yet.");
+  pyLoadXlsx().then(() => {
+    const blob = XLSX.make(sheets);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Expenses by city and division - " + iso(today()) + ".xlsx";
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }).catch(e => toast(errCopy(e), "bad"));
+}
 function pyCsv(rows){ return rows.map(r => r.map(v => { const s = String(v === null || v === undefined ? "" : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(",")).join("\r\n"); }
 function pyDownload(kind){
   const rep = PY.data && PY.data.report; if(!rep) return;
@@ -3472,6 +3544,17 @@ VIEWS.expenses = {
             .concat(['<tr><td><b>Total</b></td>' + EX_BR.map(b => '<td class="r num"><b>' + (tot(b) ? D2(tot(b)) : "-") + '</b></td>').join("") + '</tr>']));
     });
     h += '</div>';
+    /* 2b. The same money split by city and division, the way Danielle posts payroll */
+    if(d.months.length && d.months[0].split){
+      h += '<div class="card wide" data-nofold><h2>By city and division, each month</h2><p class="lede">The same money split the way the payroll split works: the job\'s Job Type and the Estimating branch. Danielle uses this to move expenses, km and supplies into the right cost of sales line, because QuickBooks cannot take the Edmonton and Calgary split directly. "No type" means the job has no Job Type in JobTread.</p>' +
+        '<button class="btn ghost" data-ex-split>' + ico("download") + 'Download for Danielle</button>';
+      d.months.slice(0, 3).forEach(m => {
+        const rows = Object.entries(m.split || {}).sort((a, b) => a[0].localeCompare(b[0]));
+        h += '<h3 style="margin:14px 0 6px;font-size:14px">' + E(exMonth(m.month)) + '</h3>' + tbl('<th>City and division</th>' + Object.keys(EX_CAT).map(k => '<th class="r">' + E(EX_CAT[k]) + '</th>').join("") + '<th class="r">Total</th>',
+          rows.map(([b, v]) => '<tr><td>' + E(b) + '</td>' + Object.keys(EX_CAT).map(k => '<td class="r num">' + (v[k] ? D2(v[k]) : "-") + '</td>').join("") + '<td class="r num"><b>' + D2(v.total) + '</b></td></tr>'));
+      });
+      h += '</div>';
+    }
 
     /* 3. Card spend by holder */
     h += '<div class="card" data-nofold><h2>Company card spend by holder</h2><p class="lede">Expense bills on jobs plus shop purchases on a card. Matched on the card\'s last 4 in the payment reference first, then the bill description. The card list comes from the shop form\'s "Company card used" list in JobTread.</p>' +
@@ -3516,11 +3599,20 @@ VIEWS.payroll = {
       '<button class="btn ghost" data-py-go="' + E(p.next) + '">Next period</button>' +
       '<button class="btn ghost" data-py-go="' + E(p.start) + '">' + (PY.loading ? "Reading…" : "Refresh") + '</button>' +
       '<span class="sp" style="flex:1"></span>' +
-      '<button class="btn" data-py-csv="summary">' + ico("download") + 'Download summary</button>' +
+      '<button class="btn" data-py-xlsx>' + ico("download") + 'Workbook for Danielle</button>' +
+      '<button class="btn ghost" data-py-csv="summary">' + ico("download") + 'Download summary</button>' +
       '<button class="btn ghost" data-py-csv="detail">' + ico("download") + 'Download detail</button>' +
       '<button class="btn ghost" data-py-tour>' + ico("tour") + 'Walk me through it</button></div>';
     h += verdictHtml(this.alerts(), "Every hour this period is approved, clocked out and has a city.", plural(r.totals.people, "employee") + ", " + H2(r.totals.hours) + " hours.");
     if(d.posted) h += '<div class="state ok" style="margin:12px 0">' + D2(d.posted.moved) + ' moved from payroll into cost of sales. Posted by ' + E(d.posted.by) + ' on ' + E(showWhen(d.posted.at)) + ', QuickBooks journal entry ' + E(d.posted.docNumber) + '</div>';
+
+    h += pyCatchUp(d);
+    if(d.settings.anchorMoved) h += '<div class="state wait" style="margin:12px 0">Pay periods now run from Saturday 19 September 2026 (paid Friday 9 October), the periods in Craig\'s 6 November workbook. Before 15 November the app counted them from 28 September. Check this in the payroll settings and save once to keep it.</div>';
+    if(r.crewOnCalgary && r.crewOnCalgary.length){ const hrs = r.crewOnCalgary.reduce((x, c) => x + c.hours, 0);
+      h += '<div class="card wide" style="margin-top:16px"><h2>Edmonton crew on Calgary jobs</h2><p class="lede">' + H2(hrs) + ' hours. ' + (r.crewRule === "crew" ? 'Counted as <b>Edmonton</b>, the crew\'s home city, as in Craig\'s 6 November run.' : 'Counted as <b>Calgary</b>, the job\'s city. Craig\'s 6 November run counted these as Edmonton. Bruce asked for Craig to confirm the rule first; change it in the payroll settings once he has.') + '</p>' +
+        tbl('<th>Person</th><th>Job</th><th class="r">Hours</th><th>Counted as</th>', r.crewOnCalgary.map(c => '<tr><td>' + E(c.person) + '</td><td>' + E(c.job + " " + c.jobName) + '</td><td class="r num">' + H2(c.hours) + '</td><td>' + E(c.countedAs) + '</td></tr>')) + '</div>'; }
+    if(r.noJobType && r.noJobType.length) h += '<div class="card wide" style="margin-top:16px"><h2>Jobs with no Job Type</h2><p class="lede">Danielle\'s rule is that hours go to the job\'s type. These jobs have none in JobTread, so the cost code on each time entry decided. Set the Job Type on the job and press Refresh.</p>' +
+      tbl('<th>Job</th><th>Name</th><th>Counted as</th>', r.noJobType.map(j => '<tr><td>' + E(j.job) + '</td><td>' + E(j.jobName) + '</td><td>' + E(j.countedAs) + '</td></tr>')) + '</div>';
 
     /* the summary */
     const headRow = '<th>Employee</th><th class="r">Total</th><th class="r">Regular</th><th class="r">Overtime</th><th class="r">Not approved</th>' + bs.map(b => '<th class="r">' + E(b) + (r.overheadBuckets.includes(b) ? ' <span class="sm">stays</span>' : '') + '</th>').join("");
@@ -3584,6 +3676,8 @@ function pySettings(s){
       '<div class="ctl" style="margin-top:12px"><label class="fld"><b>First day of a pay period</b><input type="date" data-py-set="anchor" value="' + E(s.anchor) + '"></label>' +
       '<label class="fld"><b>Overtime counts as</b><input type="number" step="0.5" min="1" max="3" data-py-set="otMultiplier" value="' + E(s.otMultiplier) + '"></label></div>' +
       '<label class="fld"><b>Jobs that stay in general payroll</b><textarea data-py-set="overhead" rows="3" style="font:inherit;font-size:13px;padding:7px;border:1px solid var(--rule);border-radius:3px">' + E(Object.entries(s.overheadJobs).map(([k, v]) => k + " = " + v).join("\n")) + '</textarea><span class="sm">One per line: job number = name. Add a training and safety job here once it exists in JobTread.</span></label>' +
+      '<div class="ctl" style="margin-top:12px"><label class="fld"><b>Calgary jobs worked by the Edmonton crew count as</b><select data-py-set="crewRule" style="font:inherit;font-size:13px;padding:6px"><option value="job"' + (s.crewRule !== "crew" ? " selected" : "") + '>Calgary (the job\'s city)</option><option value="crew"' + (s.crewRule === "crew" ? " selected" : "") + '>Edmonton (the crew\'s home city, as in Craig\'s 6 Nov run)</option></select></label></div>' +
+      '<label class="fld"><b>Calgary-based people</b><span class="sm">One name a line, as in JobTread. Everyone else is Edmonton crew.</span><textarea data-py-set="calgaryCrew" rows="2" style="font:inherit;font-size:13px;padding:7px;border:1px solid var(--rule);border-radius:3px">' + E((s.calgaryCrew || []).join("\n")) + '</textarea></label>' +
       '<label class="fld"><b>People left out of the split</b><textarea data-py-set="leaveOut" rows="3" style="font:inherit;font-size:13px;padding:7px;border:1px solid var(--rule);border-radius:3px">' + E(Object.entries(s.leaveOut || {}).map(([k, v]) => k + " = " + v).join("\n")) + '</textarea><span class="sm">One per line: name exactly as in JobTread = why. Salaried staff and subcontractors go here.</span></label>' +
       (CAN_EDIT ? '<div style="margin-top:12px"><button class="btn" data-py-save>Save settings</button></div>' : '<div class="state" style="margin-top:12px">Your account can look at these settings but not change them.</div>') + '</div>';
   }
@@ -3595,6 +3689,8 @@ function pyEditSettings(){
 }
 document.addEventListener("click", ev => {
   if(ev.target.closest && ev.target.closest("[data-py-tour]")){ CCTOUR.payroll(); return; }
+  if(ev.target.closest && ev.target.closest("[data-py-xlsx]")){ pyWorkbook(); return; }
+  if(ev.target.closest && ev.target.closest("[data-ex-split]")){ exSplitWorkbook(); return; }
   const t = ev.target.closest && ev.target.closest("[data-py-go],[data-py-csv],[data-py-preview],[data-py-post],[data-py-forget],[data-py-lists],[data-py-save]");
   if(!t) return;
   if(t.dataset.pyGo){ PY.data = PY.data && PY.data.report.period.start === t.dataset.pyGo ? PY.data : null; loadPY(t.dataset.pyGo); render(); return; }
@@ -3638,6 +3734,8 @@ document.addEventListener("input", ev => {
     } else if(el.dataset.pySet === "leaveOut"){
       const o = {}; el.value.split("\n").forEach(line => { const i = line.indexOf("="); const k = (i > 0 ? line.slice(0, i) : line).trim(), v = i > 0 ? line.slice(i + 1).trim() : "Left out"; if(k) o[k] = v || "Left out"; });
       s.leaveOut = o;
+    } else if(el.dataset.pySet === "calgaryCrew"){
+      s.calgaryCrew = el.value.split("\n").map(x => x.trim()).filter(Boolean);
     } else s[el.dataset.pySet] = el.value;
   }
 });

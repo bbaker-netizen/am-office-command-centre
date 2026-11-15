@@ -12,10 +12,21 @@
    Pure functions only, so the rules can be tested without JobTread or
    QuickBooks.
 
-   The rules, agreed 2026-10-10:
-   - Service line comes from the cost code on the time entry (51 Demolition,
-     53 Asbestos, 54 Lead, 55 Mould, 56 Sampling, 59 Restoration, anything
-     else Other), not the job type, so combined jobs split correctly.
+   The rules, agreed 2026-10-10, changed 2026-11-15 to Danielle's "Journal
+   hours by cost code" process (built with Craig the week of 2 November):
+   - Service line comes from the job's Job Type in JobTread. If a job could
+     fit two types (asbestos work on a mitigation job), the hours stay under
+     the job's type (Danielle). Only when Job Type is blank does the cost code
+     on the time entry decide (51 Demolition, 53 Asbestos, 54 Lead, 55 Mould,
+     56 Sampling, 59 Restoration, anything else Other), and the job is listed.
+   - Pay periods run 14 days from Saturday 19 September 2026 (paid Friday
+     9 October), the periods in Craig's 6 November workbook. Payroll is
+     processed on the Tuesday and paid on the Friday after a period ends.
+   - Calgary jobs worked by the Edmonton crew: Craig's 6 November run counted
+     them as Edmonton. Bruce asked for that to be confirmed with Craig first,
+     so it is a setting (crewRule): "job" (the job's city, the default) or
+     "crew" (the person's home city; people in calgaryCrew are Calgary,
+     everyone else Edmonton). The hours affected are always listed.
    - City comes from the job's Estimating branch field. If it is blank, a job
      whose address city is Calgary goes to Calgary and everything else to
      Edmonton, and the job is listed so the field can be filled in.
@@ -32,12 +43,25 @@
      an overtime hour costs one and a half regular hours. */
 
 export const LINE_BY_DIVISION = { "51": "Demolition", "53": "Asbestos", "54": "Lead", "55": "Mould", "56": "Sampling", "59": "Restoration" };
+/* JobTread's Job Type options (read 2026-11-15) to service lines. Mitigation
+   is the Restoration division (account 59100 "Mitigation labour"). */
+export const LINE_BY_JOB_TYPE = { "Demolition Services": "Demolition", "Clean Demolition": "Demolition", "Asbestos Abatement": "Asbestos", "Lead Abatement": "Lead", "Mould Remediation": "Mould", "Sampling": "Sampling", "Mitigation": "Restoration" };
+/* The three periods Danielle already posted on 2026-11-10 from Craig's
+   6 November workbook (period 1 combined Canopy and JobTread hours, which this
+   app cannot read). Recorded so they are never posted twice. */
+export const POSTED_ELSEWHERE = [
+  { start: "2026-09-19", end: "2026-10-02", paid: "2026-10-09", moved: 29377.36 },
+  { start: "2026-10-03", end: "2026-10-16", paid: "2026-10-23", moved: 23407.85 },
+  { start: "2026-10-17", end: "2026-10-30", paid: "2026-11-06", moved: 22710.70 }
+];
 export const LINES = ["Demolition", "Asbestos", "Lead", "Mould", "Sampling", "Restoration", "Other"];
 export const CITIES = ["Edmonton", "Calgary"];
 export const COS_BUCKETS = LINES.flatMap(l => CITIES.map(c => `${l} ${c}`));
 
 export const DEFAULTS = {
-  anchor: "2026-09-28",          /* first day of a pay period; periods run 14 days from here */
+  anchor: "2026-09-19",          /* first day of a pay period; periods run 14 days from here */
+  crewRule: "job",               /* "job": a Calgary job's hours are Calgary; "crew": the person's home city */
+  calgaryCrew: [],               /* names of the people based in Calgary, for crewRule "crew" */
   periodDays: 14,
   otMultiplier: 1.5,
   tz: "America/Edmonton",
@@ -52,6 +76,12 @@ export function withDefaults(s) {
   out.overheadJobs = { ...(s && s.overheadJobs ? s.overheadJobs : DEFAULTS.overheadJobs) };
   out.map = { ...(s && s.map ? s.map : {}) };
   out.leaveOut = { ...(s && s.leaveOut ? s.leaveOut : DEFAULTS.leaveOut) };
+  out.calgaryCrew = Array.isArray(s && s.calgaryCrew) ? s.calgaryCrew.slice() : [];
+  out.crewRule = s && s.crewRule === "crew" ? "crew" : "job";
+  /* Before 2026-11-15 the periods were counted from 28 September (the day
+     JobTread time started), which put them out of step with A&M's real pay
+     periods. Moved once to 19 September, unless someone chose another date. */
+  if (out.anchor === "2026-09-28" && !(s && s.anchorConfirmed)) { out.anchor = "2026-09-19"; out.anchorMoved = true; }
   return out;
 }
 
@@ -105,21 +135,45 @@ export function leftOutReason(name, settings) {
 }
 export const isOvertime = type => /overtime/i.test(String(type || ""));
 
+/* A job custom field by name. Older reads carried only the branch, with no
+   field name, so a nameless value is taken as the branch. */
+function fieldOf(job, name) {
+  const nodes = (job && job.customFieldValues && job.customFieldValues.nodes) || [];
+  const hit = nodes.find(n => n && n.customField && n.customField.name === name) || (name === "Estimating branch" ? nodes.find(n => n && !n.customField) : null);
+  return hit ? hit.value : null;
+}
 function branchOf(job) {
-  const v = job && job.customFieldValues && job.customFieldValues.nodes && job.customFieldValues.nodes[0];
-  const b = v && String(v.value || "").trim();
+  const b = String(fieldOf(job, "Estimating branch") || "").trim();
   return CITIES.includes(b) ? b : null;
 }
+/* The job's service line from its Job Type. A job with more than one type
+   uses the one matching the time entry's cost code if there is one, else the
+   first. */
+export function lineOfJob(job, codeLine) {
+  const v = fieldOf(job, "Job Type");
+  const types = (Array.isArray(v) ? v : [v]).map(x => String(x || "").trim()).filter(Boolean);
+  const lines = types.map(t => LINE_BY_JOB_TYPE[t]).filter(Boolean);
+  if (!lines.length) return null;
+  return lines.includes(codeLine) ? codeLine : lines[0];
+}
+const sameName = (a, b) => String(a || "").trim().replace(/\s+/g, " ").toLowerCase() === String(b || "").trim().replace(/\s+/g, " ").toLowerCase();
+export const homeCity = (person, settings) => (settings.calgaryCrew || []).some(n => sameName(n, person)) ? "Calgary" : "Edmonton";
 
 export function classify(entry, settings) {
   const job = entry.job || {};
   const number = String(job.number || "");
   if (settings.overheadJobs[number]) return { bucket: settings.overheadJobs[number], overhead: true, assumed: false };
   const code = String((entry.costItem && entry.costItem.costCode && entry.costItem.costCode.number) || "");
-  const line = LINE_BY_DIVISION[code.slice(0, 2)] || "Other";
+  const codeLine = LINE_BY_DIVISION[code.slice(0, 2)] || "Other";
+  const typeLine = lineOfJob(job, codeLine);
+  const line = typeLine || codeLine;
   let city = branchOf(job), assumed = false;
   if (!city) { assumed = true; city = /^calgary$/i.test(String((job.location && job.location.city) || "").trim()) ? "Calgary" : "Edmonton"; }
-  return { bucket: `${line} ${city}`, overhead: false, assumed, noCode: !code };
+  const person = entry.user && entry.user.name;
+  const home = homeCity(person, settings);
+  const crossCrew = city === "Calgary" && home === "Edmonton";
+  if (crossCrew && settings.crewRule === "crew") city = "Edmonton";
+  return { bucket: `${line} ${city}`, overhead: false, assumed, noCode: !code, noType: !typeLine, typeDiffers: !!typeLine && !!code && typeLine !== codeLine, crossCrew };
 }
 
 /* ----------------------------------------------------------- the report */
@@ -129,7 +183,7 @@ export function buildReport(entries, settingsIn, period) {
   const settings = withDefaults(settingsIn);
   const buckets = allBuckets(settings);
   const emp = new Map(), temps = new Map(), detail = new Map(), left = new Map();
-  const open = [], assumedJobs = new Map(), conflicts = new Map(), noCode = [];
+  const open = [], assumedJobs = new Map(), conflicts = new Map(), noCode = [], noType = new Map(), cross = new Map();
 
   for (const e of entries || []) {
     const user = (e.user && e.user.name) || "Unknown person";
@@ -151,6 +205,8 @@ export function buildReport(entries, settingsIn, period) {
     const br = branchOf(job), city = job.location && job.location.city;
     if (br && city && CITIES.includes(city) && city !== br && !settings.overheadJobs[job.number]) conflicts.set(job.number, { job: job.number, jobName: job.name || "", branch: br, city });
     if (c.noCode) noCode.push({ person: user, job: job.number || "" });
+    if (!c.overhead && c.noType && job.number) noType.set(job.number, { job: job.number, jobName: job.name || "", countedAs: c.bucket.split(" ")[0] });
+    if (!c.overhead && c.crossCrew && !isTemp(e.type) && !isAgencyName(user)) { const k = user + "|" + job.number; const x = cross.get(k) || { person: user, job: job.number || "", jobName: job.name || "", minutes: 0, countedAs: c.bucket.split(" ").pop() }; x.minutes += mins; cross.set(k, x); }
 
     if (isTemp(e.type) || isAgencyName(user)) {
       const t = temps.get(user) || { name: user, minutes: 0, byBucket: {} };
@@ -198,7 +254,10 @@ export function buildReport(entries, settingsIn, period) {
     open: open.sort((a, b) => String(a.since).localeCompare(String(b.since))),
     assumedJobs: [...assumedJobs.values()].sort((a, b) => a.job.localeCompare(b.job)),
     conflicts: [...conflicts.values()],
-    noCode
+    noCode,
+    noJobType: [...noType.values()].sort((a, b) => a.job.localeCompare(b.job)),
+    crewOnCalgary: [...cross.values()].map(x => ({ ...x, hours: h(x.minutes) })),
+    crewRule: settings.crewRule
   };
 }
 

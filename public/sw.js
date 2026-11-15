@@ -28,7 +28,7 @@
    app has to be installed to the home screen and why the pending count is on
    every screen. */
 
-const VERSION = "am-inv-v78";
+const VERSION = "am-inv-v79";
 const SHELL = [
   "./",
   "./index.html",
@@ -46,7 +46,8 @@ const SHELL = [
   "./manifest.webmanifest",
   "./am-logo.png",
   "./vendor/html5-qrcode.min.js",
-  "./vendor/qrcode.min.js"
+  "./vendor/qrcode.min.js",
+  "./xlsx-lite.js"
 ];
 
 self.addEventListener("install", e => {

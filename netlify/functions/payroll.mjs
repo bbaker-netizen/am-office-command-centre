@@ -26,7 +26,7 @@
 import { getStore } from "@netlify/blobs";
 import { accountGate, sees, canEdit } from "./_accounts.mjs";
 import { query, qboPost, readTokens } from "./_qbo.mjs";
-import { withDefaults, periodFor, buildReport, buildJournal, COS_BUCKETS } from "./_payroll.mjs";
+import { withDefaults, periodFor, buildReport, buildJournal, COS_BUCKETS, POSTED_ELSEWHERE } from "./_payroll.mjs";
 
 const STORE = "am-inventory";
 const PAVE = "https://api.jobtread.com/pave";
@@ -58,7 +58,7 @@ async function readEntries(s, period) {
       user: { id: {}, name: {} },
       costItem: { name: {}, costCode: { number: {}, name: {} } },
       job: { id: {}, number: {}, name: {}, location: { city: {} },
-        customFieldValues: { $: { where: [["customField", "name"], "Estimating branch"] }, nodes: { value: {} } } }
+        customFieldValues: { $: { where: [["customField", "name"], "in", ["Estimating branch", "Job Type"]] }, nodes: { value: {}, customField: { name: {} } } } }
     } } } }, c.grantKey);
     const te = res && res.organization && res.organization.timeEntries;
     if (!te) throw new Error("JobTread did not return the timesheets.");
@@ -70,12 +70,41 @@ async function readEntries(s, period) {
 
 async function readSettings(s) { return withDefaults(await s.get(SETTINGS_KEY, { type: "json" })); }
 
+/* The three periods Danielle posted from Craig's 6 November workbook are
+   recorded as posted, once, so the app never posts them a second time. */
+async function recordPostedElsewhere(s) {
+  for (const p of POSTED_ELSEWHERE) {
+    if (await s.get(POSTED(p.start), { type: "json" })) continue;
+    await s.setJSON(POSTED(p.start), { start: p.start, end: p.end, moved: p.moved, docNumber: "Danielle, from Craig's 6 Nov workbook", by: "Danielle Pilon", at: "2026-11-10T00:00:00.000Z", outside: true,
+      note: "Posted in QuickBooks by Danielle on 10 Nov from Craig's workbook (period 1 includes Canopy hours). Not posted by the app." });
+  }
+}
+
+/* Every pay period from the first (19 September) to the one that ended last,
+   with whether it is posted. Paid the second Friday after it ends. */
+async function catchUp(s, settings) {
+  await recordPostedElsewhere(s);
+  const out = [];
+  let p = periodFor(POSTED_ELSEWHERE[0].start, settings);
+  const today = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
+  for (let i = 0; i < 40 && p.start <= today; i++) {
+    const posted = await s.get(POSTED(p.start), { type: "json" });
+    const paid = new Date(Date.parse(p.end + "T12:00:00Z") + 7 * 86400000).toISOString().slice(0, 10);
+    out.push({ start: p.start, end: p.end, paid, ended: p.end < today, posted: posted ? { by: posted.by, at: posted.at, moved: posted.moved, docNumber: posted.docNumber, outside: !!posted.outside } : null });
+    p = periodFor(p.next, settings);
+  }
+  return out;
+}
+
 function cleanSettings(incoming, existing) {
   const s = withDefaults(existing);
   const i = incoming || {};
   if (/^\d{4}-\d{2}-\d{2}$/.test(i.anchor || "")) s.anchor = i.anchor;
   if ([7, 14].includes(Number(i.periodDays))) s.periodDays = Number(i.periodDays);
   if (Number(i.otMultiplier) >= 1 && Number(i.otMultiplier) <= 3) s.otMultiplier = Number(i.otMultiplier);
+  if (i.anchor) s.anchorConfirmed = true;
+  if (i.crewRule === "job" || i.crewRule === "crew") s.crewRule = i.crewRule;
+  if (Array.isArray(i.calgaryCrew)) s.calgaryCrew = i.calgaryCrew.map(x => String(x || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 60)).filter(Boolean).slice(0, 40);
   if (i.overheadJobs && typeof i.overheadJobs === "object") {
     const o = {};
     for (const [k, v] of Object.entries(i.overheadJobs)) { const kk = String(k).trim(), vv = String(v || "").trim(); if (kk && vv) o[kk.slice(0, 30)] = vv.slice(0, 40); }
@@ -129,9 +158,10 @@ export default async (req) => {
       if (action === "report") {
         const period = periodFor(url.searchParams.get("start"), settings);
         const report = buildReport(await readEntries(s, period), settings, period);
+        const periods = await catchUp(s, settings);
         const posted = await s.get(POSTED(period.start), { type: "json" });
         const t = await readTokens().catch(() => null);
-        return json({ report, posted: posted || null, quickbooks: !!(t && t.refresh_token), settings, readAt: new Date().toISOString() });
+        return json({ report, posted: posted || null, periods, quickbooks: !!(t && t.refresh_token), settings, readAt: new Date().toISOString() });
       }
       return json({ error: "Unknown action." }, 400);
     }

@@ -21,7 +21,17 @@
 
    Nothing here writes to JobTread or QuickBooks. */
 
+import { LINE_BY_JOB_TYPE } from "./_payroll.mjs";
 export const RATES = { regular: 0.70, trailer: 0.90 };
+/* The division a job's cost lands on, by the same rule as the payroll split:
+   the job's Job Type (Danielle, 2026-11). Shop and office jobs are overhead.
+   A job with no type is "No type", shown so it can be fixed. */
+export function divisionOfJob(j) {
+  if (!j) return "Shop";
+  if (isOverheadJob(j)) return "Shop and office";
+  const t = Array.isArray(j.jobType) ? j.jobType[0] : j.jobType;
+  return LINE_BY_JOB_TYPE[String(t || "").trim()] || "No type";
+}
 export const OVERHEAD_JOBS = ["26-00000", "26-0000"];
 export const CITIES = ["Edmonton", "Calgary"];
 export const NO_BRANCH = "No branch";
@@ -162,15 +172,21 @@ export function buildExpenses(input, opts = {}) {
   /* 2. Branch totals by month, from the trip or purchase date: when the cost
      hit the job. Claims count once approved; card bills once logged. */
   const totals = {};
-  const put = (date, cat, branch, amt) => {
+  /* Also split by city and division (Danielle: expenses, kilometres and
+     supplies need the same split as payroll, because QuickBooks cannot take
+     the Edmonton and Calgary classification directly). */
+  const put = (date, cat, branch, amt, job) => {
     const m = month(date) || "No date";
-    const t = totals[m] || (totals[m] = { month: m, km: {}, reimbursements: {}, card: {}, shop: {} });
+    const t = totals[m] || (totals[m] = { month: m, km: {}, reimbursements: {}, card: {}, shop: {}, split: {} });
     t[cat][branch] = r2((t[cat][branch] || 0) + amt);
+    const bucket = (cat === "shop" ? "Shop" : divisionOfJob(job)) + " " + branch;
+    const sp = t.split[bucket] || (t.split[bucket] = { km: 0, reimbursements: 0, card: 0, shop: 0, total: 0 });
+    sp[cat] = r2(sp[cat] + amt); sp.total = r2(sp.total + amt);
   };
-  km.filter(c => counts(c.status)).forEach(c => put(c.date, "km", c.branch, c.owed));
-  re.filter(c => counts(c.status)).forEach(c => put(c.date, "reimbursements", c.branch, c.owed));
-  shop.filter(c => counts(c.status)).forEach(c => put(c.date, "shop", c.branch, c.total));
-  bills.filter(b => !b.claim && !b.test && !isOverheadJob(b.job)).forEach(b => put(b.date, "card", b.branch, Number(b.cost) || 0));
+  km.filter(c => counts(c.status)).forEach(c => put(c.date, "km", c.branch, c.owed, c.job));
+  re.filter(c => counts(c.status)).forEach(c => put(c.date, "reimbursements", c.branch, c.owed, c.job));
+  shop.filter(c => counts(c.status)).forEach(c => put(c.date, "shop", c.branch, c.total, null));
+  bills.filter(b => !b.claim && !b.test && !isOverheadJob(b.job)).forEach(b => put(b.date, "card", b.branch, Number(b.cost) || 0, b.job));
   const months = Object.values(totals).sort((a, b) => b.month.localeCompare(a.month));
 
   /* 3. Card spend by holder: Expense bills plus shop purchases on a card. */
