@@ -187,14 +187,47 @@ export async function accountGate(req, s = authStore(), opts = {}) {
   if (a.active === false) return refuse("auth", "That account has been switched off. Ask an admin.");
   if ((a.pwv || "") !== (claim.v || "")) return refuse("auth", "Your password was changed. Sign in again.");
   if ((claim.m || a.mustChange) && !opts.allowMustChange) return refuse("must_change", "Choose your own password before you carry on.", 403);
+  req.amUser = userOf(a, settings);
+  /* View as: an admin sees the command centre exactly as another person sees
+     it, to check what they see and sort out their access. Look only: anything
+     but a plain read is refused on the server, whatever the page does, and the
+     person's own Google Drive and sign-in steps are never opened. */
+  const viewAs = String(req.headers.get("x-am-view-as") || "").trim();
+  if (viewAs) {
+    const real = req.amUser;
+    const why = viewAsProblem(real, accounts[viewAs], req.method, req.url);
+    if (why) return refuse(why.error, why.message, why.status);
+    req.amReal = real;
+    req.amUser = { ...userOf(accounts[viewAs], settings), edit: false, admin: false, claude: false, shownLevel: accounts[viewAs].level, viewAs: { byId: real.id, byName: real.name } };
+  }
+  return null;
+}
+
+/* The person a token stands for, as every function sees them. */
+export function userOf(a, settings = {}) {
   const areas = (a.areas || []).filter(x => AREAS.includes(x));
-  req.amUser = {
+  const u = {
     kind: "account", id: a.id, name: a.name, email: a.email, title: a.title || "", areas, level: a.level,
     edit: a.level === "edit" || a.level === "admin", admin: a.level === "admin",
     office: areas.includes("office"), mustChange: !!a.mustChange, idleHours: settings.idleHours,
     claude: !!a.claude
   };
-  req.amUser.role = areas.includes("office") && areas.includes("field") ? "owner" : areas.includes("office") ? "office" : areas.includes("field") ? "field" : "none";
+  u.role = areas.includes("office") && areas.includes("field") ? "owner" : areas.includes("office") ? "office" : areas.includes("field") ? "field" : "none";
+  return u;
+}
+
+/* Why a View as request is refused, or null when it may go ahead. */
+const VIEW_AS_NEVER = ["start", "connect", "callback", "disconnect", "forget", "login", "setup", "password"];
+export function viewAsProblem(real, target, method, url) {
+  if (!real || !real.admin) return { error: "role", message: "Only an admin can view the command centre as someone else.", status: 403 };
+  if (!target || target.active === false) return { error: "view_as", message: "That person's account is not there or is switched off.", status: 404 };
+  const m = String(method || "GET").toUpperCase();
+  const name = String(target.name || "that person").split(" ")[0];
+  if (m !== "GET" && m !== "HEAD") return { error: "view_only", message: `You are viewing as ${name}. Nothing can be changed while you do. Go back to yourself first.`, status: 403 };
+  let path = "", action = "";
+  try { const u = new URL(url, "https://x"); path = u.pathname; action = u.searchParams.get("action") || u.searchParams.get("get") || ""; } catch (e) {}
+  if (/^\/api\/drive\b/.test(path)) return { error: "view_only", message: `Google Drive is ${name}'s own, so it is not opened while you view as them.`, status: 403 };
+  if (VIEW_AS_NEVER.includes(action)) return { error: "view_only", message: `That step is not available while you view as ${name}.`, status: 403 };
   return null;
 }
 

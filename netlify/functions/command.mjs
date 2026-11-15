@@ -17,7 +17,7 @@
    not open any of this; see _accounts.mjs. */
 
 import { getStore } from "@netlify/blobs";
-import { accountGate, sees, canEdit } from "./_accounts.mjs";
+import { accountGate, sees, canEdit, logAccount } from "./_accounts.mjs";
 import { CUSTOMER_FIELDS, fieldIds } from "./_jtfields.mjs";
 import { qboGet, query as qboQuery } from "./_qbo.mjs";
 import { KEY as BANK_KEY, cleanActual, readBankAccounts, lastEntryDate, pickCash, addActual, clearActual } from "./_bank.mjs";
@@ -490,7 +490,11 @@ export default async (req) => {
   const fresh = url.searchParams.get("fresh") === "1";
 
   try {
-    if (part === "me") return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, claude: !!u.claude, today: localDay() });
+    if (part === "me") {
+      if (u.viewAs) await logAccount(s, { action: "view-as", by: u.viewAs.byName, target: u.name });
+      return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, claude: !!u.claude, today: localDay(),
+        viewAs: u.viewAs ? { by: u.viewAs.byName, shownLevel: u.shownLevel } : null });
+    }
     if (part === "jobs" && url.searchParams.get("page")) return json(await readJobs(s, url.searchParams.get("page")));
     if (part === "jobs") return json(await cached(s, "jobs", () => readJobs(s), fresh));
     if (part === "money") return json(await withCash(s, await cached(s, "money", () => readMoney(), fresh)));

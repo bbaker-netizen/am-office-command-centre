@@ -403,6 +403,12 @@ main.enter .verdict.stop{animation:am-up .38s cubic-bezier(.2,.8,.2,1) both,am-p
 .kpi.drag-hole{opacity:.25;outline:2px dashed var(--cyan);outline-offset:-2px}
 .kpi-hint{font-size:11px;color:var(--ink-3);margin:-8px 0 14px;display:flex;gap:10px;align-items:center}
 .kpi-hint button{font:inherit;font-size:11px;background:none;border:0;color:var(--cyan-deep);cursor:pointer;padding:0;text-decoration:underline}
+/* View as */
+.viewas{background:var(--cyan);color:#fff;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;padding:8px 16px;font-size:13px;line-height:1.35}
+.viewas .btn{background:#fff;color:var(--ink);border:0;font-weight:700;padding:5px 12px;border-radius:6px;cursor:pointer}
+.valist{list-style:none;margin:10px 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.valist button{width:100%;text-align:left;font:inherit;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--rule);border-radius:8px;background:var(--panel);color:var(--ink);cursor:pointer}
+.valist button:hover{border-color:var(--cyan)}.valist span{font-size:12px;color:var(--ink-3)}
 /* bank balance typed in */
 .bankform{margin:10px 0}.bankform summary{cursor:pointer;color:var(--cyan-deep);font-size:13px;font-weight:700}
 .bankrow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:8px 0}
@@ -893,6 +899,35 @@ function go(tab){
   render(); window.scrollTo(0, 0);
 }
 
+/* ---------- View as (admins) ----------
+   Craig asked on 2026-11-15 to see the command centre as Amir, Bruce or anyone
+   else sees it, so he can check and sort out what each person has. */
+function viewAsBanner(me){
+  const b = document.createElement("div"); b.className = "viewas"; b.setAttribute("role", "status");
+  b.innerHTML = '<span>Viewing as <b>' + E(me.name) + '</b>' + (me.title ? ' (' + E(me.title) + ')' : '') + '. Look only: nothing can be saved, sent or changed, and their Google Drive and Ask Claude stay closed.' +
+    (me.viewAs.shownLevel === "admin" ? ' Their admin pages are not shown.' : '') + '</span><button type="button" class="btn" data-view-end>Back to me</button>';
+  $("top").appendChild(b);
+  b.querySelector("[data-view-end]").onclick = viewAsEnd;
+  document.body.classList.add("is-viewas");
+  setTimeout(sizeTop, 0);
+}
+function viewAsButton(){
+  const v = document.createElement("button");
+  v.className = "refresh"; v.textContent = "View as"; v.dataset.ico = "viewas"; v.setAttribute("aria-label", "View as someone else"); v.title = "See the command centre exactly as another person sees it";
+  v.onclick = viewAsPick;
+  const tb = $("refresh").parentNode.querySelector('[data-ico="tour"]') || $("refresh"); tb.parentNode.insertBefore(v, tb); sizeTop();
+}
+function viewAsPick(){
+  openDrawer("View as", '<p class="sub">Loading people…</p>');
+  drawerState = { kind:"viewas" };
+  acctCall("action=list").then(d => {
+    const list = (d.accounts || []).filter(a => a.active && a.id !== ME.id).sort((a, b) => a.name.localeCompare(b.name));
+    $("dbody").innerHTML = '<p class="sub">Pick a person to see the command centre exactly as they do: their sections, their pages and their numbers. It is look only. A bar across the top takes you back.</p>' +
+      (list.length ? '<ul class="valist">' + list.map(a => '<li><button type="button" data-view-as="' + E(a.id) + '" data-view-name="' + E(a.name) + '"><b>' + E(a.name) + '</b><span>' + E([a.title, a.responsibilityLabel, LEVEL_INFO[a.level] ? LEVEL_INFO[a.level].label : ""].filter(Boolean).join(" · ")) + '</span></button></li>').join("") + '</ul>' : '<p class="sub">Nobody else has an account yet.</p>');
+  }).catch(e => { $("dbody").innerHTML = '<div class="state err">' + E(errCopy(e)) + '</div>'; });
+}
+document.addEventListener("click", ev => { const t = ev.target.closest && ev.target.closest("[data-view-as]"); if(t) viewAsStart(t.dataset.viewAs, t.dataset.viewName); });
+
 /* ---------- drawer: one job, or a list of jobs ---------- */
 let drawerState = null, lastFocus = null;
 function openDrawer(title, html){
@@ -1262,6 +1297,13 @@ document.addEventListener("input", ev => {
    chose (8 by default), it sends people back to the front door to sign in again.
    The shop keeps its own PIN sign-in; its keys on this device are not touched. */
 let TOKEN = "";
+/* View as (admins): which person this tab is showing, kept for this tab only
+   so it ends when the tab is closed. The server checks every request and
+   refuses anything but a plain read (_accounts.mjs, viewAsProblem). */
+let VIEW_AS = null;
+try{ VIEW_AS = JSON.parse(sessionStorage.getItem("am.viewAs") || "null"); }catch(e){}
+function viewAsStart(id, name){ try{ sessionStorage.setItem("am.viewAs", JSON.stringify({ id, name })); }catch(e){} location.hash = ""; location.reload(); }
+function viewAsEnd(){ try{ sessionStorage.removeItem("am.viewAs"); }catch(e){} location.hash = ""; location.reload(); }
 function idbToken(){ return idbGet("acctToken").then(v => v || ""); }
 function idbOpen(){
   return new Promise((res, rej) => {
@@ -1303,6 +1345,11 @@ function touch(){
 /* A token the office has switched off or that has run out sends people to sign in again, from any screen. */
 const _cfetch = window.fetch.bind(window);
 window.fetch = function(input, init){
+  const url0 = typeof input === "string" ? input : (input && input.url) || "";
+  if(VIEW_AS && VIEW_AS.id && /^\/api\//.test(url0)){
+    init = { ...(init || {}) };
+    const h = new Headers(init.headers || {}); h.set("x-am-view-as", VIEW_AS.id); init.headers = h;
+  }
   return _cfetch(input, init).then(r => {
     const u = typeof input === "string" ? input : (input && input.url) || "";
     if(r.status === 401 && /\/api\//.test(u) && TOKEN) { TOKEN = ""; idbSet("acctToken", null).then(() => toDoor()); }
@@ -1382,6 +1429,8 @@ async function startApp(){
   try{ me = await api("me"); }
   catch(e){
     if(e.status === 401) return toDoor();
+    /* The person viewed is gone, or this account is no longer an admin: back to yourself. */
+    if(VIEW_AS){ try{ sessionStorage.removeItem("am.viewAs"); }catch(x){} VIEW_AS = null; return location.reload(); }
     /* Still on a temporary password: the front door asks for a new one. */
     if(e.code === "must_change"){ await idbSet("acctToken", null); return toDoor(); }
     return appStop("Cannot reach the app", e.message || "The app did not answer. Check for signal and reload.");
@@ -1395,6 +1444,8 @@ async function startApp(){
   const has = a => (me.areas || []).includes(a);
   ROLE = has("office") && has("field") && has("money") ? "craig" : has("office") ? "office" : has("field") ? "field" : "office";
   CAN_EDIT = !!me.edit;
+  if(VIEW_AS && !me.viewAs){ try{ sessionStorage.removeItem("am.viewAs"); }catch(e){} VIEW_AS = null; }
+  if(me.viewAs){ CAN_EDIT = false; viewAsBanner(me); }
   const tabs = ["overview"];
   if(has("office")) tabs.push("estimating", "dispatch", "tm");
   if(has("money")) tabs.push("money");
@@ -1413,8 +1464,9 @@ async function startApp(){
   document.title = CFG.title;
   $("roleTitle").textContent = CFG.title; $("roleWho").textContent = CFG.who; sizeTop();
   /* Admins: Settings beside Tour opens Admin, Connections, where JobTread and QuickBooks are connected. */
+  if(me.admin) viewAsButton();
   if(me.admin){ const set = document.createElement("button"); set.className = "refresh"; set.textContent = "Settings"; set.dataset.ico = "settings"; set.setAttribute("aria-label", "Settings"); set.title = "Connect JobTread and QuickBooks"; set.onclick = () => go("connections"); const tb = $("refresh").parentNode.querySelector('[data-ico="tour"]') || $("refresh"); tb.parentNode.insertBefore(set, tb); sizeTop(); }
-  if(me.claude) CLAUDE.mount();
+  if(me.claude && !me.viewAs) CLAUDE.mount();
   const h = (location.hash || "").replace("#", "");
   current = CFG.tabs.includes(h) ? h : (CFG.tabs.includes(store("tab." + ROLE)) ? store("tab." + ROLE) : "overview");
   render();
@@ -1831,15 +1883,15 @@ function worstTable(list, who){
    one, and the last few he typed. */
 function bankBox(n){
   const p = n.cashPick, q = n.qboCash; let h = '';
-  if(p && p.source === "you" && q !== null && q !== undefined) h += '<p class="sm">QuickBooks says ' + M(q) + (p.qbo && p.qbo.lastEntry ? ' (bank entered to ' + E(showDate(p.qbo.lastEntry)) + ')' : '') + '. The ' + M(Math.abs(p.gap)) + ' difference is what has gone through the bank and is not in QuickBooks yet. It switches back to QuickBooks by itself once Danielle\'s import reaches ' + E(showDate(p.date)) + '.</p>';
-  else if(p && p.caughtUp && p.actual) h += '<p class="sm">QuickBooks has caught up to the ' + M(p.actual.amount) + ' you typed for ' + E(showDate(p.actual.date)) + ', so it shows QuickBooks again.</p>';
+  if(p && p.source === "you" && q !== null && q !== undefined) h += '<p class="sub">QuickBooks says ' + M(q) + (p.qbo && p.qbo.lastEntry ? ' (bank entered to ' + E(showDate(p.qbo.lastEntry)) + ')' : '') + '. The ' + M(Math.abs(p.gap)) + ' difference is what has gone through the bank and is not in QuickBooks yet. It switches back to QuickBooks by itself once Danielle\'s import reaches ' + E(showDate(p.date)) + '.</p>';
+  else if(p && p.caughtUp && p.actual) h += '<p class="sub">QuickBooks has caught up to the ' + M(p.actual.amount) + ' you typed for ' + E(showDate(p.actual.date)) + ', so it shows QuickBooks again.</p>';
   if(!(CAN_EDIT && CFG.qb)) return h;
   h += '<details class="bankform"' + (p && p.stale ? ' open' : '') + '><summary>Type the balance from the bank</summary>' +
     '<div data-bank-form class="bankrow"><label>Balance<input type="text" inputmode="decimal" name="amount" placeholder="-540,000"></label>' +
     '<label>As of<input type="date" name="date" value="' + iso(today()) + '" max="' + iso(today()) + '"></label>' +
     '<label class="wide">Note (optional)<input type="text" name="note" maxlength="200" placeholder="BMO online banking, end of day"></label>' +
     '<button class="btn" type="button" data-bank-save>Save</button>' + (p && p.actual ? '<button class="btn ghost" type="button" data-bank-clear>Go back to QuickBooks</button>' : '') + '<span class="sm" id="bankMsg"></span></div>' +
-    '<p class="sm">Use the end of day balance from BMO online banking for all A&amp;M bank accounts together. A minus is money drawn on the line of credit.</p>';
+    '<p class="sub">Use the end of day balance from BMO online banking for all A&amp;M bank accounts together. A minus is money drawn on the line of credit.</p>';
   const hist = (S.M.bankHistory || []).slice(0, 5);
   if(hist.length) h += tbl('<th>For</th><th class="r">Balance</th><th>Typed by</th>', hist.map(x => '<tr><td>' + E(showDate(x.date)) + (x.note ? '<span class="sm">' + E(x.note) + '</span>' : '') + '</td><td class="r num' + (x.amount < 0 ? " stop" : "") + '">' + M(x.amount) + '</td><td>' + E(x.by || "") + '<span class="sm">' + E(whenSeen(x.at)) + '</span></td></tr>'));
   return h + '</details>';
@@ -1883,7 +1935,7 @@ VIEWS.money = {
     else {
       h += '<div class="big num ' + (n.cash < 0 ? "stop" : "") + '">' + M(n.cash) + '</div><p class="sub"><b>' + E(cashSource(n)) + '.</b> A minus means the account is drawn on the line of credit.</p>' + bankBox(n) +
         ((S.M.bs && S.M.bs.banks && S.M.bs.banks.length) ? tbl('<th>Bank account, per QuickBooks</th><th class="r">On the books</th>', S.M.bs.banks.filter(x => x.amount).map(x => '<tr><td>' + E(x.name) + '</td><td class="r num' + (x.amount < 0 ? " stop" : "") + '">' + M(x.amount) + '</td></tr>')) +
-          '<p class="sm">These are the balances recorded in QuickBooks, not the bank\'s own figures. BMO does not feed QuickBooks: Danielle imports it by hand on Tuesdays' + (S.M.bank && S.M.bank.lastEntry ? ', and the newest bank entry is dated ' + E(showDate(S.M.bank.lastEntry)) : '') + '. Anything after that is missing here.</p>' : '') +
+          '<p class="sub">These are the balances recorded in QuickBooks, not the bank\'s own figures. BMO does not feed QuickBooks: Danielle imports it by hand on Tuesdays' + (S.M.bank && S.M.bank.lastEntry ? ', and the newest bank entry is dated ' + E(showDate(S.M.bank.lastEntry)) : '') + '. Anything after that is missing here.</p>' : '') +
         tbl('<th>&nbsp;</th><th class="r">Amount</th>', [
           '<tr><td>Owed to A&amp;M by customers<span class="sm">Including ' + M(n.holdbacks) + ' of holdbacks</span></td><td class="r num">' + M(n.arBS) + '</td></tr>',
           '<tr><td>Owed by A&amp;M to suppliers</td><td class="r num">' + M(n.apBS) + '</td></tr>',
@@ -3486,7 +3538,8 @@ var ICONS = {
   tm:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6M12 2v3"/>',
   clients:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
   scorecards:'<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
-  chevron:'<path d="m6 9 6 6 6-6"/>'
+  chevron:'<path d="m6 9 6 6 6-6"/>',
+  viewas:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'
 };
 function ico(n, cls){ return ICONS[n] ? '<svg class="ico' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + ICONS[n] + '</svg>' : ""; }
 var SEC_ICO = { "":"overview", Office:"office", Field:"field", Assistants:"assistants", Admin:"admin" };
@@ -3499,7 +3552,7 @@ function kpiIco(label){
    their icons are drawn by the stylesheet from a data-ico attribute and
    survive any change of text. */
 (function(){
-  const names = ["settings", "tour", "refresh", "account", "signout"];
+  const names = ["settings", "tour", "refresh", "account", "signout", "viewas"];
   let css = "";
   names.forEach(n => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICONS[n] + '</svg>';
@@ -5052,7 +5105,7 @@ const CCTOUR = (function(){
 
   return {
     start,
-    ready(){ try{ if(localStorage.getItem(SEEN) === "1") return; }catch(e){ return; } start(); },
+    ready(){ if(VIEW_AS) return; try{ if(localStorage.getItem(SEEN) === "1") return; }catch(e){ return; } start(); },
     replay(){ try{ localStorage.removeItem(SEEN); }catch(e){} start(); },
     payroll(){ start("payroll"); }
   };
