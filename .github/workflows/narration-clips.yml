@@ -40,7 +40,13 @@ jobs:
           made=0; failed=0
           for n in $names; do
             if [ ! -f "public/tour/cc/$n.mp3" ]; then
-              if python3 tools/generate-narration.py tools/Narration-Script-Command-Centre.md public/tour/cc --only "$n" > "/tmp/$n.log" 2>&1; then
+              ok=0
+              # The voice service sometimes answers with no audio; try again after a pause.
+              for try in 1 2 3 4; do
+                if python3 tools/generate-narration.py tools/Narration-Script-Command-Centre.md public/tour/cc --only "$n" > "/tmp/$n.log" 2>&1; then ok=1; break; fi
+                sleep $((try*8))
+              done
+              if [ "$ok" = 1 ]; then
                 made=$((made+1))
               else
                 failed=$((failed+1))
