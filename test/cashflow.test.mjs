@@ -96,6 +96,13 @@ for (const amt of [-420000, -380000, -330000]) {
 }
 ok("whatever it advises, the tightest week still keeps the $25,000 reserve");
 
+const grow = buildCashFlow({ today: T, weeks: 4, limit: 750000, floor: 15000, reserveGrowth: 5000, graceDays: 14, opening: { amount: -250000 }, invoices, bills, plan });
+assert.deepEqual(grow.weeks.map(w => w.reserve), [15000, 20000, 25000, 30000]);
+const flat = buildCashFlow({ today: T, weeks: 4, limit: 750000, floor: 15000, graceDays: 14, opening: { amount: -250000 }, invoices, bills, plan });
+assert.ok(grow.advice.pay.reduce((x, b) => x + b.amount, 0) <= flat.advice.pay.reduce((x, b) => x + b.amount, 0));
+assert.ok(grow.weeks.every((w, i) => true));
+ok("paying the line down like Craig's sheet: the reserve grows $5,000 a week and the advice pays no more than it can keep");
+
 /* Ticks, placements and rolling */
 const payKey = "item:" + SEED_ITEMS.find(x => x.name === "Payroll" && x.start === "2026-11-16").id + ":2026-11-16";
 const chandos = docKey("inv", { type: "Invoice", num: "PRO-26-00500", name: "Chandos Construction", date: "2026-10-20" });

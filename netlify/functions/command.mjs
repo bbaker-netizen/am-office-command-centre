@@ -24,6 +24,7 @@ import { KEY as BANK_KEY, cleanActual, readBankAccounts, lastEntryDate, pickCash
 import { readAging, readBalanceSheet, readProfitAndLoss, readPayableDetail, readVendorSpend } from "./_qboreports.mjs";
 import { buildFeed, localDay } from "./_derive.mjs";
 import { pickTask, readInBatches } from "./_crew.mjs";
+import { closeoutCheck } from "./_closeout.mjs";
 import { SWEEP_KEY as ENCIRCLE_SWEEP } from "./_encircle.mjs";
 
 const STORE = "am-inventory";
@@ -45,7 +46,8 @@ const ACCESS = {
   crew: u => sees(u, "office", "field"),
   field: u => sees(u, "office", "field", "money"),
   billing: u => sees(u, "office", "field", "money"),
-  encircle: u => sees(u, "office", "field")
+  encircle: u => sees(u, "office", "field"),
+  closeout: u => sees(u, "office", "field")
 };
 const TTL = { jobs: 120000, money: 300000, inventory: 60000, buying: 300000, people: 3600000, billing: 1800000, field: 300000 };
 
@@ -309,6 +311,63 @@ function parseDesc(d) {
 function buildDesc(p) {
   return [p.lead && LINE.lead + ": " + p.lead, p.shop && LINE.shop + ": " + p.shop, p.site && LINE.site + ": " + p.site, ...(p.rest || [])].filter(Boolean).join("\n") || null;
 }
+/* Closeout checks for jobs that have finished on site (see _closeout.mjs):
+   quotes, purchase orders and bills on each job, and its last time entry. */
+async function readCloseout(s, idsParam, poParam) {
+  const c = (await s.get("jobtread-key", { type: "json" })) || {};
+  if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
+  const ids = String(idsParam || "").split(",").filter(x => /^[A-Za-z0-9_-]{2,40}$/.test(x)).slice(0, 60);
+  const po = {}; String(poParam || "").split(",").forEach((v, i) => { if (ids[i]) po[ids[i]] = decodeURIComponent(v || ""); });
+  const today = localDay();
+  const ask = async group => {
+    const q = {};
+    group.forEach((id, i) => { q["j" + i] = { _: "job", $: { id }, id: {},
+      documents: { $: { size: 50 }, nodes: { type: {}, status: {}, account: { name: {} } } },
+      timeEntries: { $: { size: 1, sortBy: [{ field: "startedAt", order: "desc" }] }, nodes: { startedAt: {} } } }; });
+    const res = await pave(q, c.grantKey);
+    const out = {};
+    group.forEach((id, i) => {
+      const j = res["j" + i]; if (!j) return;
+      const docs = ((j.documents && j.documents.nodes) || []).map(d => ({ type: d.type, status: d.status, vendor: (d.account && d.account.name) || "" }));
+      const te = j.timeEntries && j.timeEntries.nodes && j.timeEntries.nodes[0];
+      const last = te ? localDay(new Date(te.startedAt)) : null;
+      out[id] = closeoutCheck({ poStatus: po[id], docs, lastWork: last, today });
+    });
+    return out;
+  };
+  const { found, failed } = await readInBatches(ids, ask, 4);
+  return { closeout: found, failed, today };
+}
+
+/* A document from a phone into the job's Files in JobTread (purchase orders,
+   quotes, subcontractor invoices, sign-in sheets, letters). Site photos stay
+   in Encircle, which owns them. Three steps, per JobTread's API: ask for an
+   upload address, send the bytes there, then attach it to the job. */
+const FOLDERS = ["Purchase orders", "Quotes", "Subcontractor invoices", "Site documents"];
+async function uploadToJob(s, req, b) {
+  const c = (await s.get("jobtread-key", { type: "json" })) || {};
+  if (!c.grantKey) return json({ error: "not_connected", message: "JobTread is not connected yet." }, 409);
+  const jobId = String(b.jobId || ""), name = String(b.name || "").replace(/[^\w .&()-]/g, "").trim().slice(0, 100) || "Document";
+  const folder = FOLDERS.includes(b.folder) ? b.folder : "Site documents";
+  const m = String(b.dataUrl || "").match(/^data:([\w/+.-]+);base64,(.+)$/);
+  if (!/^[A-Za-z0-9_-]{2,40}$/.test(jobId) || !m) return json({ error: "bad", message: "Pick a job and a file." }, 400);
+  if (/^image\//.test(m[1]) && b.photo) return json({ error: "photo", message: "Site photos go in Encircle, which keeps them for the job. Use Encircle's app for photos." }, 400);
+  const bytes = Buffer.from(m[2], "base64");
+  if (bytes.length > 4_000_000) return json({ error: "big", message: "That file is over 4 MB. Send a smaller copy or upload it in JobTread." }, 400);
+  const ur = await pave({ createUploadRequest: { $: { organizationId: c.organizationId, type: m[1], size: bytes.length }, createdUploadRequest: { id: {}, url: {}, method: {}, headers: {} } } }, c.grantKey);
+  const u = ur.createUploadRequest && ur.createUploadRequest.createdUploadRequest;
+  if (!u || !u.url) return json({ error: "upstream", message: "JobTread did not give an upload address." }, 502);
+  const put = await fetch(u.url, { method: u.method || "PUT", headers: u.headers || { "content-type": m[1] }, body: bytes });
+  if (!put.ok) return json({ error: "upstream", message: "The file did not upload (" + put.status + ")." }, 502);
+  const f = await pave({ createFile: { $: { uploadRequestId: u.id, name, targetType: "job", targetId: jobId, folder, description: "Added from the A&M app by " + req.amUser.name }, createdFile: { id: {}, name: {} } } }, c.grantKey);
+  try {
+    const logDoc = (await s.get("jobtread-log", { type: "json" })) || { entries: [] };
+    logDoc.entries.unshift({ at: new Date().toISOString(), action: "createFile", by: req.amUser.name, jobId, changes: [folder + ": " + name] });
+    logDoc.entries = logDoc.entries.slice(0, 300); await s.setJSON("jobtread-log", logDoc);
+  } catch (e) {}
+  return json({ ok: true, file: f.createFile && f.createFile.createdFile, folder });
+}
+
 async function readCrew(s, idsParam) {
   const c = (await s.get("jobtread-key", { type: "json" })) || {};
   if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
@@ -478,6 +537,7 @@ export default async (req) => {
     try {
       const body = await req.clone().json().catch(() => ({}));
       if (body && body.crew) return await saveCrew(s, req, body);
+      if (body && body.upload) return await uploadToJob(s, req, body.upload);
       return await updateJob(s, req);
     }
     catch (e) { return json({ error: "upstream", message: e.message }, 502); }
@@ -502,6 +562,7 @@ export default async (req) => {
     if (part === "buying") return json(await cached(s, "buying", () => readBuying(s), fresh));
     if (part === "people") return json(await cached(s, "people", () => readPeople(s), fresh));
     if (part === "crew") return json(await readCrew(s, url.searchParams.get("ids")));
+    if (part === "closeout") return json(await readCloseout(s, url.searchParams.get("ids"), url.searchParams.get("po")));
     if (part === "field") return json(await cached(s, "field", () => readField(s), fresh));
     if (part === "billing") return json(await cached(s, "billing", () => readBilling(s), fresh));
     if (part === "encircle") return json({ mode: String(process.env.ENCIRCLE_MODE || "off").toLowerCase(), sweep: (await s.get(ENCIRCLE_SWEEP, { type: "json" })) || null });

@@ -35,10 +35,10 @@ const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, header
 async function readPlan(s) {
   let p = await s.get(PLAN, { type: "json" });
   if (!p) {
-    p = { items: SEED_ITEMS.map(x => ({ ...x })), done: {}, place: {}, settings: { limit: 750000, floor: 25000, graceDays: 14 }, seededFrom: SEED_FROM, seededAt: new Date().toISOString(), log: [] };
+    p = { items: SEED_ITEMS.map(x => ({ ...x })), done: {}, place: {}, settings: { limit: 750000, floor: 25000, graceDays: 14, reserveGrowth: 0 }, seededFrom: SEED_FROM, seededAt: new Date().toISOString(), log: [] };
     await s.setJSON(PLAN, p);
   }
-  p.done = p.done || {}; p.place = p.place || {}; p.settings = { limit: 750000, floor: 25000, graceDays: 14, ...(p.settings || {}) }; p.log = p.log || [];
+  p.done = p.done || {}; p.place = p.place || {}; p.settings = { limit: 750000, floor: 25000, graceDays: 14, reserveGrowth: 0, ...(p.settings || {}) }; p.log = p.log || [];
   return p;
 }
 
@@ -152,10 +152,10 @@ export default async (req) => {
         }
         case "settings": {
           const n = (v, lo, hi) => { const x = Number(String(v).replace(/[$,\s]/g, "")); return isFinite(x) && x >= lo && x <= hi ? x : null; };
-          const limit = n(b.limit ?? plan.settings.limit, 0, 20000000), floor = n(b.floor ?? plan.settings.floor, 0, 5000000), grace = n(b.graceDays ?? plan.settings.graceDays, 0, 60);
-          if (limit === null || floor === null || grace === null) return { status: 400, body: { error: "bad_value", message: "Check the numbers." } };
-          plan.settings = { limit, floor, graceDays: grace };
-          log("Settings: line $" + limit + ", keep $" + floor + " in reserve, roll bills and invoices due in the last " + grace + " days");
+          const limit = n(b.limit ?? plan.settings.limit, 0, 20000000), floor = n(b.floor ?? plan.settings.floor, 0, 5000000), grace = n(b.graceDays ?? plan.settings.graceDays, 0, 60), growth = n(b.reserveGrowth ?? plan.settings.reserveGrowth ?? 0, 0, 500000);
+          if (limit === null || floor === null || grace === null || growth === null) return { status: 400, body: { error: "bad_value", message: "Check the numbers." } };
+          plan.settings = { limit, floor, graceDays: grace, reserveGrowth: growth };
+          log("Settings: line $" + limit + ", keep $" + floor + " in reserve" + (growth ? ", growing $" + growth + " a week" : "") + ", roll bills and invoices due in the last " + grace + " days");
           break;
         }
         default: return { status: 400, body: { error: "bad", message: "Unknown change." } };
