@@ -17,7 +17,14 @@
 
 import { withLock } from "./_lock.mjs";
 
-export const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.compose"];
+/* gmail.compose covers drafts AND sending a draft the person approved.
+   calendar.events (2026-11-17) lets the assistant show today's meetings and
+   answer an invite when the person presses Accept or Decline. An inbox
+   connected before that date has no calendar permission until it is
+   connected again; hasCalendar says which. */
+export const CAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+export const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.compose", CAL_SCOPE];
+export const hasCalendar = inbox => !!inbox && String(inbox.scope || "").split(/\s+/).includes(CAL_SCOPE);
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 export const KEY = id => "inbox-" + id;
 
@@ -137,6 +144,88 @@ export async function makeDraft(token, { to, cc, subject, body, threadId, inRepl
   const raw = Buffer.from(lines.join("\r\n"), "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const d = await gmail(token, "/drafts", { method: "POST", body: JSON.stringify({ message: { raw, ...(threadId ? { threadId } : {}) } }) });
   return { draftId: d.id, link: "https://mail.google.com/mail/u/0/#drafts" };
+}
+
+/* ------------------------------------------------------------ the thread
+   What has happened in the conversation since this email: has the person
+   already answered, and has someone else at A&M answered. This is what stops
+   "needs you" being raised on mail that is already dealt with. */
+export async function threadInfo(token, threadId, messageId, mine, companyDomains) {
+  const t = await gmail(token, "/threads/" + encodeURIComponent(threadId) + "?format=metadata&metadataHeaders=From&metadataHeaders=Date");
+  return readThread(t, messageId, mine, companyDomains);
+}
+export function readThread(t, messageId, mine, companyDomains) {
+  const msgs = (t && t.messages) || [];
+  const me = new Set((mine || []).map(x => String(x).toLowerCase()));
+  const doms = (companyDomains || []).map(x => String(x).toLowerCase());
+  const i = msgs.findIndex(m => m.id === messageId);
+  const later = i < 0 ? [] : msgs.slice(i + 1);
+  const who = m => addressOf(header(m, "From"));
+  const isMe = m => (m.labelIds || []).includes("SENT") || me.has(who(m));
+  const othersAfter = [...new Set(later.filter(m => !isMe(m) && doms.some(d => who(m).endsWith("@" + d))).map(m => (header(m, "From").split("<")[0] || who(m)).replace(/"/g, "").trim()))];
+  return { count: msgs.length, repliedAfter: later.some(isMe), othersAfter, newerFromSender: later.some(m => !isMe(m) && who(m) === (i >= 0 ? who(msgs[i]) : "")) };
+}
+
+/* The person's own recent sent mail, so drafts sound like them. */
+export async function sentSamples(token, n = 5) {
+  const list = await gmail(token, "/messages?maxResults=" + (n * 3) + "&q=" + encodeURIComponent("in:sent newer_than:45d -in:chats"));
+  const out = [];
+  for (const m of (list.messages || [])) {
+    if (out.length >= n) break;
+    const f = await gmail(token, "/messages/" + m.id + "?format=full");
+    const body = plainText(f.payload).split(/\nOn .{10,80} wrote:|\n-{2,} ?Forwarded message|\nFrom: .+\nSent: /)[0].replace(/\s+\n/g, "\n").trim();
+    if (body.length > 40 && body.length < 1500) out.push(body.slice(0, 700));
+  }
+  return out;
+}
+
+/* Change a draft the person edited, then send it. Sending happens only when
+   they press Approve and send; nothing in the app sends on a timer. */
+export async function updateDraft(token, draftId, { to, cc, subject, body, threadId, inReplyTo }) {
+  const raw = rawMessage({ to, cc, subject, body, inReplyTo });
+  await gmail(token, "/drafts/" + encodeURIComponent(draftId), { method: "PUT", body: JSON.stringify({ message: { raw, ...(threadId ? { threadId } : {}) } }) });
+}
+export async function sendDraft(token, draftId) {
+  const r = await gmail(token, "/drafts/send", { method: "POST", body: JSON.stringify({ id: draftId }) });
+  return { id: r.id, threadId: r.threadId };
+}
+export async function sendNow(token, { to, cc, subject, body }) {
+  const r = await gmail(token, "/messages/send", { method: "POST", body: JSON.stringify({ raw: rawMessage({ to, cc, subject, body }) }) });
+  return { id: r.id, threadId: r.threadId };
+}
+
+/* ------------------------------------------------------------ the calendar */
+const CAL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+async function cal(token, path, opts = {}) {
+  const r = await fetch(CAL + path, { ...opts, headers: { authorization: "Bearer " + token, "content-type": "application/json", ...(opts.headers || {}) } });
+  const b = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error("Google Calendar said no: " + ((b.error && b.error.message) || r.status));
+  return b;
+}
+export function readEvent(e) {
+  const self = (e.attendees || []).find(a => a.self);
+  return { id: e.id, title: e.summary || "(no title)", start: (e.start && (e.start.dateTime || e.start.date)) || "", end: (e.end && (e.end.dateTime || e.end.date)) || "", allDay: !!(e.start && e.start.date && !e.start.dateTime),
+    where: e.location || "", organizer: (e.organizer && (e.organizer.displayName || e.organizer.email)) || "", mine: !!(e.organizer && e.organizer.self), status: self ? self.responseStatus : (e.organizer && e.organizer.self ? "accepted" : ""),
+    people: (e.attendees || []).length, link: e.htmlLink || "", meet: e.hangoutLink || "" };
+}
+/* Events between two moments, in order, with any that overlap marked. */
+export async function calEvents(token, fromIso, toIso) {
+  const q = new URLSearchParams({ timeMin: fromIso, timeMax: toIso, singleEvents: "true", orderBy: "startTime", maxResults: "50" });
+  const list = ((await cal(token, "?" + q)).items || []).filter(e => e.status !== "cancelled").map(readEvent).filter(e => e.status !== "declined");
+  return markClashes(list);
+}
+export function markClashes(list) {
+  const timed = list.filter(e => !e.allDay);
+  for (const a of timed) a.clash = timed.some(b => b !== a && b.start < a.end && a.start < b.end);
+  return list;
+}
+/* Accept, decline or maybe: only the person's own answer changes. */
+export async function calRespond(token, eventId, status) {
+  const e = await cal(token, "/" + encodeURIComponent(eventId));
+  const attendees = (e.attendees || []).map(a => a.self ? { ...a, responseStatus: status } : a);
+  if (!attendees.some(a => a.self)) throw new Error("You are not on the guest list for that meeting.");
+  await cal(token, "/" + encodeURIComponent(eventId) + "?sendUpdates=all", { method: "PATCH", body: JSON.stringify({ attendees }) });
+  return { ok: true };
 }
 
 export const addressOf = from => { const m = String(from || "").match(/<([^>]+)>/); return (m ? m[1] : String(from || "")).trim().toLowerCase(); };

@@ -12,7 +12,7 @@
 
 import { getStore } from "@netlify/blobs";
 import { accountGate, readAccounts } from "./_accounts.mjs";
-import { SCOPES, readInboxes, writeInboxes, allowedAddress, personalAllowed } from "./_gmail.mjs";
+import { SCOPES, readInboxes, writeInboxes, allowedAddress, personalAllowed, hasCalendar } from "./_gmail.mjs";
 import { withLock } from "./_lock.mjs";
 
 const store = () => getStore({ name: "am-inventory", consistency: "strong" });
@@ -43,10 +43,10 @@ export async function inboxCallback(url) {
   if (!allowedAddress(email, account)) return page("Not connected", `${email || "That inbox"} cannot be connected here. Only A&amp;M work inboxes can be added to an assistant, and never the robots' mailbox.${personalAllowed(account) ? "" : " A personal Gmail can be added by Craig and Amir only."} If Google signed you in to the wrong account, start again from My day with Add another inbox and pick the right one.`);
   await withLock(s, "inbox-" + saved.userId, async () => {
     const list = (await readInboxes(s, saved.userId)).filter(x => x.email !== email);
-    list.push({ email, refresh_token: t.refresh_token, access_token: t.access_token, expires_at: Date.now() + (t.expires_in || 3600) * 1000, addedAt: new Date().toISOString() });
+    list.push({ email, refresh_token: t.refresh_token, access_token: t.access_token, expires_at: Date.now() + (t.expires_in || 3600) * 1000, addedAt: new Date().toISOString(), scope: String(t.scope || "") });
     await writeInboxes(s, saved.userId, list);
   });
-  return page(email + " is connected", "Your assistant sorts this inbox every half hour through the working day, puts what needs you on your list, and offers drafts for you to send yourself. Nothing is ever sent from it by the app.");
+  return page(email + " is connected", "Your assistant sorts this inbox every half hour through the working day, puts what needs you at the top of My day with a reply drafted, and shows your meetings. Nothing is sent unless you press Approve and send.");
 }
 
 export default async (req) => {
@@ -57,7 +57,7 @@ export default async (req) => {
   if (req.method === "GET" && !action) {
     const list = await readInboxes(s, u.id);
     const { accounts } = await readAccounts(s);
-    return json({ inboxes: list.map(x => ({ email: x.email, addedAt: x.addedAt })), ready: !missing().length, missing: missing(), personal: !u.viewAs && personalAllowed(accounts[u.id]) });
+    return json({ inboxes: list.map(x => ({ email: x.email, addedAt: x.addedAt, calendar: hasCalendar(x) })), ready: !missing().length, missing: missing(), personal: !u.viewAs && personalAllowed(accounts[u.id]) });
   }
   if (req.method === "GET" && action === "start") {
     if (missing().length) return json({ error: "setup", message: "Google sign-in is not set up in Netlify yet: " + missing().join(", ") }, 409);
