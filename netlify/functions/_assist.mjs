@@ -50,6 +50,15 @@ export function checkinSlot(local) {
   return null;
 }
 
+/* Between check-ins the mail is sorted every half hour, so "Emails need you"
+   and the hit list keep up with the day (2026-11-17). Weekdays, 7:00 to 5:30
+   only, the same working hours as everything else. */
+export function inWorkingHours(local) {
+  if (["Sat", "Sun"].includes(local.weekday)) return false;
+  const m = local.hour * 60 + (local.minute || 0);
+  return m >= mins(WORK_START) && m <= mins(WORK_END);
+}
+
 let seq = 0;
 export const newId = () => "a" + Date.now().toString(36) + (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
 
@@ -68,6 +77,40 @@ export function cleanEntry(x, today) {
 export function addItem(doc, value, nowIso, { held = false } = {}) {
   const it = { id: newId(), ...value, createdAt: nowIso, done: false, held };
   doc.items = [it].concat(doc.items || []);
+  return it;
+}
+
+/* Mail that needs this person goes onto their hit list by itself (2026-11-17).
+   Before this the list only held what they said, typed or photographed, so
+   it read "Nothing on your list" while their inbox was full of asks.
+   One line per email thread. Once a line has been made for an email it is
+   never made again, so ticking or removing it sticks. Returns the new lines. */
+export function mailToList(doc, today, nowIso) {
+  const added = [];
+  doc.items = doc.items || [];
+  for (const m of (doc.triage && doc.triage.items) || []) {
+    if (m.bucket !== "needs_you" || m.handled || m.listed) continue;
+    const thread = m.threadId || m.id;
+    const same = doc.items.find(x => x.mailThread === thread);
+    if (same) { m.listed = same.id; continue; }
+    const who = String(m.who || m.address || "").trim();
+    const what = String(m.action || m.subject || "Email needs you").trim();
+    const ck = cleanEntry({ text: (who ? who + ": " : "") + what, kind: "ask", who, source: "email" }, today);
+    if (!ck.ok) continue;
+    const it = addItem(doc, { ...ck.value, mailId: m.id, mailThread: thread, inbox: m.inbox || "", subject: String(m.subject || "").slice(0, 160) }, nowIso);
+    m.listed = it.id; added.push(it);
+  }
+  return added;
+}
+/* Ticking the line marks the email dealt with, and the other way round. */
+export function mailDone(doc, mailId, nowIso) {
+  const m = ((doc.triage && doc.triage.items) || []).find(x => x.id === mailId);
+  if (m && !m.handled) m.handled = nowIso;
+  return m;
+}
+export function listDoneForMail(doc, mailId, nowIso) {
+  const it = (doc.items || []).find(x => x.mailId === mailId && !x.done);
+  if (it) { it.done = true; it.doneAt = nowIso; it.doneWhy = "Marked done in your inbox"; }
   return it;
 }
 

@@ -8,7 +8,8 @@
      say { text }        talk to it ("put this on my list", "I just paid Aces")
      photo { image }     a photo of a paper list: new lines added, ticked lines ticked
      tick | untick | remove | pin { id }
-     triage              sort new mail in this person's inboxes now
+     triage              sort new mail in this person's inboxes now; what needs
+                         them goes onto their hit list
      draft { inbox, id } a reply drafted into their own Gmail, for them to send
      chase { job..., who, email, what, from }   start a three-day chase
      chaseCall { id, outcome }   the call on day three, and what next
@@ -26,7 +27,7 @@
 import { getStore } from "@netlify/blobs";
 import { accountGate, sees, canEdit, readAccounts, userOf } from "./_accounts.mjs";
 import { withLock } from "./_lock.mjs";
-import { cleanEntry, addItem, rank, buildCheckin, chaseStep, chaseStatus, chaseDraft, matchPayments, callContext, parseSaying, localNow, KINDS, newId } from "./_assist.mjs";
+import { cleanEntry, addItem, rank, buildCheckin, chaseStep, chaseStatus, chaseDraft, matchPayments, callContext, parseSaying, localNow, KINDS, newId, mailToList, mailDone, listDoneForMail } from "./_assist.mjs";
 import { claude, jsonFrom, hasKey, fastModel, draftModel, OUTSIDE_RULE, STYLE } from "./_claudecall.mjs";
 import { readInboxes, tokenFor, recentMail, makeDraft, heardFrom, addressOf, getMessage } from "./_gmail.mjs";
 import { query as qboQuery } from "./_qbo.mjs";
@@ -69,7 +70,13 @@ async function linkToCashFlow(s, u, it, today) {
 }
 async function tickCashFlow(s, u, it, done) {
   if (!it.cfItemId || !it.cfDate) return;
-  await planChange(s, p => { const k = "item:" + it.cfItemId + ":" + it.cfDate; if (done) p.done[k] = { at: new Date().toISOString(), by: u.name, via: "My day" }; else delete p.done[k]; });
+  await planChange(s, p => {
+    const k = "item:" + it.cfItemId + ":" + it.cfDate, at = new Date().toISOString();
+    /* The tick moves the room on the line now (see movesSince in _cashflow.mjs). */
+    p.moves = (p.moves || []).filter(m => m.key !== k);
+    if (done) { p.done[k] = { at, by: u.name, via: "My day" }; if (it.amount) p.moves.push({ key: k, side: it.kind === "expect" ? "in" : "out", amount: it.amount, name: it.who || it.text, at, day: localNow().date, by: u.name }); }
+    else delete p.done[k];
+  });
 }
 
 /* ----------------------------------------------------- payments seen */
@@ -107,10 +114,10 @@ export async function triage(s, u, { max = 10, autoDraft = 0 } = {}) {
   let sorted = [];
   if (msgs.length && hasKey()) {
     const text = await claude({
-      model: fastModel(), max_tokens: 2000,
-      system: `You sort a person's email for their personal assistant. ${ROLE_WORDS(u)} ${OUTSIDE_RULE}
-Return only a JSON array, one object per email, in the same order: {"id":"...","bucket":"needs_you"|"payment"|"fyi"|"not_yours"|"junk","why":"under 12 words","who":"sender's name","action":"what they need to do, under 10 words, or empty","payment":null or {"direction":"in"|"out","name":"who paid or was paid","amount":number},"draft":true|false}.
-needs_you: a person asking ${u.name.split(" ")[0]} for a decision, an answer, money or a call. payment: an e-transfer, deposit, bank notice or payment portal notice showing money in or out. not_yours: estimating mail (bids, quotes, tenders, plan downloads), mail meant for someone else's work, or copies where someone else is handling it. fyi: worth knowing, nothing to do. junk: marketing, newsletters, automatic notices with nothing to do.
+      model: fastModel(), max_tokens: Math.min(8000, 600 + msgs.length * 220),
+      system: `You sort a person's email for their personal assistant. ${ROLE_WORDS(u)} Their own addresses: ${[u.email].concat(inboxes.map(x => x.email)).filter((x, i, a) => x && a.indexOf(x) === i).join(", ")}. ${OUTSIDE_RULE}
+Return only a JSON array, one object per email, in the same order: {"id":"...","bucket":"needs_you"|"payment"|"fyi"|"not_yours"|"junk","why":"under 12 words","who":"sender's name","action":"what ${u.name.split(" ")[0]} has to do, starting with a verb, under 12 words, naming the job, person or amount (for example: Send Bryan's $800 LOA for Cana Lloydminster), or empty","payment":null or {"direction":"in"|"out","name":"who paid or was paid","amount":number},"draft":true|false}.
+needs_you: a person asking ${u.name.split(" ")[0]} for a decision, an approval, an answer, money, a document or a call. This includes staff and partners at A&M writing to ${u.name.split(" ")[0]} directly (their address is in To), a customer or supplier chasing an invoice or a payment, a bank or insurer asking for something, and a JobTread message posted to ${u.name.split(" ")[0]} that asks for something. If ${u.name.split(" ")[0]} is the one who has to act, it is needs_you even when others are copied. payment: an e-transfer, deposit, bank notice or payment portal notice showing money in or out. not_yours: estimating mail (bid invitations, tenders, addenda, plan downloads), or mail where ${u.name.split(" ")[0]} is only copied (in Cc) and someone else is clearly handling it. Never use not_yours for mail sent To ${u.name.split(" ")[0]} that asks them for something. fyi: worth knowing, nothing to do. junk: marketing, newsletters, automatic notices with nothing to do.
 draft is true only when a short written reply would help.`,
       messages: [{ role: "user", content: msgs.map(m => `<email id="${m.id}">\nFrom: ${m.from}\nTo: ${m.to}${m.cc ? "\nCc: " + m.cc : ""}\nSubject: ${m.subject}\nDate: ${m.date}\n\n${(m.body || m.snippet).slice(0, 1200)}\n</email>`).join("\n\n") }]
     }).catch(e => { throw new Error("Sorting the mail did not work: " + e.message); });
@@ -126,13 +133,18 @@ draft is true only when a short written reply would help.`,
     try { const m = msgs.find(x => x.id === it.id); const dr = await draftReply(s, u, it, m); it.draft = dr; } catch (e) { it.draftError = e.message; }
   }
   const errors = fresh.filter(m => m.error).map(m => m.inbox + ": " + m.error);
-  await change(s, u.id, doc => {
-    doc.triage = { at: new Date().toISOString(), seen: [...new Set([...(doc.triage.seen || []), ...msgs.map(m => m.id)])].slice(-600), items: items.concat(doc.triage.items || []).filter((x, i, a) => a.findIndex(y => y.id === x.id) === i).slice(0, 120), errors };
+  const listed = await change(s, u.id, doc => {
+    /* Mail that could not be sorted (Claude did not answer) is not marked as
+       seen, so the next pass tries it again. */
+    const done = hasKey() && msgs.length && !sorted.length ? [] : msgs.map(m => m.id);
+    doc.triage = { at: new Date().toISOString(), seen: [...new Set([...(doc.triage.seen || []), ...done])].slice(-2000), items: (done.length ? items : []).concat(doc.triage.items || []).filter((x, i, a) => a.findIndex(y => y.id === x.id) === i).slice(0, 200), errors };
     /* e-transfers and payment notices can tick a sticky note */
     const pays = items.filter(x => x.payment).map(x => ({ kind: x.payment.direction, name: x.payment.name, amount: x.payment.amount, date: localNow().date, source: "email from " + (x.who || x.address) }));
     for (const m of matchPayments(doc.items, pays)) { const it = doc.items.find(x => x.id === m.id); if (it) { it.done = true; it.doneAt = new Date().toISOString(); it.doneWhy = m.reason; } }
+    /* What needs this person goes straight onto their hit list. */
+    return mailToList(doc, localNow().date, new Date().toISOString()).map(x => x.text);
   });
-  return { at: new Date().toISOString(), count: items.length, errors };
+  return { at: new Date().toISOString(), count: items.length, needs: items.filter(x => x.bucket === "needs_you").length, listed, errors };
 }
 
 async function draftReply(s, u, it, full) {
@@ -184,14 +196,18 @@ async function robotsDraft(s, to, subject, body, replyTo) {
    "Check in now" button. */
 export async function runFor(s, u, slot, { heavy = true } = {}) {
   const now = new Date(), L = localNow(now), notes = [];
-  if (heavy && (slot === "morning" || slot === "noon")) {
-    try { const t = await triage(s, u, { max: 15, autoDraft: slot === "morning" ? 3 : 1 }); if (t.count) notes.push(`Sorted ${t.count} new email${t.count === 1 ? "" : "s"}.`); } catch (e) { notes.push(e.message); }
+  /* Mail is sorted at every check-in and, between them, every half hour
+     (slot "sort": the mail only, no check-in and no email to the person). */
+  if (heavy) {
+    try { const t = await triage(s, u, { max: 25, autoDraft: slot === "morning" ? 3 : slot === "noon" ? 1 : 0 }); if (t.count) notes.push(`Sorted ${t.count} new email${t.count === 1 ? "" : "s"}${t.listed && t.listed.length ? ", " + t.listed.length + " put on your list" : ""}.`); } catch (e) { notes.push(e.message); }
   }
+  if (slot === "sort") return { slot, at: now.toISOString(), notes };
   if (slot === "morning") { try { notes.push(...await runChases(s, u, L.date)); } catch (e) { notes.push("The chases did not run: " + e.message); } }
   let pays = [];
   if (u.assistant === "exec" && sees(u, "money")) { try { pays = await recentPayments(new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)); } catch (e) {} }
   const c = await change(s, u.id, d => {
     for (const m of matchPayments(d.items, pays)) { const it = d.items.find(x => x.id === m.id); if (it && !it.done) { it.done = true; it.doneAt = now.toISOString(); it.doneWhy = m.reason; } }
+    mailToList(d, L.date, now.toISOString());
     const c = buildCheckin(d, slot, now);
     const ctx = callContext(d.items, pays);
     if (ctx.length) { c.context = ctx.map(x => x.text); c.text += "\n\n" + c.context.join("\n"); }
@@ -309,7 +325,7 @@ export default async (req) => {
       const it = await change(s, u.id, d => {
         const i = d.items.findIndex(x => x.id === b.id); if (i < 0) return null;
         const x = d.items[i];
-        if (A === "tick") { x.done = true; x.doneAt = nowIso; x.doneWhy = ""; }
+        if (A === "tick") { x.done = true; x.doneAt = nowIso; x.doneWhy = ""; if (x.mailId) mailDone(d, x.mailId, nowIso); }
         if (A === "untick") { x.done = false; x.doneAt = null; x.doneWhy = ""; }
         if (A === "pin") x.pinned = !x.pinned;
         if (A === "remove") d.items.splice(i, 1);
@@ -329,7 +345,7 @@ export default async (req) => {
       await change(s, u.id, d2 => { const x = (d2.triage.items || []).find(y => y.id === it.id); if (x) x.draft = dr; });
       return json({ ok: true, draft: dr });
     }
-    if (A === "handled") { await change(s, u.id, d => { const x = (d.triage.items || []).find(y => y.id === b.id); if (x) x.handled = nowIso; }); return json({ ok: true }); }
+    if (A === "handled") { await change(s, u.id, d => { const x = (d.triage.items || []).find(y => y.id === b.id); if (x) { x.handled = nowIso; listDoneForMail(d, x.id, nowIso); } }); return json({ ok: true }); }
     if (A === "chase") {
       const who = String(b.who || "").trim().slice(0, 80), what = String(b.what || "").trim().slice(0, 200), email = String(b.email || "").trim().toLowerCase();
       if (!who || !what) return json({ error: "bad", message: "Say who owes the information and what it is." }, 400);

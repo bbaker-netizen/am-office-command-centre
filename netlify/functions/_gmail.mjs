@@ -12,7 +12,8 @@
    /api/inbox?action=callback, which has to be listed as a redirect address
    on that Google app. INBOX_DOMAINS (default amabatement.com) limits which
    addresses can be connected; INBOX_EXTRA can name single addresses outside
-   it (for example the original company Gmail, later). */
+   it. Craig and Amir, and only they, can also add a personal Gmail (see
+   allowedAddress). */
 
 import { withLock } from "./_lock.mjs";
 
@@ -20,13 +21,29 @@ export const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/gmail
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 export const KEY = id => "inbox-" + id;
 
-export function allowedAddress(email) {
+/* Which addresses a person may connect.
+   - A&M work inboxes (INBOX_DOMAINS): anyone, for their own assistant.
+   - Single named addresses outside it (INBOX_EXTRA): anyone.
+   - A personal Gmail (INBOX_PERSONAL_DOMAINS, default gmail.com): only the
+     accounts named in INBOX_PERSONAL_USERS, by their command centre sign-in
+     address. Default: Craig and Amir, nobody else (Bruce, 2026-11-17).
+   - Never the robots' mailbox.
+   `account` is the signed-in person's account (their email is what counts). */
+const listOf = (v, d) => String(v === undefined || v === "" ? d : v).split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+export function personalAllowed(account) {
+  const who = listOf(process.env.INBOX_PERSONAL_USERS, "craig@amabatement.com,amir@amabatement.com");
+  return !!account && account.active !== false && who.includes(String(account.email || "").trim().toLowerCase());
+}
+export function allowedAddress(email, account) {
   const e = String(email || "").toLowerCase().trim();
-  const domains = (process.env.INBOX_DOMAINS || "amabatement.com").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
-  const extra = (process.env.INBOX_EXTRA || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+  if (!/^[^\s@]+@[^\s@]+$/.test(e)) return false;
+  const domains = listOf(process.env.INBOX_DOMAINS, "amabatement.com");
+  const extra = listOf(process.env.INBOX_EXTRA, "");
+  const personal = listOf(process.env.INBOX_PERSONAL_DOMAINS, "gmail.com");
   const robots = (process.env.MAILBOX || "automation@amabatement.com").toLowerCase();
   if (e === robots) return false;
-  return extra.includes(e) || domains.some(d => e.endsWith("@" + d));
+  if (extra.includes(e) || domains.some(d => e.endsWith("@" + d))) return true;
+  return personal.some(d => e.endsWith("@" + d)) && personalAllowed(account);
 }
 
 export async function readInboxes(s, userId) { return ((await s.get(KEY(userId), { type: "json" })) || { inboxes: [] }).inboxes || []; }
@@ -69,12 +86,20 @@ function plainText(part) {
   return "";
 }
 
-/* New inbox mail since a time: sender, subject, a short body. Promotions and
-   social are skipped. */
-export async function recentMail(token, { afterSec, max = 15, skip = [] } = {}) {
-  const q = "in:inbox -category:promotions -category:social" + (afterSec ? " after:" + afterSec : " newer_than:2d");
-  const list = await gmail(token, "/messages?maxResults=" + Math.min(max * 2, 50) + "&q=" + encodeURIComponent(q));
-  const ids = (list.messages || []).map(m => m.id).filter(id => !skip.includes(id)).slice(0, max);
+/* New inbox mail: sender, subject, a short body. Promotions and social are
+   skipped. Looks back three days and past what has been sorted already, so a
+   busy inbox is caught up over a few passes, newest first, and nothing is
+   left behind because it arrived between two sorts. */
+export async function recentMail(token, { afterSec, max = 15, skip = [], days = 3 } = {}) {
+  const q = "in:inbox -category:promotions -category:social" + (afterSec ? " after:" + afterSec : " newer_than:" + days + "d");
+  const seen = new Set(skip), ids = [];
+  let pageToken = "";
+  for (let page = 0; page < 3 && ids.length < max; page++) {
+    const list = await gmail(token, "/messages?maxResults=100&q=" + encodeURIComponent(q) + (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : ""));
+    for (const m of list.messages || []) if (!seen.has(m.id) && ids.length < max) ids.push(m.id);
+    pageToken = list.nextPageToken || "";
+    if (!pageToken) break;
+  }
   const out = [];
   for (const id of ids) {
     const m = await gmail(token, "/messages/" + id + "?format=full");

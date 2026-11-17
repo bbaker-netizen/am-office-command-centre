@@ -23,7 +23,7 @@ import { accountGate, sees, canEdit } from "./_accounts.mjs";
 import { qboGet, query as qboQuery } from "./_qbo.mjs";
 import { readPayableDetail, readReceivableDetail, readBalanceSheet } from "./_qboreports.mjs";
 import { KEY as BANK_KEY, readBankAccounts, lastEntryDate } from "./_bank.mjs";
-import { buildCashFlow, openingBalance, cleanItem, weekZero, mondayOf, CATEGORIES } from "./_cashflow.mjs";
+import { buildCashFlow, openingBalance, cleanItem, weekZero, mondayOf, CATEGORIES, outlookOf, findLine, tidyMoves } from "./_cashflow.mjs";
 import { SEED_ITEMS, SEED_FROM } from "./_cfseed.mjs";
 import { withLock } from "./_lock.mjs";
 import { localDay } from "./_derive.mjs";
@@ -88,8 +88,12 @@ export async function cashFlowFor(s, fresh) {
   const bank = (await s.get(BANK_KEY, { type: "json" })) || { history: [] };
   const today = localDay();
   const opening = openingBalance({ today, history: bank.history, qbo: { amount: q.cash, lastEntry: q.lastEntry } });
+  if (opening.at) opening.atDay = localDay(new Date(opening.at));
+  opening.ageDays = opening.date ? Math.round((Date.parse(today + "T12:00:00Z") - Date.parse(opening.date + "T12:00:00Z")) / 86400000) : null;
   const cf = buildCashFlow({ today, weeks: 4, ...plan.settings, opening, invoices: q.invoices, bills: q.bills, plan });
-  return { ...cf, items: plan.items, categories: CATEGORIES, seededFrom: plan.seededFrom || "", readAt: q.readAt, log: plan.log.slice(0, 20) };
+  /* The look ahead: the same build carried to 13 weeks, for the chart. */
+  const outlook = outlookOf(buildCashFlow({ today, weeks: 13, ...plan.settings, opening, invoices: q.invoices, bills: q.bills, plan }));
+  return { ...cf, outlook, workedAt: new Date().toISOString(), items: plan.items, categories: CATEGORIES, seededFrom: plan.seededFrom || "", readAt: q.readAt, log: plan.log.slice(0, 20) };
 }
 
 export default async (req) => {
@@ -136,8 +140,19 @@ export default async (req) => {
         }
         case "done": case "undo": {
           const key = String(b.key || ""); if (!/^(item|inv|bill):/.test(key)) return { status: 400, body: { error: "bad", message: "Nothing to tick." } };
-          if (b.action === "done") { plan.done[key] = { at: new Date().toISOString(), by: u.name }; log("Ticked " + (b.label || key)); }
+          plan.moves = (plan.moves || []).filter(m => m.key !== key);
+          if (b.action === "done") {
+            /* What the tick is worth, so the room on the line moves now and
+               not when the bank balance is next typed. */
+            let line = null;
+            try { const q = await readQbo(s, false); line = findLine(buildCashFlow({ today, weeks: 13, ...plan.settings, opening: { amount: null }, invoices: q.invoices, bills: q.bills, plan }), key); } catch (e) {}
+            const at = new Date().toISOString();
+            plan.done[key] = { at, by: u.name };
+            if (line) plan.moves.push({ key, side: line.side, amount: line.amount, name: line.name, at, day: today, by: u.name });
+            log("Ticked " + (b.label || key));
+          }
           else { delete plan.done[key]; log("Unticked " + (b.label || key)); }
+          plan.moves = tidyMoves(plan.moves, today);
           break;
         }
         case "place": {

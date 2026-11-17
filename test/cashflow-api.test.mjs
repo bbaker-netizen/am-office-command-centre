@@ -54,9 +54,17 @@ assert.ok(r.body.lateBills.find(x => x.name.startsWith("AP Solutions")));
 assert.ok(calls.some(c => c.includes("account=35")));
 ok("first read copies Craig's 74 planned lines, reads QuickBooks, starts from Sunday's -$540,000");
 
-r = await call("v1", "POST", { action: "done", key: r.body.weeks[0].in[0].key });
+assert.equal(r.body.outlook.weeks.length, 13); assert.equal(r.body.outlook.weeks[0].open, 210000); assert.ok(r.body.workedAt);
+const firstIn = r.body.weeks[0].in[0], endBefore = r.body.weeks[0].close;
+r = await call("v1", "POST", { action: "done", key: firstIn.key });
 assert.equal(r.status, 403);
 ok("a look-only account cannot tick anything");
+
+r = await call("c1", "POST", { action: "done", key: firstIn.key, label: firstIn.name });
+assert.equal(r.body.roomNow, 210000 + firstIn.amount); assert.equal(r.body.sinceBalance.in, firstIn.amount); assert.equal(r.body.weeks[0].close, endBefore);
+r = await call("c1", "POST", { action: "undo", key: firstIn.key });
+assert.equal(r.body.roomNow, 210000); assert.equal(r.body.sinceBalance.count, 0);
+ok("ticking money received lifts room on the line at once and leaves the end of the week where it was; undo puts it back; the 13-week look ahead comes with the page");
 
 const chandos = (await call("c1")).body.weeks[0].in.find(x => x.name === "Chandos Construction").key;
 r = await call("c1", "POST", { action: "done", key: chandos, label: "Chandos" });

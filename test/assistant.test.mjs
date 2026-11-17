@@ -3,11 +3,13 @@
    Run: node --import ./test/support/use-fake-blobs.mjs test/assistant.test.mjs */
 import { strict as assert } from "node:assert";
 import { getStore } from "@netlify/blobs";
-import { hoursLeft, checkinSlot, rank, buildCheckin, chaseStep, chaseStatus, chaseDraft, matchPayments, callContext, parseSaying, workingDaysBetween } from "../netlify/functions/_assist.mjs";
+import { inWorkingHours, mailToList, hoursLeft, checkinSlot, rank, buildCheckin, chaseStep, chaseStatus, chaseDraft, matchPayments, callContext, parseSaying, workingDaysBetween } from "../netlify/functions/_assist.mjs";
 import { ACCOUNTS } from "../netlify/functions/_accounts.mjs";
 import { signToken } from "../netlify/functions/_auth.mjs";
 import handler from "../netlify/functions/assistant.mjs";
 import { allowedAddress } from "../netlify/functions/_gmail.mjs";
+import { runFor } from "../netlify/functions/assistant.mjs";
+import inboxHandler, { inboxCallback } from "../netlify/functions/inbox.mjs";
 
 let n = 0; const ok = m => { n++; console.log("ok", m); };
 const T = "2026-11-16";
@@ -64,6 +66,31 @@ ok("without Claude, plain sayings still work: pay ... by Friday; call back ...; 
 
 assert.ok(allowedAddress("owner@example.test")); assert.ok(!allowedAddress("robots@example.test")); assert.ok(!allowedAddress("someone@elsewhere.test"));
 ok("only company inboxes can be connected, never the robots' mailbox");
+
+process.env.INBOX_PERSONAL_USERS = "owner@example.test,gm@example.test";
+assert.ok(allowedAddress("owen.personal@gmail.com", { email: "owner@example.test" }));
+assert.ok(allowedAddress("gina.personal@gmail.com", { email: "GM@example.test" }));
+assert.ok(!allowedAddress("eve.personal@gmail.com", { email: "est@example.test" }));
+assert.ok(!allowedAddress("owen.personal@gmail.com", { email: "owner@example.test", active: false }));
+assert.ok(!allowedAddress("owen.personal@gmail.com")); assert.ok(!allowedAddress("owen@outlook.test", { email: "owner@example.test" }));
+assert.ok(!allowedAddress("robots@example.test", { email: "owner@example.test" }));
+ok("a personal Gmail can be connected by the two owners only: not by staff, not by a switched-off account, and never any other outside address");
+
+assert.ok(inWorkingHours({ weekday: "Tue", hour: 7, minute: 0 })); assert.ok(inWorkingHours({ weekday: "Tue", hour: 17, minute: 30 }));
+assert.ok(!inWorkingHours({ weekday: "Tue", hour: 6, minute: 30 })); assert.ok(!inWorkingHours({ weekday: "Tue", hour: 18, minute: 0 })); assert.ok(!inWorkingHours({ weekday: "Sun", hour: 10, minute: 0 }));
+const md = { items: [], triage: { items: [
+  { id: "e1", threadId: "th1", bucket: "needs_you", who: "Sam", action: "Send the overdue invoice review", subject: "Follow-up", inbox: "owner@example.test" },
+  { id: "e2", threadId: "th1", bucket: "needs_you", who: "Sam", action: "Second note in the same thread", subject: "Re: Follow-up" },
+  { id: "e3", threadId: "th3", bucket: "fyi", who: "News" },
+  { id: "e4", threadId: "th4", bucket: "needs_you", who: "Old", action: "Already dealt with", handled: "2026-11-16T15:00:00Z" },
+  { id: "e5", bucket: "needs_you", address: "pat@site.test", subject: "Clearance letter" }] } };
+const made = mailToList(md, T, "2026-11-16T15:00:00Z");
+assert.deepEqual(made.map(x => x.text).sort(), ["Sam: Send the overdue invoice review", "pat@site.test: Clearance letter"]);
+assert.ok(made.every(x => x.kind === "ask" && x.source === "email" && x.mailThread));
+assert.equal(mailToList(md, T, "2026-11-16T15:30:00Z").length, 0);
+md.items = md.items.filter(x => x.mailThread !== "th1");
+assert.equal(mailToList(md, T, "2026-11-16T16:00:00Z").length, 0);
+ok("mail that needs the person goes on the hit list: one line per thread, not for mail already dealt with, and a removed line never comes back");
 
 /* ------------------------------------------------ through the server */
 const s = getStore({ name: "am-inventory", consistency: "strong" });
@@ -127,7 +154,15 @@ assert.equal(sent.length, 1);
 ok("a walk-in logged mid-morning joins the list at the noon check-in, and the check-in is emailed to him");
 
 r = await call("c1", { action: "triage" });
-assert.equal(r.body.count, 3);
+assert.equal(r.body.count, 3); assert.deepEqual(r.body.listed, ["Sam: Reply"]);
+r = await call("c1");
+const fromMail = r.body.open.find(x => x.source === "email");
+assert.ok(fromMail && fromMail.kind === "ask" && fromMail.mailId === "m1" && fromMail.inbox === "owner@example.test");
+await call("c1", { action: "tick", id: fromMail.id });
+r = await call("c1"); assert.ok(!r.body.triage.items.find(x => x.id === "m1")); assert.ok(!r.body.open.find(x => x.source === "email"));
+await call("c1", { action: "untick", id: fromMail.id });
+await s.setJSON("assist-c1", { ...(await s.get("assist-c1", { type: "json" })), triage: { ...(await s.get("assist-c1", { type: "json" })).triage, items: (await s.get("assist-c1", { type: "json" })).triage.items.map(x => ({ ...x, handled: undefined })) } });
+ok("an email that needs him lands on his hit list with a link back to it; ticking the line marks the email dealt with");
 r = await call("c1");
 assert.deepEqual(Object.fromEntries(r.body.triage.items.map(x => [x.id, x.bucket])), { m1: "needs_you", m2: "payment", m3: "not_yours" });
 r = await call("c1", { action: "draft", id: "m1" });
@@ -156,5 +191,37 @@ assert.equal(drafts.at(-1).auth, "Bearer robot");
 assert.ok(Buffer.from(drafts.at(-1).body.message.raw, "base64").toString().includes("Reply-To: gm@example.test"));
 r = await call("a1"); assert.equal(r.body.chases.length, 2); assert.ok(r.body.chases.every(c => c.status === "Chase 1 of 3 drafted"));
 ok("the general manager starts a chase: day one is drafted in her own Gmail; from the robots' mailbox instead, replies still come to her");
+
+/* The half-hour sort: mail only, no check-in and no email to the person. */
+const sentBefore = sent.length, checkinsBefore = (await call("c1")).body.checkins.length;
+const sortRun = await runFor(s, { id: "c1", name: "Owen Owner", email: "owner@example.test", assistant: "exec", areas: ["office", "money"] }, "sort", { heavy: true });
+assert.equal(sortRun.slot, "sort"); assert.equal(sent.length, sentBefore); assert.equal((await call("c1")).body.checkins.length, checkinsBefore);
+await call("c1", { action: "handled", id: "m1" });
+r = await call("c1"); assert.ok(!r.body.open.find(x => x.mailId === "m1")); assert.ok(r.body.doneToday.find(x => x.mailId === "m1" && /inbox/.test(x.doneWhy)));
+ok("the half-hour sort reads the mail without a check-in or an email; marking an email done in the inbox ticks its line on the list");
+
+/* Connecting inboxes: the Google account chooser for a second inbox, and a personal Gmail for the owners only. */
+process.env.GOOGLE_CLIENT_ID = "cid"; process.env.GOOGLE_CLIENT_SECRET = "sec"; process.env.GOOGLE_REDIRECT_URI = "https://site/api/mail?action=callback";
+const start = async (who, q) => (await (await inboxHandler(new Request("https://site/api/inbox?action=start" + q, { headers: { authorization: "Bearer " + await tok(who) } }))).json()).url;
+const first = new URL(await start("c1", "")), more = new URL(await start("c1", "&another=1"));
+assert.equal(first.searchParams.get("login_hint"), "owner@example.test"); assert.equal(first.searchParams.get("prompt"), "consent");
+assert.equal(more.searchParams.get("login_hint"), null); assert.equal(more.searchParams.get("prompt"), "select_account consent");
+const realFetch = globalThis.fetch; let googleSays = "";
+globalThis.fetch = async (url, opts) => { const u = String(url);
+  if (u.includes("oauth2.googleapis.com/token")) return new Response(JSON.stringify({ refresh_token: "pr", access_token: "pa", expires_in: 3600 }), { status: 200 });
+  if (u.endsWith("/profile")) return new Response(JSON.stringify({ emailAddress: googleSays }), { status: 200 });
+  return realFetch(url, opts); };
+const comeBack = async (who, q, email) => { const st = new URL(await start(who, q)).searchParams.get("state"); googleSays = email; return (await inboxCallback(new URL("https://site/api/mail?action=callback&code=x&state=" + st))).text(); };
+assert.match(await comeBack("c1", "&another=1", "owen.personal@gmail.com"), /owen\.personal@gmail\.com is connected/);
+assert.deepEqual((await s.get("inbox-c1", { type: "json" })).inboxes.map(x => x.email), ["owner@example.test", "owen.personal@gmail.com"]);
+await s.setJSON("inbox-d1", { inboxes: [] });
+assert.match(await comeBack("d1", "&another=1", "eve.personal@gmail.com"), /cannot be connected here/);
+assert.deepEqual((await s.get("inbox-d1", { type: "json" })).inboxes, []);
+assert.match(await comeBack("c1", "&another=1", "robots@example.test"), /cannot be connected here/);
+const mine = await (await inboxHandler(new Request("https://site/api/inbox", { headers: { authorization: "Bearer " + await tok("c1") } }))).json();
+const hers = await (await inboxHandler(new Request("https://site/api/inbox", { headers: { authorization: "Bearer " + await tok("d1") } }))).json();
+assert.equal(mine.personal, true); assert.equal(hers.personal, false);
+globalThis.fetch = realFetch;
+ok("Add another inbox shows Google's account chooser; an owner's personal Gmail connects, a staff member's is refused, and the robots' mailbox is always refused");
 
 console.log(`\n${n} assistant checks pass`);

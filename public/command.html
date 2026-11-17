@@ -562,6 +562,24 @@ ul.plain{list-style:none;margin:4px 0 10px;padding:0}ul.plain li{padding:4px 0;b
 .linkish{font:inherit;font-size:12px;background:none;border:0;padding:0;color:var(--cyan-deep);cursor:pointer;text-decoration:underline}
 .cftable td span.sm,.cftable th span.sm{display:block;font-size:11px;color:var(--ink-3);font-weight:400}
 .cftable tr.strong td{font-weight:700;border-top:2px solid var(--rule)}
+/* the look ahead: one row a week, a bar for the room left at the end of it */
+.cfa{margin-top:6px}.cfa-head{font-size:15px;font-weight:700;margin:0 0 4px}.cfa-head.stop{color:var(--stop)}.cfa-head.caution{color:var(--caution)}
+.cfa-rows{list-style:none;margin:12px 0 6px;padding:0}
+.cfa-row{display:grid;grid-template-columns:118px 1fr 104px;gap:10px;align-items:center;padding:5px 0}
+.cfa-row .wk{font-size:12px;line-height:1.25}.cfa-row .wk b{display:block;font-size:13px}.cfa-row .wk span{color:var(--ink-3)}
+.cfa-track{position:relative;height:18px;border-radius:3px}
+.cfa-zero{position:absolute;top:-5px;bottom:-5px;width:1px;background:var(--rule)}
+.cfa-res{position:absolute;top:-5px;bottom:-5px;width:1px;background:var(--ink-3);opacity:.55}
+.cfa-bar{position:absolute;top:1px;height:16px;min-width:2px;background:var(--cyan);border-radius:0 4px 4px 0}
+.cfa-bar.under{background:var(--caution)}.cfa-bar.over{background:var(--stop);border-radius:4px 0 0 4px}
+.cfa-row.soft .cfa-bar{opacity:.38}.cfa-row.soft .wk b,.cfa-row.soft .val{color:var(--ink-3)}
+.cfa-row .val{text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;line-height:1.2}
+.cfa-row .val span{display:block;font-size:11px;font-weight:600;color:var(--ink-3)}.cfa-row .val span.stop{color:var(--stop)}.cfa-row .val span.caution{color:var(--caution)}
+.cfa-key{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--ink-3);margin:2px 0 8px}
+.cfa-key i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}.cfa-key i.ln{width:1px;height:12px;background:var(--ink-3);border-radius:0}
+.cfa-split{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);border-top:1px solid var(--rule);margin-top:8px;padding-top:8px}
+.cfa.compact .cfa-row{grid-template-columns:74px 1fr 78px;gap:8px;padding:3px 0}.cfa.compact .cfa-track{height:12px}.cfa.compact .cfa-bar{height:10px}
+@media (max-width:560px){.cfa-row{grid-template-columns:80px 1fr 84px;gap:8px}}
 .cfevery{margin-top:16px;padding-top:12px;border-top:1px solid var(--rule)}
 .cfplan summary{cursor:pointer;list-style:none}.cfplan summary h2{display:inline}.cfplan summary .sm{display:block;color:var(--ink-3);font-size:12px;margin-top:4px}
 .cfform{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:12px 0}
@@ -1756,6 +1774,9 @@ async function startApp(){
     });
   });
   setInterval(() => { if(!document.hidden) appLoad(false); }, 300000);
+  /* Coming back to the tab: bring the cash flow up to date straight away, so
+     room on the line is never a stale screen (2026-11-17). */
+  document.addEventListener("visibilitychange", () => { if(!document.hidden && CFG.tabs.includes("cashflow") && S.cf && Date.now() - Date.parse(S.cf.workedAt || 0) > 60000) cfLoad(false); });
 }
 
 /* ---------- changing a job from the drawer (app only) ---------- */
@@ -2175,6 +2196,8 @@ function asDo(body, ok){
   return asCall("", body).then(r => { AS.busy = false; if(ok) AS.msg = typeof ok === "function" ? ok(r) : ok; return asLoad().then(() => r); })
     .catch(e => { AS.busy = false; AS.msg = errCopy(e); render(); });
 }
+/* A Gmail link that opens in the right inbox when a person has more than one. */
+function asMailLink(inbox, thread){ return "https://mail.google.com/mail/" + (inbox ? "?authuser=" + encodeURIComponent(inbox) : "u/0/") + "#all/" + encodeURIComponent(thread || ""); }
 const AS_KIND = { todo:"To do", pay:"Pay", expect:"Coming in", call:"Call", ask:"Asked", chase:"Chase" };
 function asItem(it){
   const past = it.due && it.due < iso(today());
@@ -2183,12 +2206,12 @@ function asItem(it){
     it.amount ? '<span class="md-chip">' + E(M(it.amount)) + '</span>' : "",
     it.due ? '<span class="md-chip' + (past ? " stop" : "") + '">' + (past ? "Was due " : "Due ") + E(mdDay(it.due)) + '</span>' : "",
     it.who && !String(it.text).includes(it.who) ? '<span class="md-chip">' + E(it.who) + '</span>' : "",
-    it.source === "voice" ? '<span class="md-chip">You said it</span>' : it.source === "photo" ? '<span class="md-chip">From your paper list</span>' : it.source === "chase" ? '<span class="md-chip">From a chase</span>' : "",
+    it.source === "voice" ? '<span class="md-chip">You said it</span>' : it.source === "photo" ? '<span class="md-chip">From your paper list</span>' : it.source === "chase" ? '<span class="md-chip">From a chase</span>' : it.source === "email" ? '<span class="md-chip cy">From your email</span>' : "",
     it.cfItemId ? '<span class="md-chip cy">In the cash flow</span>' : ""
   ].filter(Boolean).join("");
   return '<li class="asit' + (it.pinned ? " pin" : "") + '"><button type="button" class="tick" data-as-tick="' + E(it.id) + '" aria-label="Done: ' + E(it.text) + '">' + ico("check") + '</button>' +
     '<div class="tx"><b>' + E(it.text) + '</b>' + (chips ? '<div class="md-chips">' + chips + '</div>' : '') + '</div>' +
-    '<div class="ac"><button type="button" class="linkish" data-as-pin="' + E(it.id) + '">' + (it.pinned ? "Unpin" : "Move to top") + '</button><button type="button" class="linkish" data-as-remove="' + E(it.id) + '">Remove</button></div></li>';
+    '<div class="ac">' + (it.mailThread ? '<a class="linkish" href="' + E(asMailLink(it.inbox, it.mailThread)) + '" target="_blank" rel="noopener" title="' + E(it.subject || "") + '">Open email</a>' : '') + '<button type="button" class="linkish" data-as-pin="' + E(it.id) + '">' + (it.pinned ? "Unpin" : "Move to top") + '</button><button type="button" class="linkish" data-as-remove="' + E(it.id) + '">Remove</button></div></li>';
 }
 /* "2026-11-21" as "Sat, Nov 21"; today and tomorrow by name. */
 function mdDay(d){
@@ -2215,18 +2238,20 @@ function asInbox(){
   const needN = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
   let h = '<div class="card wide o-inbox" data-nofold data-tour="as-inbox"><h2>Your inbox' + (needN ? ' <span class="md-count stop">' + needN + ' need you</span>' : '') + '</h2>';
   if(d.triage && d.triage.hidden) return h + '<p class="lede">Their mail stays private. Only the master admin can see another person\'s mail.</p></div>';
-  if(!ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what is someone else\'s (estimating mail stays out of your way). It drafts replies for you to check and send yourself. It never sends anything.</p>' +
+  if(!ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it every half hour through the working day: what needs you (it goes on your hit list), payments, what is just for your information, and what is someone else\'s (estimating mail stays out of your way). It drafts replies for you to check and send yourself. It never sends anything.</p>' +
     (AS.inbox && AS.inbox.ready === false ? '<div class="state wait">Google sign-in is not set up in Netlify yet.</div>' : '<button class="btn" data-as-connect>Connect my inbox</button>') + '</div>';
   const t = d.triage || {}, items = t.items || [];
   const group = (b, title, open) => { const g = items.filter(x => x.bucket === b); if(!g.length) return "";
     return '<details class="asmail"' + (open ? " open" : "") + '><summary><b>' + E(title) + '</b> <span class="tag ' + (b === "needs_you" ? "stop" : b === "payment" ? "clear" : "mute") + '">' + g.length + '</span></summary><ul>' + g.map(x =>
       '<li><div><b>' + E(x.who || x.address) + '</b> <span class="sm">' + E(x.inbox) + '</span><div>' + E(x.subject) + '</div><span class="sm">' + E([x.why, x.action, x.payment ? (x.payment.direction === "in" ? "Money in: " : "Money out: ") + x.payment.name + " " + M(x.payment.amount) : ""].filter(Boolean).join(" · ")) + '</span></div>' +
       '<div class="ac">' + (x.draft ? '<a class="btn ghost sm" href="' + E(x.draft.link || "https://mail.google.com/mail/u/0/#drafts") + '" target="_blank" rel="noopener">Draft is in Gmail</a>' : b === "needs_you" ? '<button type="button" class="btn ghost sm" data-as-draft="' + E(x.id) + '">Draft a reply</button>' : '') +
-      '<a class="linkish" href="https://mail.google.com/mail/u/0/#inbox/' + E(x.threadId || x.id) + '" target="_blank" rel="noopener">Open</a> <button type="button" class="linkish" data-as-handled="' + E(x.id) + '">Done</button></div></li>').join("") + '</ul></details>'; };
-  h += '<p class="lede">' + (t.at ? "Sorted " + whenSeen(t.at) + ". " : "Not sorted yet. ") + plural(ib.length, "inbox", "inboxes") + ': ' + E(ib.map(x => x.email).join(", ")) + '.</p>' +
+      '<a class="linkish" href="' + E(asMailLink(x.inbox, x.threadId || x.id)) + '" target="_blank" rel="noopener">Open</a> <button type="button" class="linkish" data-as-handled="' + E(x.id) + '">Done</button></div></li>').join("") + '</ul></details>'; };
+  h += '<p class="lede">' + (t.at ? "Sorted " + whenSeen(t.at) + ". " : "Not sorted yet. ") + "Sorted every half hour, 7:00 to 5:30 on weekdays. What needs you goes on your hit list.</p>" +
+    '<ul class="plain asboxes">' + ib.map(x => '<li><b>' + E(x.email) + '</b>' + (d.role && !(d.triage && d.triage.hidden) && !VIEW_AS ? ' <button type="button" class="linkish" data-as-rminbox="' + E(x.email) + '">Disconnect</button>' : '') + '</li>').join("") + '</ul>' +
+    (AS.inbox && AS.inbox.personal ? '<p class="sm">You can also add your personal Gmail: press Add another inbox and pick it on the Google screen.</p>' : '') +
     '<div class="row-btns"><button class="btn ghost" data-as-triage>' + (AS.busy ? "Working…" : "Sort new mail now") + '</button><button class="linkish" data-as-connect>Add another inbox</button></div>' +
     ((t.errors || []).length ? '<div class="state wait">' + t.errors.map(E).join("<br>") + '</div>' : '') +
-    group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", "Someone else's (estimating and the like)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true);
+    group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", "Someone else is handling it (you are copied)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true);
   return h + '</div>';
 }
 function asMoney(){ return mdCash() + mdBank() + mdDue(); }
@@ -2236,7 +2261,9 @@ function mdCash(){
   const w = cf.weeks[0];
   h += '<div class="md-big2"><div><b class="' + (cf.roomNow !== null && cf.roomNow < cf.floor ? "stop" : "") + '">' + M(cf.roomNow) + '</b><span>Room on the line now</span></div>' +
     '<div><b class="' + (w.close !== null && w.close < 0 ? "stop" : "") + '">' + M(w.close) + '</b><span>End of this week</span></div></div>';
-  const lines = (cf.advice.lines || []).filter(l => !/^You start the week/.test(l)).slice(0, 3);
+  const lines = (cf.advice.lines || []).filter(l => !/^You (start the week|have .* of room on the line now)/.test(l)).slice(0, 3);
+  h += '<p class="sm">' + E(cfRoomWhy()) + '</p>';
+  h += cfAhead(true);
   if(lines.length) h += '<ul class="md-advice">' + lines.map(l => '<li>' + E(l) + '</li>').join("") + '</ul>';
   return h + '<button class="btn ghost" data-go="cashflow">Open Cash flow</button></div>';
 }
@@ -2716,7 +2743,7 @@ document.addEventListener("click", ev => {
   acctCall("", { action:"settings", projectAssistantLive: p.dataset.acPmlive === "1" }).then(() => { toast(p.dataset.acPmlive === "1" ? "The project assistant is on for staff with a project assistant set." : "The project assistant is off for staff."); loadAccounts(); }).catch(e => { p.disabled = false; toast(errCopy(e), "bad"); });
 });
 document.addEventListener("click", ev => {
-  const t = ev.target.closest && ev.target.closest("[data-as-talk],[data-as-tick],[data-as-untick],[data-as-pin],[data-as-remove],[data-as-log],[data-as-connect],[data-as-triage],[data-as-draft],[data-as-handled],[data-as-seenbank],[data-as-checkin],[data-as-chasefor],[data-as-chasego],[data-as-chasecancel],[data-as-called],[data-as-chaseclose],[data-as-preview]");
+  const t = ev.target.closest && ev.target.closest("[data-as-talk],[data-as-tick],[data-as-untick],[data-as-pin],[data-as-remove],[data-as-log],[data-as-connect],[data-as-rminbox],[data-as-triage],[data-as-draft],[data-as-handled],[data-as-seenbank],[data-as-checkin],[data-as-chasefor],[data-as-chasego],[data-as-chasecancel],[data-as-called],[data-as-chaseclose],[data-as-preview]");
   if(!t) return;
   const D = t.dataset;
   if(D.asTalk !== undefined) return asSpeak();
@@ -2725,8 +2752,9 @@ document.addEventListener("click", ev => {
   if(D.asPin) return asDo({ action:"pin", id: D.asPin });
   if(D.asRemove) return asDo({ action:"remove", id: D.asRemove }, "Removed.");
   if(D.asLog !== undefined){ const i = $("asText"); const text = i && i.value.trim(); if(!text){ AS.msg = "Type what happened in the box first (someone at the door, a phone call), then press Log."; render(); setTimeout(() => { const x = $("asText"); if(x) x.focus(); }, 0); return; } i.value = ""; return asDo({ action:"log", text }, "Logged. It joins your list at the next check-in."); }
-  if(D.asConnect !== undefined) return fetch("/api/inbox?action=start", { headers:{ authorization:"Bearer " + TOKEN } }).then(r => r.json()).then(b => { if(b.url) location.href = b.url; else { AS.msg = b.message || "Could not start the Google sign-in."; render(); } });
-  if(D.asTriage !== undefined) return asDo({ action:"triage" }, r => r.count ? "Sorted " + plural(r.count, "new email") + "." : "No new mail since the last sort.");
+  if(D.asRminbox) return fetch("/api/inbox", { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify({ action:"remove", email: D.asRminbox }) }).then(r => r.json()).then(b => { AS.msg = b.ok ? D.asRminbox + " is disconnected. Its mail is no longer read." : (b.message || "Could not disconnect that inbox."); return asLoad(); });
+  if(D.asConnect !== undefined) return fetch("/api/inbox?action=start" + (((AS.inbox && AS.inbox.inboxes) || []).length ? "&another=1" : ""), { headers:{ authorization:"Bearer " + TOKEN } }).then(r => r.json()).then(b => { if(b.url) location.href = b.url; else { AS.msg = b.message || "Could not start the Google sign-in."; render(); } });
+  if(D.asTriage !== undefined) return asDo({ action:"triage" }, r => r.count ? "Sorted " + plural(r.count, "new email") + "." + ((r.listed || []).length ? " " + plural(r.listed.length, "is", "are") + " on your list." : "") : "No new mail since the last sort.");
   if(D.asDraft) return asDo({ action:"draft", id: D.asDraft }, "Drafted. It is in your Gmail drafts for you to check and send.");
   if(D.asHandled) return asDo({ action:"handled", id: D.asHandled });
   if(D.asSeenbank !== undefined) return asDo({ action:"seenBank" }, "Noted. Next time it shows what moved after now.").then(() => { AS.bank = null; AS.bankErr = null; render(); });
@@ -2778,6 +2806,62 @@ function cfRows(list, side, key, max){
       : all && list.length > 5 ? '<div class="peek-row"><button type="button" class="peek-btn up" data-cf-all="' + key + '">Show fewer' + ico("chevron") + '</button></div>' : '');
 }
 const CATS = () => (S.cf && S.cf.categories) || {};
+/* The look ahead (2026-11-17): room left on the line at the end of each of the
+   next 13 weeks, one row a week, so Craig can see where it gets tight before
+   he is in it. Cyan: fine. Amber: under the reserve he keeps. Red, to the
+   left of the zero line: over the line's limit. Weeks past the last invoice
+   already sent are drawn lighter, because their money in is not known yet.
+   Each row carries its own figure and a word for its state, so nothing
+   depends on colour alone; "Show the numbers" is the table. */
+function cfAhead(compact){
+  const cf = S.cf, o = cf && cf.outlook; if(!o || !o.weeks || !o.weeks.length || o.weeks[0].close === null) return "";
+  const W = compact ? o.weeks.slice(0, 8) : o.weeks;
+  const vals = W.map(w => w.close), maxRes = Math.max.apply(null, W.map(w => w.reserve));
+  const lo = Math.min(0, Math.min.apply(null, vals)), hi = Math.max(maxRes * 1.5, Math.max.apply(null, vals)), span = (hi - lo) || 1;
+  const pos = v => Math.max(0, Math.min(100, (v - lo) / span * 100));
+  const zero = pos(0);
+  const t = o.tightest, fu = o.firstUnder, fo = o.firstOver;
+  let headCls = "", head;
+  if(fu && fu.state === "over"){ headCls = "stop"; head = "You go over the line in the week of " + cfWeekLabel(fu.start) + ", by " + M(-fu.close) + "."; }
+  else if(fu){ headCls = "caution"; head = "It gets tight in the week of " + cfWeekLabel(fu.start) + ": " + M(fu.close) + " of room, under the " + M(fu.reserve) + " you keep in reserve."; }
+  else head = "No week through " + cfWeekLabel(o.weeks[o.horizon - 1].start) + " drops under your reserve." + (t ? " The tightest is the week of " + cfWeekLabel(t.start) + ", with " + M(t.close) + " of room." : "");
+  const word = w => w.state === "over" ? '<span class="stop">Over the line</span>' : w.state === "under" ? '<span class="caution">Under reserve</span>' : (t && w.start === t.start && w.firm ? '<span>Tightest</span>' : '');
+  const row = w => {
+    const a = Math.min(zero, pos(w.close)), b = Math.max(zero, pos(w.close));
+    return '<li class="cfa-row' + (w.firm ? "" : " soft") + '"><div class="wk"><b>' + (w.i === 0 ? "This week" : E(cfWeekLabel(w.start))) + '</b>' + (compact ? "" : '<span>' + MK(w.in) + ' in, ' + MK(w.out) + ' out</span>') + '</div>' +
+      '<div class="cfa-track"><i class="cfa-zero" style="left:' + zero.toFixed(2) + '%"></i><i class="cfa-res" style="left:' + pos(w.reserve).toFixed(2) + '%"></i>' +
+      '<i class="cfa-bar ' + (w.state === "ok" ? "" : w.state) + '" style="left:' + a.toFixed(2) + '%;width:' + Math.max(0.6, b - a).toFixed(2) + '%"></i></div>' +
+      '<div class="val num">' + M(w.close) + word(w) + '</div></li>';
+  };
+  const firm = W.filter(w => w.firm), soft = W.filter(w => !w.firm);
+  let h = '<div class="cfa' + (compact ? " compact" : "") + '"><p class="cfa-head ' + headCls + '">' + E(head) + '</p>';
+  if(!compact) h += '<p class="sub">Room left on the line at the end of each week, starting from ' + M(cf.roomNow) + ' now.</p>' +
+    '<div class="cfa-key"><span><i style="background:var(--cyan)"></i>Room left</span><span><i style="background:var(--caution)"></i>Under your reserve</span><span><i style="background:var(--stop)"></i>Over the line</span><span><i class="ln"></i>Reserve</span></div>';
+  h += '<ul class="cfa-rows">' + firm.map(row).join("") + '</ul>';
+  if(soft.length) h += '<div class="cfa-split">Further out: money in is not known yet</div><ul class="cfa-rows">' + soft.map(row).join("") + '</ul>';
+  if(compact) return h + '</div>';
+  if(fo && !fo.firm) h += '<p class="sub">On what is known today, the week of ' + E(cfWeekLabel(fo.start)) + ' would go over the line by ' + M(-fo.close) + '. That is before any work not billed yet.</p>';
+  h += '<p class="sub">Counted: invoices already sent and bills already entered, in the week they fall due or the week you moved them to, and your planned payments. Not counted: work not billed yet, and invoices more than ' + cf.graceDays + ' days late until you give them a week. To put expected billing in, add it under Planned payments with the group Other money in.</p>' +
+    '<details class="cfa-table"><summary class="sm">Show the numbers</summary>' + tbl('<th>Week of</th><th class="r">Room at the start</th><th class="r">Money in</th><th class="r">Money out</th><th class="r">Room at the end</th><th class="r">Reserve</th><th></th>',
+      o.weeks.map(w => '<tr><td>' + E(cfWeekLabel(w.start)) + '</td><td class="r num">' + M(w.open) + '</td><td class="r num">' + M(w.in) + '</td><td class="r num">' + M(-w.out) + '</td><td class="r num' + (w.close < 0 ? " stop" : "") + '"><b>' + M(w.close) + '</b></td><td class="r num">' + M(w.reserve) + '</td><td>' + (w.state === "over" ? "Over the line" : w.state === "under" ? "Under reserve" : "") + (w.firm ? "" : (w.state === "ok" ? "" : ", ") + "money in not known yet") + '</td></tr>')) + '</details>';
+  return h + '</div>';
+}
+/* Where "Room on the line now" comes from, in one line. */
+function cfRoomWhy(){
+  const cf = S.cf, o = cf.opening, sb = cf.sinceBalance || {};
+  if(o.amount === null) return "No bank balance yet. Type it below.";
+  return "Bank " + M(o.amount) + " (" + (o.source === "you" ? "you typed it for " + o.date : "QuickBooks" + (o.date ? ", bank entered to " + o.date : "")) + ") plus the " + M(cf.limit) + " line" +
+    (sb.in ? ", plus " + M(sb.in) + " ticked as received since" : "") + (sb.out ? ", less " + M(sb.out) + " ticked as paid since" : "") + "." + (cf.workedAt ? " Worked out " + whenSeen(cf.workedAt) + "." : "");
+}
+function cfBankForm(){
+  if(!(CAN_EDIT && CFG.qb)) return "";
+  const o = S.cf.opening, old = o.amount === null || o.source !== "you" || (o.ageDays || 0) >= 1;
+  return '<details class="bankform"' + (old ? " open" : "") + '><summary>' + (old ? "Type today's bank balance" : "Update the bank balance") + '</summary>' +
+    '<div data-bank-form class="bankrow"><label>Balance<input type="text" inputmode="decimal" name="amount" placeholder="-540,000"></label>' +
+    '<label>As of<input type="date" name="date" value="' + iso(today()) + '" max="' + iso(today()) + '"></label><input type="hidden" name="note" value="">' +
+    '<button class="btn" type="button" data-bank-save>Save</button><span class="sm" id="bankMsg"></span></div>' +
+    '<p class="sub">BMO does not feed the app, so the room is only as current as this figure. Use the balance from BMO online banking for all A&amp;M accounts together. A minus is money drawn on the line. Between balances, the room moves each time you tick something received or paid.</p></details>';
+}
 function cfFour(){
   const cf = S.cf, W = cf.weeks, C = CATS();
   const order = ["payroll","source","wcb","benefits","subs","loans","tax","oneoff","bills","running","owner"];
@@ -2826,11 +2910,11 @@ function cfPlan(){
 }
 function addDaysIso(d, n){ const x = dOnly(d); x.setDate(x.getDate() + n); return iso(x); }
 VIEWS.cashflow = {
-  hold(){ const a = document.activeElement; return !!(a && a.closest && a.closest("[data-cf-form],[data-cf-settings],.cfsel")); },
+  hold(){ const a = document.activeElement; return !!(a && a.closest && a.closest("[data-cf-form],[data-cf-settings],.cfsel,[data-bank-form]")); },
   alerts(){
     const cf = S.cf, a = []; if(!cf || !cf.weeks) return a;
     const w = cf.weeks[0];
-    if(cf.opening.source !== "you" || !cf.opening.sunday) a.push({ lvl:"caution", text:"The weeks start from " + (cf.opening.source === "you" ? "the balance you typed for " + cf.opening.date : "QuickBooks, which is only as current as Danielle's last bank import") + ", not Sunday's.", meta:"Type Sunday's end of day balance under Money, Cash position." });
+    if(cf.opening.amount !== null && (cf.opening.source !== "you" || (cf.opening.ageDays || 0) >= 2)) a.push({ lvl:"caution", text:"Room on the line is worked from " + (cf.opening.source === "you" ? "the bank balance you typed for " + cf.opening.date + ", " + plural(cf.opening.ageDays, "day") + " ago" : "QuickBooks, which is only as current as Danielle's last bank import" + (cf.opening.date ? " (" + cf.opening.date + ")" : "")) + ".", meta:"Type today's balance from BMO at the top of this page for a live figure." });
     const tw = cf.advice && cf.advice.tightest;
     if(tw && tw.close !== null && tw.close < 0) a.push({ lvl:"stop", text:"The line goes over its limit by " + M(-tw.close) + " in the week of " + cfWeekLabel(tw.week) + ".", meta:"Something has to move before then. See What to do this week." });
     else if(tw && tw.close !== null && tw.close < cf.floor) a.push({ lvl:"caution", text:"Room on the line drops to " + M(tw.close) + " in the week of " + cfWeekLabel(tw.week) + ", under the " + M(cf.floor) + " you keep in reserve.", meta:"Hold what can wait." });
@@ -2844,11 +2928,12 @@ VIEWS.cashflow = {
     if(!S.cf) return h + (S.cfErr ? failBox(S.cfErr, "Cash flow") : wait("the cash flow"));
     const cf = S.cf, w = cf.weeks[0], o = cf.opening;
     h += verdictHtml(this.alerts(), "All four weeks stay inside the line, with your reserve kept.", "");
-    h += '<div class="card wide cftop" data-tour="cf-top"><div><span class="k">Room on the line now</span><div class="big num' + (cf.roomNow !== null && cf.roomNow < cf.floor ? " stop" : "") + '">' + (cf.roomNow === null ? "n/a" : M(cf.roomNow)) + '</div><p class="sub">' + (o.amount === null ? "No bank balance yet. Type Sunday's balance under Money, Cash position." : "Bank " + M(o.amount) + " (" + (o.source === "you" ? "you typed it for " + o.date : "QuickBooks" + (o.date ? ", bank entered to " + o.date : "")) + ") plus the " + M(cf.limit) + " line.") + '</p></div>' +
+    h += '<div class="card wide cftop" data-tour="cf-top"><div><span class="k">Room on the line now</span><div class="big num' + (cf.roomNow !== null && cf.roomNow < cf.floor ? " stop" : "") + '">' + (cf.roomNow === null ? "n/a" : M(cf.roomNow)) + '</div><p class="sub">' + E(cfRoomWhy()) + '</p>' + cfBankForm() + '</div>' +
       '<div><span class="k">End of this week</span><div class="big num' + (w.close !== null && w.close < 0 ? " stop" : "") + '">' + M(w.close) + '</div><p class="sub">' + M(w.totalIn) + ' in, ' + M(w.totalOut) + ' out.</p></div>' +
       '<div><span class="k">End of four weeks</span><div class="big num' + (cf.weeks[3].close !== null && cf.weeks[3].close < 0 ? " stop" : "") + '">' + M(cf.weeks[3].close) + '</div><p class="sub">Week of ' + E(cfWeekLabel(cf.weeks[3].start)) + '.</p></div>' +
       (cf.everyone ? '<div><span class="k">If everyone paid me and I paid everyone</span><div class="big num' + (cf.everyone.result < 0 ? " stop" : "") + '">' + M(cf.everyone.result) + '</div><p class="sub">Every invoice and bill settled today.</p></div>' : '') + '</div>';
     h += '<div class="card wide cfadvice" data-tour="cf-advice"><h2>What to do this week</h2>' + cf.advice.lines.map(l => '<p>' + E(l) + '</p>').join("") + '<p class="sm">Ask Claude can go deeper: "What if Chandos pays a week late?" or "Can I pay Aces in full?"</p></div>';
+    h += '<div class="card wide" data-nofold data-tour="cf-ahead"><h2>Looking ahead: where it gets tight</h2>' + cfAhead(false) + '</div>';
     h += '<div class="seg" role="tablist" data-tour="cf-view"><button type="button" data-cf-view="week" aria-selected="' + (CF.view === "week") + '">This week</button><button type="button" data-cf-view="four" aria-selected="' + (CF.view === "four") + '">Four weeks</button></div>';
     h += CF.view === "four" ? '<div class="card wide">' + cfFour() + '</div>' : cfWeek();
     h += cfPlan();
@@ -2904,7 +2989,8 @@ document.addEventListener("click", ev => {
   const body = t.dataset.bankClear !== undefined ? { bankActual: null } : { bankActual: { amount: f.querySelector('[name=amount]').value, date: f.querySelector('[name=date]').value, note: f.querySelector('[name=note]').value } };
   t.disabled = true; if(msg) msg.textContent = "Saving…";
   apiPost(body).then(() => api("money", false)).then(d => {
-    S.M.cash = d.cash || null; S.M.bankHistory = d.bankHistory || []; S.M.bank = d.bank || S.M.bank;
+    if(S.M){ S.M.cash = d.cash || null; S.M.bankHistory = d.bankHistory || []; S.M.bank = d.bank || S.M.bank; }
+    cfLoad(false);
     if(document.activeElement) document.activeElement.blur();
     toast(body.bankActual ? "Saved. The command centre now leads with your figure." : "Back to the QuickBooks figure."); render();
   }).catch(e => { t.disabled = false; if(msg) msg.textContent = errCopy(e); });
