@@ -562,6 +562,24 @@ ul.plain{list-style:none;margin:4px 0 10px;padding:0}ul.plain li{padding:4px 0;b
 .linkish{font:inherit;font-size:12px;background:none;border:0;padding:0;color:var(--cyan-deep);cursor:pointer;text-decoration:underline}
 .cftable td span.sm,.cftable th span.sm{display:block;font-size:11px;color:var(--ink-3);font-weight:400}
 .cftable tr.strong td{font-weight:700;border-top:2px solid var(--rule)}
+/* the assistant's queue: what needs you, with the reply drafted and the buttons */
+.asq-list{list-style:none;margin:0;padding:0}
+.asq{padding:14px 0;border-bottom:1px solid var(--rule)}.asq:last-child{border-bottom:0}
+.asq .aqwho{font-size:15px;font-weight:700}.asq .aqwho .tag{display:inline-block;margin-left:8px;vertical-align:2px}
+.asq .subj{font-size:13px;color:var(--ink-2);margin-top:1px}
+.asq .ask{margin:6px 0 0;padding:8px 10px;background:var(--cyan-wash);border-radius:8px;font-size:14px;font-weight:600}
+.asq .ask small{display:block;font-weight:400;font-size:12px;color:var(--ink-2);margin-top:2px}
+.asq-draft{margin:8px 0 0;border:1px solid var(--rule);border-radius:8px;background:var(--panel-2)}
+.asq-draft summary{cursor:pointer;padding:7px 10px;font-size:12px;font-weight:700;color:var(--ink-2)}
+.asq-draft pre{margin:0;padding:0 10px 10px;white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.45}
+.asq textarea{width:100%;min-height:150px;margin-top:8px;padding:10px;border:1px solid var(--cyan);border-radius:8px;font:inherit;font-size:14px;line-height:1.45;background:var(--panel);color:var(--ink)}
+.asq-btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.asq-ask2{margin-top:10px;padding:10px;border-radius:8px;background:var(--caution-wash);display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
+.asq-ask2 select,.asq-ask2 input{font:inherit;padding:7px 8px;border:1px solid var(--rule);border-radius:6px;background:var(--panel);color:var(--ink)}.asq-ask2 input{flex:1;min-width:160px}
+.ascal{list-style:none;margin:0;padding:0}.ascal li{display:grid;grid-template-columns:86px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule-soft);font-size:14px}
+.ascal li:last-child{border-bottom:0}.ascal .t{font-variant-numeric:tabular-nums;color:var(--ink-2);font-size:13px}.ascal small{display:block;color:var(--ink-3);font-size:12px}
+.ascal .ac{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.md .o-queue{order:1}.md .o-cal{order:2}
 /* the look ahead: one row a week, a bar for the room left at the end of it */
 .cfa{margin-top:6px}.cfa-head{font-size:15px;font-weight:700;margin:0 0 4px}.cfa-head.stop{color:var(--stop)}.cfa-head.caution{color:var(--caution)}
 .cfa-rows{list-style:none;margin:12px 0 6px;padding:0}
@@ -2233,6 +2251,59 @@ function mdCheckinText(text){
   }
   close(); return h;
 }
+/* The assistant's queue (2026-11-17): what an executive assistant puts in
+   front of you. Only mail you have to act on, each with what is being asked,
+   a reply drafted in your own words, and the buttons: Approve and send, Edit,
+   Hand to, Not mine, Later, Done. Nothing is sent until you press it, and
+   Approve asks once more with the address before it goes. */
+const AQ = { edit:null, confirm:null, hand:null, nm:null };
+function asQueue(){
+  const d = AS.data, q = d.queue || [];
+  if(d.triage && d.triage.hidden) return "";
+  if(!(d.inboxes || []).length) return "";
+  let h = '<div class="card o-queue" data-nofold data-tour="as-queue"><h2>Needs you' + (q.length ? ' <span class="md-count stop">' + q.length + '</span>' : '') + '</h2>';
+  if(!q.length) return h + '<div class="md-empty"><b>Nothing is waiting on you.</b>When an email needs your answer it shows here with a reply drafted.</div></div>';
+  h += '<p class="lede">Only what you have to act on. Read the draft, then approve it, hand it on, or say it is not yours. Nothing is sent until you press Approve and send.</p><ul class="asq-list">';
+  const staff = d.staff || [];
+  h += q.map(x => {
+    const dr = x.draft && x.draft.draftId && !x.draft.sent ? x.draft : null, id = E(x.id);
+    const blank = dr && /\[[^\]\n]{1,200}\]/.test(dr.body || "");
+    let b = '<li class="asq"><div class="aqwho">' + E(x.who || x.address) + (x.vip ? '<span class="tag clear">Always matters</span>' : '') + '</div><div class="subj">' + E(x.subject || "(no subject)") + ' <span class="sm">' + E(x.inbox) + '</span></div>' +
+      '<div class="ask">' + E(x.action || x.why || "Needs your answer") + (x.action && x.why ? '<small>' + E(x.why) + '</small>' : '') + ((x.othersReplied || []).length ? '<small>Already replied: ' + E(x.othersReplied.join(", ")) + '</small>' : '') + '</div>';
+    if(AQ.edit === x.id && dr) b += '<div data-as-form><textarea data-aq-text="' + id + '" aria-label="Your reply">' + E(dr.body || "") + '</textarea>' +
+      '<div class="asq-btns"><button type="button" class="btn" data-aq="sendEdited" data-id="' + id + '">Send to ' + E(dr.to || x.address) + '</button><button type="button" class="btn ghost" data-aq="cancel">Cancel</button><span class="sm">Fill in any [square bracket] before you send.</span></div></div>';
+    else if(dr) b += '<details class="asq-draft" open><summary>Reply drafted for you' + (blank ? ' · has a blank to fill in' : '') + '</summary><pre>' + E(dr.body || "") + '</pre></details>';
+    if(AQ.confirm === x.id && dr) b += '<div class="asq-ask2"><b>Send this to ' + E(dr.to || x.address) + '?</b><button type="button" class="btn" data-aq="sendNow" data-id="' + id + '">Send now</button><button type="button" class="btn ghost" data-aq="cancel">Cancel</button></div>';
+    if(AQ.hand === x.id) b += '<div class="asq-ask2" data-as-form><b>Hand to</b><select data-aq-to="' + id + '" aria-label="Who to hand it to">' + staff.map(p => '<option value="' + E(p.email) + '"' + (p.email === x.handTo ? " selected" : "") + '>' + E(p.name) + (p.title ? " (" + E(p.title) + ")" : "") + '</option>').join("") + '</select>' +
+      '<input data-aq-note="' + id + '" placeholder="A note for them (optional)" maxlength="600"><button type="button" class="btn" data-aq="handGo" data-id="' + id + '">Send it to them</button><button type="button" class="btn ghost" data-aq="cancel">Cancel</button></div>';
+    if(AQ.nm === x.id) b += '<div class="asq-ask2"><b>Not yours?</b><button type="button" class="btn" data-aq="nmAlways" data-id="' + id + '">This and others like it</button><button type="button" class="btn ghost" data-aq="nmOnce" data-id="' + id + '">Just this one</button><button type="button" class="btn ghost" data-aq="cancel">Cancel</button></div>';
+    if(AQ.edit !== x.id) b += '<div class="asq-btns">' +
+      (dr ? (blank ? '<button type="button" class="btn" data-aq="edit" data-id="' + id + '">Fill in the blank</button>' : '<button type="button" class="btn" data-aq="confirm" data-id="' + id + '">Approve and send</button><button type="button" class="btn ghost" data-aq="edit" data-id="' + id + '">Edit</button>')
+          : '<button type="button" class="btn" data-as-draft="' + id + '">Draft a reply</button>') +
+      (staff.length ? '<button type="button" class="btn ghost" data-aq="hand" data-id="' + id + '">Hand to' + (x.handTo ? " " + E(((staff.find(p => p.email === x.handTo) || {}).name || "").split(" ")[0]) : "…") + '</button>' : '') +
+      '<button type="button" class="btn ghost" data-aq="nm" data-id="' + id + '">Not mine</button><button type="button" class="btn ghost" data-aq="later" data-id="' + id + '">Later</button>' +
+      '<button type="button" class="linkish" data-as-handled="' + id + '">Done</button><a class="linkish" href="' + E(asMailLink(x.inbox, x.threadId || x.id)) + '" target="_blank" rel="noopener">Open email</a>' +
+      (x.vip ? '' : '<button type="button" class="linkish" data-aq="vip" data-id="' + id + '">Always flag this sender</button>') + '</div>';
+    return b + '</li>';
+  }).join("");
+  return h + '</ul></div>';
+}
+/* Today's meetings, and invites still waiting for an answer. */
+function asCalendar(){
+  const d = AS.data, c = d.calendar || {};
+  if(c.hidden || !(d.inboxes || []).length) return "";
+  let h = '<div class="card o-cal" data-nofold data-tour="as-cal"><h2>Your meetings</h2>';
+  if(!c.connected) return h + '<p class="lede">Your calendar is not connected yet. Sign in to Google once more and tick the calendar box, and your meetings and invites show here.</p><button class="btn" data-as-connect>Connect my calendar</button></div>';
+  const tm = e => e.allDay ? "All day" : new Date(e.start).toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" });
+  const dayOf = e => new Date(e.allDay ? e.start + "T12:00:00" : e.start).toLocaleDateString("en-CA", { weekday:"short", month:"short", day:"numeric" });
+  const inv = c.invites || [], td = c.today || [];
+  if(inv.length) h += '<div class="md-sec">Waiting for your answer <b>' + inv.length + '</b></div><ul class="ascal">' + inv.map(e => '<li><span class="t">' + E(dayOf(e)) + '<br>' + E(tm(e)) + '</span><div><b>' + E(e.title) + '</b><small>' + E([e.organizer ? "From " + e.organizer : "", e.where].filter(Boolean).join(" · ")) + '</small>' +
+    '<div class="ac"><button type="button" class="btn sm" data-aq="rsvp" data-answer="accept" data-inbox="' + E(e.inbox) + '" data-id="' + E(e.id) + '">Accept</button><button type="button" class="btn ghost sm" data-aq="rsvp" data-answer="maybe" data-inbox="' + E(e.inbox) + '" data-id="' + E(e.id) + '">Maybe</button><button type="button" class="btn ghost sm" data-aq="rsvp" data-answer="decline" data-inbox="' + E(e.inbox) + '" data-id="' + E(e.id) + '">Decline</button></div></div></li>').join("") + '</ul>';
+  h += '<div class="md-sec">Today <b>' + td.length + '</b></div>' + (td.length ? '<ul class="ascal">' + td.map(e => '<li><span class="t">' + E(tm(e)) + '</span><div><b>' + E(e.title) + '</b>' + (e.clash ? ' <span class="tag stop">Overlaps</span>' : '') + (e.status === "needsAction" ? ' <span class="tag caution">Not answered</span>' : e.status === "tentative" ? ' <span class="tag mute">Maybe</span>' : '') +
+    '<small>' + E([e.where, e.people > 1 ? e.people + " people" : ""].filter(Boolean).join(" · ")) + '</small></div></li>').join("") + '</ul>' : '<p class="sub">No meetings today.</p>');
+  if((c.errors || []).length) h += '<p class="sub">' + E(c.errors[0]) + '</p>';
+  return h + '</div>';
+}
 function asInbox(){
   const d = AS.data, ib = (AS.inbox && AS.inbox.inboxes) || d.inboxes || [];
   const needN = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
@@ -2246,12 +2317,16 @@ function asInbox(){
       '<li><div><b>' + E(x.who || x.address) + '</b> <span class="sm">' + E(x.inbox) + '</span><div>' + E(x.subject) + '</div><span class="sm">' + E([x.why, x.action, x.payment ? (x.payment.direction === "in" ? "Money in: " : "Money out: ") + x.payment.name + " " + M(x.payment.amount) : ""].filter(Boolean).join(" · ")) + '</span></div>' +
       '<div class="ac">' + (x.draft ? '<a class="btn ghost sm" href="' + E(x.draft.link || "https://mail.google.com/mail/u/0/#drafts") + '" target="_blank" rel="noopener">Draft is in Gmail</a>' : b === "needs_you" ? '<button type="button" class="btn ghost sm" data-as-draft="' + E(x.id) + '">Draft a reply</button>' : '') +
       '<a class="linkish" href="' + E(asMailLink(x.inbox, x.threadId || x.id)) + '" target="_blank" rel="noopener">Open</a> <button type="button" class="linkish" data-as-handled="' + E(x.id) + '">Done</button></div></li>').join("") + '</ul></details>'; };
-  h += '<p class="lede">' + (t.at ? "Sorted " + whenSeen(t.at) + ". " : "Not sorted yet. ") + "Sorted every half hour, 7:00 to 5:30 on weekdays. What needs you goes on your hit list.</p>" +
+  const learned = (d.rules && d.rules.notMine) || [], vips = (d.rules && d.rules.vip) || [];
+  const learnedBox = (learned.length || vips.length) ? '<details class="asmail"><summary><b>What your assistant has learned</b> <span class="tag mute">' + (learned.length + vips.length) + '</span></summary><ul>' +
+    vips.map(v => '<li><div><b>' + E(v) + '</b><span class="sm">Always flagged</span></div><div class="ac"><button type="button" class="linkish" data-as-unvip="' + E(v) + '">Stop</button></div></li>').join("") +
+    learned.map(r => '<li><div><b>' + E(r.name || r.address) + '</b><span class="sm">Not yours' + (r.subject ? ': "' + E(r.subject) + '"' : '') + '</span></div><div class="ac"><button type="button" class="linkish" data-as-forget="' + E(r.address) + '" data-subject="' + E(r.subject || "") + '">Forget</button></div></li>').join("") + '</ul></details>' : '';
+  h += '<p class="lede">' + (t.at ? "Sorted " + whenSeen(t.at) + ". " : "Not sorted yet. ") + "Sorted every half hour, 7:00 to 5:30 on weekdays. What needs you is at the top of this page under Needs you. Everything else is here.</p>" +
     '<ul class="plain asboxes">' + ib.map(x => '<li><b>' + E(x.email) + '</b>' + (d.role && !(d.triage && d.triage.hidden) && !VIEW_AS ? ' <button type="button" class="linkish" data-as-rminbox="' + E(x.email) + '">Disconnect</button>' : '') + '</li>').join("") + '</ul>' +
     (AS.inbox && AS.inbox.personal ? '<p class="sm">You can also add your personal Gmail: press Add another inbox and pick it on the Google screen.</p>' : '') +
     '<div class="row-btns"><button class="btn ghost" data-as-triage>' + (AS.busy ? "Working…" : "Sort new mail now") + '</button><button class="linkish" data-as-connect>Add another inbox</button></div>' +
     ((t.errors || []).length ? '<div class="state wait">' + t.errors.map(E).join("<br>") + '</div>' : '') +
-    group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", "Someone else is handling it (you are copied)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true);
+    group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", "Someone else is handling it (you are copied)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true) + learnedBox;
   return h + '</div>';
 }
 function asMoney(){ return mdCash() + mdBank() + mdDue(); }
@@ -2389,8 +2464,8 @@ VIEWS.brief = {
   alerts(){ const d = AS.data; if(!d) return []; const a = [];
     const over = (d.open || []).filter(x => x.due && x.due < iso(today()));
     if(over.length) a.push({ lvl:"caution", text: plural(over.length, "thing on your list is", "things on your list are") + " past due.", meta: over.slice(0, 3).map(x => x.text).join("; ") });
-    const needs = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
-    if(needs) a.push({ lvl:"info", text: plural(needs, "email needs", "emails need") + " you.", meta:"Under Your inbox." });
+    const needs = d.queue ? d.queue.length : (d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0);
+    if(needs) a.push({ lvl:"info", text: plural(needs, "email needs", "emails need") + " you.", meta:"Under Needs you, with a reply drafted." });
     return a; },
   render(){
     const first = S.meName || "", hr = new Date().getHours();
@@ -2402,7 +2477,7 @@ VIEWS.brief = {
     if(!AS.data){ if(!AS.loading) asLoad(); return '<div class="md">' + top("Getting your day ready…") + wait("your day") + '</div>'; }
     const d = AS.data, c = (d.checkins || [])[0], open = d.open || [];
     const over = open.filter(x => x.due && x.due < iso(today())).length;
-    const needs = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
+    const needs = d.queue ? d.queue.length : (d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0);
     const calls = (d.chases || []).filter(x => x.step === "call").length;
     const exec = d.role === "exec", cf = S.cf;
     const said = [open.length ? plural(open.length, "thing") + " on your list" + (over ? ", " + over + " past due" : "") + "." : "Your list is clear.",
@@ -2422,6 +2497,7 @@ VIEWS.brief = {
       '<form data-as-say onsubmit="return false"><input id="asText" placeholder="' + (window.innerWidth < 620 ? "Type here, or tap the mic" : "Put this on my list… or: I just paid Aces") + '" autocomplete="off" aria-label="Tell your assistant"><button type="submit" class="btn">Add</button></form>' +
       '<div class="asmore"><button type="button" class="linkish" data-as-log>Log a walk-in or call</button><label class="linkish">Photo of a paper list<input type="file" accept="image/*" capture="environment" data-as-photo hidden></label></div>' +
       (AS.msg ? '<p class="md-status" role="status">' + E(AS.msg) + '</p>' : '') + (d.claude ? '' : '<p class="sub" style="grid-column:1/-1">Claude is not set up, so sayings are read simply and photos cannot be read.</p>') + '</div>';
+    main += asQueue();
     if(c) main += '<div class="card md-checkin o-check" data-nofold><h2>' + E({ morning:"This morning's check-in", noon:"Noon check-in", end:"End of day check-in" }[c.slot] || "Check-in") + '<span class="when">' + E(showWhen(c.at)) + '</span></h2>' + mdCheckinText(c.text) + '</div>';
     main += '<div class="card o-list" data-nofold data-tour="as-list"><h2>Your hit list' + (open.length ? ' <span class="md-count">' + open.length + '</span>' : '') + '</h2><p class="lede">Most pressing first. Tick it when it is done. If it is a payment, the cash flow updates too.</p>' +
       (open.length ? '<ol class="aslist">' + open.map(asItem).join("") + '</ol>' : '<div class="md-empty"><b>Nothing on your list.</b>Say or type something above, and it lands here.</div>') +
@@ -2433,6 +2509,7 @@ VIEWS.brief = {
     main += asInbox();
     let side = "";
     if(exec){
+      side += asCalendar();
       if(CFG.qb) side += asMoney();
       if(ME.areas.includes("field") || ME.areas.includes("office")) main += asJobs();
     } else main += asProject(ME.name);
@@ -2743,7 +2820,7 @@ document.addEventListener("click", ev => {
   acctCall("", { action:"settings", projectAssistantLive: p.dataset.acPmlive === "1" }).then(() => { toast(p.dataset.acPmlive === "1" ? "The project assistant is on for staff with a project assistant set." : "The project assistant is off for staff."); loadAccounts(); }).catch(e => { p.disabled = false; toast(errCopy(e), "bad"); });
 });
 document.addEventListener("click", ev => {
-  const t = ev.target.closest && ev.target.closest("[data-as-talk],[data-as-tick],[data-as-untick],[data-as-pin],[data-as-remove],[data-as-log],[data-as-connect],[data-as-rminbox],[data-as-triage],[data-as-draft],[data-as-handled],[data-as-seenbank],[data-as-checkin],[data-as-chasefor],[data-as-chasego],[data-as-chasecancel],[data-as-called],[data-as-chaseclose],[data-as-preview]");
+  const t = ev.target.closest && ev.target.closest("[data-as-talk],[data-as-tick],[data-as-untick],[data-as-pin],[data-as-remove],[data-as-log],[data-as-connect],[data-as-rminbox],[data-as-unvip],[data-as-forget],[data-as-triage],[data-as-draft],[data-as-handled],[data-as-seenbank],[data-as-checkin],[data-as-chasefor],[data-as-chasego],[data-as-chasecancel],[data-as-called],[data-as-chaseclose],[data-as-preview]");
   if(!t) return;
   const D = t.dataset;
   if(D.asTalk !== undefined) return asSpeak();
@@ -2752,6 +2829,8 @@ document.addEventListener("click", ev => {
   if(D.asPin) return asDo({ action:"pin", id: D.asPin });
   if(D.asRemove) return asDo({ action:"remove", id: D.asRemove }, "Removed.");
   if(D.asLog !== undefined){ const i = $("asText"); const text = i && i.value.trim(); if(!text){ AS.msg = "Type what happened in the box first (someone at the door, a phone call), then press Log."; render(); setTimeout(() => { const x = $("asText"); if(x) x.focus(); }, 0); return; } i.value = ""; return asDo({ action:"log", text }, "Logged. It joins your list at the next check-in."); }
+  if(D.asUnvip) return asDo({ action:"vip", address: D.asUnvip, on: false }, "No longer always flagged.");
+  if(D.asForget) return asDo({ action:"forget", address: D.asForget, subject: D.subject || "" }, "Forgotten. Mail like it will be sorted fresh.");
   if(D.asRminbox) return fetch("/api/inbox", { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify({ action:"remove", email: D.asRminbox }) }).then(r => r.json()).then(b => { AS.msg = b.ok ? D.asRminbox + " is disconnected. Its mail is no longer read." : (b.message || "Could not disconnect that inbox."); return asLoad(); });
   if(D.asConnect !== undefined) return fetch("/api/inbox?action=start" + (((AS.inbox && AS.inbox.inboxes) || []).length ? "&another=1" : ""), { headers:{ authorization:"Bearer " + TOKEN } }).then(r => r.json()).then(b => { if(b.url) location.href = b.url; else { AS.msg = b.message || "Could not start the Google sign-in."; render(); } });
   if(D.asTriage !== undefined) return asDo({ action:"triage" }, r => r.count ? "Sorted " + plural(r.count, "new email") + "." + ((r.listed || []).length ? " " + plural(r.listed.length, "is", "are") + " on your list." : "") : "No new mail since the last sort.");
@@ -2767,6 +2846,21 @@ document.addEventListener("click", ev => {
   if(D.asCalled){ const f = t.closest("[data-as-form]"); const outcome = f.querySelector('[name="outcome"]').value; return asDo({ action:"chaseCall", id: D.asCalled, outcome }, r => "Logged. Suggested next step: " + r.nextStep); }
   if(D.asChaseclose) return asDo({ action:"chaseClose", id: D.asChaseclose }, "Chase closed.");
   if(D.asPreview){ AS.preview = D.asPreview; render(); }
+});
+
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-aq]"); if(!t || !AS.data) return;
+  const a = t.dataset.aq, id = t.dataset.id, clear = () => { AQ.edit = AQ.confirm = AQ.hand = AQ.nm = null; };
+  const el = sel => document.querySelector(sel);
+  if(a === "cancel"){ clear(); if(document.activeElement) document.activeElement.blur(); return render(); }
+  if(a === "edit" || a === "confirm" || a === "hand" || a === "nm"){ clear(); AQ[a] = id; return render(); }
+  if(a === "sendNow"){ clear(); return asDo({ action:"send", id }, r => "Sent to " + r.sent.to + "."); }
+  if(a === "sendEdited"){ const x = el('[data-aq-text="' + CSS.escape(id) + '"]'), body = x ? x.value : ""; clear(); if(document.activeElement) document.activeElement.blur(); return asDo({ action:"send", id, body }, r => "Sent to " + r.sent.to + "."); }
+  if(a === "handGo"){ const to = (el('[data-aq-to="' + CSS.escape(id) + '"]') || {}).value, note = (el('[data-aq-note="' + CSS.escape(id) + '"]') || {}).value || ""; clear(); if(document.activeElement) document.activeElement.blur(); return asDo({ action:"handoff", id, to, note }, r => "Handed to " + r.to + ". A check is on your list for " + mdDay(r.check) + "."); }
+  if(a === "nmAlways" || a === "nmOnce"){ clear(); return asDo({ action:"notMine", id, always: a === "nmAlways" }, a === "nmAlways" ? "Off your queue. Mail like it will be kept out of your way from now on." : "Off your queue."); }
+  if(a === "later"){ return asDo({ action:"later", id }, r => "Back on your queue " + mdDay(r.until) + "."); }
+  if(a === "vip"){ const x = (AS.data.queue || []).find(q => q.id === id); return x ? asDo({ action:"vip", address: x.address }, "Mail from " + (x.who || x.address) + " will always be flagged.") : null; }
+  if(a === "rsvp"){ return asDo({ action:"rsvp", inbox: t.dataset.inbox, eventId: id, answer: t.dataset.answer }, { accept:"Accepted. The organizer has been told.", decline:"Declined. The organizer has been told.", maybe:"Marked as maybe." }[t.dataset.answer]); }
 });
 
 /* ---------- Cash flow (Craig's weekly method) ----------
@@ -6049,7 +6143,7 @@ function hrSlotCard(){
    clip needs recording again; until then that line falls back to the device's
    own voice if its clip is missing. */
 const CCTOUR = (function(){
-  const SEEN = "am-command-tour-seen.v1", NEW_SEEN = "am-command-whatsnew-2026-11", MUTE = "am-command-tour-muted", RELEASE_MS = 45000;
+  const SEEN = "am-command-tour-seen.v1", NEW_SEEN = "am-command-whatsnew-2026-11-17", MUTE = "am-command-tour-muted", RELEASE_MS = 45000;
   const q = s => document.querySelector(s);
   const has = sec => CFG.tabs.some(t => secOf(t) === sec);
 
@@ -6177,7 +6271,11 @@ const CCTOUR = (function(){
       { id:"md-checkins", clips:["md-checkins"], target:'[data-tour="as-checkins"]', at:"brief", title:"Three check-ins",
         body:"At seven, noon and five on weekdays, your assistant looks at everything again and writes you a short check-in. It shows at the top of this page, and it's emailed to you unless you untick that box. You can also ask for one now." },
       { id:"md-inbox", clips:["md-inbox"], target:'[data-tour="as-inbox"]', at:"brief", title:"Your inbox",
-        body:"Connect your own work inbox here, once. Your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what belongs to someone else. It writes reply drafts that sit in your Gmail drafts. You read them and send them yourself. It never sends anything, and nobody else sees your mail." },
+        body:"Connect your own work inbox here, once, and tick the calendar box when Google asks. Your assistant reads new mail every half hour through the working day. What needs you goes to Needs you at the top, with a reply drafted. Everything else is sorted here: payments, for your information, what someone else is handling, and junk. Nobody else sees your mail." },
+      { id:"md-queue", clips:["md-queue"], target:'[data-tour="as-queue"]', at:"brief", when: () => !!document.querySelector('[data-tour="as-queue"]'), title:"Needs you",
+        body:"Needs you is your assistant's short list: only the emails you have to act on. Each one says what is being asked and has a reply drafted in your own words. Approve and send sends it from your own Gmail. Edit lets you change it first. Hand to passes it to someone else with a note, and puts a check on your list. Not mine takes it away, and This and others like it teaches your assistant for next time. Later brings it back tomorrow. Nothing is ever sent until you press the button." },
+      { id:"md-cal", clips:["md-cal"], target:'[data-tour="as-cal"]', at:"brief", when: () => !!document.querySelector('[data-tour="as-cal"]'), title:"Your meetings",
+        body:"Your meetings shows today's calendar, with anything that overlaps marked. Invites still waiting for your answer are at the top: press Accept, Maybe or Decline and the organizer is told." },
       { id:"md-jobs", clips:["md-jobs"], target:'[data-tour="as-jobs"]', at:"brief", when: () => !AS.data || AS.data.role === "exec", title:"Done, not billed",
         body:"Done, not billed lists every finished job that can't be invoiced yet, and why: a missing purchase order, a quote not approved, or a supplier bill still to come. Press Chase when someone owes us something. Your assistant drafts a note each day for three days, then tells you to pick up the phone." },
       { id:"md-closeout", clips:["md-closeout"], target:'[data-tour="as-closeout"]', at:"brief", when: () => !!AS.data && AS.data.role !== "exec", title:"Closeout",
@@ -6192,7 +6290,9 @@ const CCTOUR = (function(){
       { id:"cf-intro", clips:["cf-intro"], bookend:true, at:"cashflow", title:"Cash flow, step by step",
         body:"Hi" + (S.meName ? " " + S.meName : "") + "! This page is Craig's weekly cash flow sheet, kept up to date for you. Money owed to us and by us comes from QuickBooks. The planned payments, like payroll, WCB and loans, are kept here. Let's walk through it once." },
       { id:"cf-top", clips:["cf-top"], target:'[data-tour="cf-top"]', at:"cashflow", title:"Room on the line",
-        body:"The first number is room on the line of credit right now: the bank balance plus the seven hundred and fifty thousand dollar overdraft. Next is where it ends this week, and where it ends four weeks out. The last one is: if everyone paid me today, and I paid everyone. Type Sunday's bank balance under Money, Cash position, so the weeks start from a real number." },
+        body:"The first number is room on the line of credit right now: the newest bank balance plus the seven hundred and fifty thousand dollar overdraft. It moves each time you tick something received or paid. Type the balance from the bank right here whenever you want it exact. Next is where it ends this week, and where it ends four weeks out. The last one is: if everyone paid me today, and I paid everyone." },
+      { id:"cf-ahead", clips:["cf-ahead"], target:'[data-tour="cf-ahead"]', at:"cashflow", when: () => !!document.querySelector('[data-tour="cf-ahead"]'), title:"Looking ahead",
+        body:"Looking ahead shows the room left on the line at the end of each of the next thirteen weeks, one bar a week. Amber means the week ends under the reserve you keep. Red means it goes over the line. The sentence at the top names the first week it gets tight. The lighter bars further out only count what is known today, so add the billing you expect under Planned payments." },
       { id:"cf-advice", clips:["cf-advice"], target:'[data-tour="cf-advice"]', at:"cashflow", title:"What to do this week",
         body:"This is the plain advice. It finds the tightest week ahead and says what to pay now and what to hold, so the line never goes over and your reserve is kept every week." },
       { id:"cf-view", clips:["cf-view"], target:'[data-tour="cf-view"]', at:"cashflow", title:"This week, or four weeks",
@@ -6215,6 +6315,12 @@ const CCTOUR = (function(){
         body:"Sticky notes is your own board, so the paper notes can come off your monitor. Type a note or press Talk and say it, pick a colour, and it sticks to the board. Drag it anywhere, tap the words to change them, and Tidy up lines them all up." },
       { id:"new-cashflow", clips:["cashflow"], target:'[data-tour="cf-top"]', at:"cashflow", title:"Cash flow",
         body:"Cash flow follows Craig's weekly method: room on the line of credit now, money in and money out each week, and where it lands four weeks out. The advice underneath says what to pay and what to hold. Tick a payment once it goes out, and the weeks update." },
+      { id:"new-queue", clips:["md-queue"], target:'[data-tour="as-queue"]', at:"brief", when: () => !!document.querySelector('[data-tour="as-queue"]'), title:"Needs you",
+        body:"Needs you is your assistant's short list: only the emails you have to act on. Each one says what is being asked and has a reply drafted in your own words. Approve and send sends it from your own Gmail. Edit lets you change it first. Hand to passes it to someone else with a note, and puts a check on your list. Not mine takes it away, and This and others like it teaches your assistant for next time. Later brings it back tomorrow. Nothing is ever sent until you press the button." },
+      { id:"new-cal", clips:["md-cal"], target:'[data-tour="as-cal"]', at:"brief", when: () => !!document.querySelector('[data-tour="as-cal"]'), title:"Your meetings",
+        body:"Your meetings shows today's calendar, with anything that overlaps marked. Invites still waiting for your answer are at the top: press Accept, Maybe or Decline and the organizer is told." },
+      { id:"new-ahead", clips:["cf-ahead"], target:'[data-tour="cf-ahead"]', at:"cashflow", when: () => !!document.querySelector('[data-tour="cf-ahead"]'), title:"Looking ahead",
+        body:"Looking ahead shows the room left on the line at the end of each of the next thirteen weeks, one bar a week. Amber means the week ends under the reserve you keep. Red means it goes over the line. The sentence at the top names the first week it gets tight. The lighter bars further out only count what is known today, so add the billing you expect under Planned payments." },
       { id:"new-viewas", clips:["viewas"], target:'[data-ico="viewas"]', when: () => !!document.querySelector('[data-ico="viewas"]'), title:"View as",
         body:"View as shows you the command centre exactly as someone else sees it, so you can check their access or help them over the phone. It is look only: nothing can be saved, sent or changed. Their email stays private." },
       { id:"new-payroll", clips:["new-payroll"], target:'[data-tour="page"]', at:"payroll", title:"Payroll workbook",

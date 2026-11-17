@@ -275,7 +275,15 @@ At seven, noon and five on weekdays, your assistant looks at everything again an
 
 ## md-inbox
 
-Connect your own work inbox here, once. Your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what belongs to someone else. It writes reply drafts that sit in your Gmail drafts. You read them and send them yourself. It never sends anything, and nobody else sees your mail.
+Connect your own work inbox here, once, and tick the calendar box when Google asks. Your assistant reads new mail every half hour through the working day. What needs you goes to Needs you at the top, with a reply drafted. Everything else is sorted here: payments, for your information, what someone else is handling, and junk. Nobody else sees your mail.
+
+## md-queue
+
+Needs you is your assistant's short list: only the emails you have to act on. Each one says what is being asked and has a reply drafted in your own words. Approve and send sends it from your own Gmail. Edit lets you change it first. Hand to passes it to someone else with a note, and puts a check on your list. Not mine takes it away, and This and others like it teaches your assistant for next time. Later brings it back tomorrow. Nothing is ever sent until you press the button.
+
+## md-cal
+
+Your meetings shows today's calendar, with anything that overlaps marked. Invites still waiting for your answer are at the top: press Accept, Maybe or Decline and the organizer is told.
 
 ## md-jobs
 
@@ -295,7 +303,11 @@ Hi! This page is Craig's weekly cash flow sheet, kept up to date for you. Money 
 
 ## cf-top
 
-The first number is room on the line of credit right now: the bank balance plus the seven hundred and fifty thousand dollar overdraft. Next is where it ends this week, and where it ends four weeks out. The last one is: if everyone paid me today, and I paid everyone. Type Sunday's bank balance under Money, Cash position, so the weeks start from a real number.
+The first number is room on the line of credit right now: the newest bank balance plus the seven hundred and fifty thousand dollar overdraft. It moves each time you tick something received or paid. Type the balance from the bank right here whenever you want it exact. Next is where it ends this week, and where it ends four weeks out. The last one is: if everyone paid me today, and I paid everyone.
+
+## cf-ahead
+
+Looking ahead shows the room left on the line at the end of each of the next thirteen weeks, one bar a week. Amber means the week ends under the reserve you keep. Red means it goes over the line. The sentence at the top names the first week it gets tight. The lighter bars further out only count what is known today, so add the billing you expect under Planned payments.
 
 ## cf-advice
 

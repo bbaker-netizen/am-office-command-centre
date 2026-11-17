@@ -10,6 +10,14 @@
      tick | untick | remove | pin { id }
      triage              sort new mail in this person's inboxes now; what needs
                          them goes onto their hit list
+     send { id, body? }  approve the drafted reply (changed or not): it is sent
+                         from their own Gmail, as them. The only thing that sends.
+     redraft { id, note } draft it again, saying what they asked for
+     notMine { id, always } not theirs; with always, remembered for next time
+     later { id, until } off the queue until the next working day
+     handoff { id, to, note } sent to a colleague with a note; a check goes on the list
+     vip { address, on } a sender who always matters
+     rsvp { inbox, eventId, answer } accept, decline or maybe a meeting invite
      draft { inbox, id } a reply drafted into their own Gmail, for them to send
      chase { job..., who, email, what, from }   start a three-day chase
      chaseCall { id, outcome }   the call on day three, and what next
@@ -21,15 +29,15 @@
    Whose: always the signed-in person's own. Nobody can read another person's
    assistant, and View as shows the list but not their mail.
    What it writes: this person's assistant record ("assist-<id>"), drafts in
-   their own Gmail (never sent), and for promises to pay or money expected,
+   their own Gmail, and for promises to pay or money expected,
    one line in the cash flow plan so the weeks stay right. */
 
 import { getStore } from "@netlify/blobs";
 import { accountGate, sees, canEdit, readAccounts, userOf } from "./_accounts.mjs";
 import { withLock } from "./_lock.mjs";
-import { cleanEntry, addItem, rank, buildCheckin, chaseStep, chaseStatus, chaseDraft, matchPayments, callContext, parseSaying, localNow, KINDS, newId, mailToList, mailDone, listDoneForMail } from "./_assist.mjs";
+import { cleanEntry, addItem, rank, buildCheckin, chaseStep, chaseStatus, chaseDraft, matchPayments, callContext, parseSaying, localNow, KINDS, newId, mailToList, mailDone, listDoneForMail, nextWorkingDay, learnNotMine, setVip, rulesText, afterThread, queueOf } from "./_assist.mjs";
 import { claude, jsonFrom, hasKey, fastModel, draftModel, OUTSIDE_RULE, STYLE } from "./_claudecall.mjs";
-import { readInboxes, tokenFor, recentMail, makeDraft, heardFrom, addressOf, getMessage } from "./_gmail.mjs";
+import { readInboxes, tokenFor, recentMail, makeDraft, heardFrom, addressOf, getMessage, threadInfo, sentSamples, updateDraft, sendDraft, sendNow, hasCalendar, calEvents, calRespond } from "./_gmail.mjs";
 import { query as qboQuery } from "./_qbo.mjs";
 import { sendEmail } from "./mail.mjs";
 
@@ -40,9 +48,9 @@ const PLAN = "cashflow-plan";
 
 export async function readDoc(s, id) {
   const d = (await s.get(KEY(id), { type: "json" })) || {};
-  return { items: [], checkins: [], chases: [], triage: { at: null, seen: [], items: [] }, settings: {}, lastBankLook: null, ...d };
+  return { items: [], checkins: [], chases: [], triage: { at: null, seen: [], items: [] }, settings: {}, lastBankLook: null, rules: { notMine: [], vip: [] }, handoffs: [], ...d };
 }
-const writeDoc = (s, id, d) => s.setJSON(KEY(id), { ...d, items: (d.items || []).slice(0, 400), checkins: (d.checkins || []).slice(0, 40), chases: (d.chases || []).slice(0, 100) });
+const writeDoc = (s, id, d) => s.setJSON(KEY(id), { ...d, handoffs: (d.handoffs || []).slice(0, 100), items: (d.items || []).slice(0, 400), checkins: (d.checkins || []).slice(0, 40), chases: (d.chases || []).slice(0, 100) });
 async function change(s, id, fn) { return withLock(s, "assist-" + id, async () => { const d = await readDoc(s, id); const out = await fn(d); await writeDoc(s, id, d); return out; }); }
 
 /* ----------------------------------------------------- cash flow links */
@@ -111,23 +119,38 @@ export async function triage(s, u, { max = 10, autoDraft = 0 } = {}) {
     } catch (e) { fresh.push({ error: e.message, inbox: ib.email }); }
   }
   const msgs = fresh.filter(m => !m.error).slice(0, max);
+  /* The conversation each email sits in: already answered by this person, or
+     by someone else at A&M. */
+  const mine = [u.email].concat(inboxes.map(x => x.email)).filter(Boolean).map(x => x.toLowerCase());
+  const domains = (process.env.INBOX_DOMAINS || "amabatement.com").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+  for (const m of msgs) {
+    try { const tok = await tokenFor(s, u.id, m.inbox); m.thread = await threadInfo(tok, m.threadId, m.id, mine, domains); } catch (e) { m.thread = null; }
+  }
+  const staff = await staffList(s, u);
+  const rules = rulesText(d);
+  const threadLine = m => !m.thread ? "" : "\nConversation: " + (m.thread.count > 1 ? m.thread.count + " emails." : "first email.") + (m.thread.repliedAfter ? " " + u.name.split(" ")[0] + " has ALREADY REPLIED after this email." : "") + (m.thread.othersAfter.length ? " Replied after this email, from A&M: " + m.thread.othersAfter.join(", ") + "." : "");
   let sorted = [];
   if (msgs.length && hasKey()) {
     const text = await claude({
       model: fastModel(), max_tokens: Math.min(8000, 600 + msgs.length * 220),
       system: `You sort a person's email for their personal assistant. ${ROLE_WORDS(u)} Their own addresses: ${[u.email].concat(inboxes.map(x => x.email)).filter((x, i, a) => x && a.indexOf(x) === i).join(", ")}. ${OUTSIDE_RULE}
-Return only a JSON array, one object per email, in the same order: {"id":"...","bucket":"needs_you"|"payment"|"fyi"|"not_yours"|"junk","why":"under 12 words","who":"sender's name","action":"what ${u.name.split(" ")[0]} has to do, starting with a verb, under 12 words, naming the job, person or amount (for example: Send Bryan's $800 LOA for Cana Lloydminster), or empty","payment":null or {"direction":"in"|"out","name":"who paid or was paid","amount":number},"draft":true|false}.
+Return only a JSON array, one object per email, in the same order: {"id":"...","bucket":"needs_you"|"payment"|"fyi"|"not_yours"|"junk","why":"under 12 words","who":"sender's name","action":"what ${u.name.split(" ")[0]} has to do, starting with a verb, under 12 words, naming the job, person or amount (for example: Send Bryan's $800 LOA for Cana Lloydminster), or empty","payment":null or {"direction":"in"|"out","name":"who paid or was paid","amount":number},"draft":true|false,"handTo":"email address of the one colleague below who should deal with it instead, or empty"}.
 needs_you: a person asking ${u.name.split(" ")[0]} for a decision, an approval, an answer, money, a document or a call. This includes staff and partners at A&M writing to ${u.name.split(" ")[0]} directly (their address is in To), a customer or supplier chasing an invoice or a payment, a bank or insurer asking for something, and a JobTread message posted to ${u.name.split(" ")[0]} that asks for something. If ${u.name.split(" ")[0]} is the one who has to act, it is needs_you even when others are copied. payment: an e-transfer, deposit, bank notice or payment portal notice showing money in or out. not_yours: estimating mail (bid invitations, tenders, addenda, plan downloads), or mail where ${u.name.split(" ")[0]} is only copied (in Cc) and someone else is clearly handling it. Never use not_yours for mail sent To ${u.name.split(" ")[0]} that asks them for something. fyi: worth knowing, nothing to do. junk: marketing, newsletters, automatic notices with nothing to do.
-draft is true only when a short written reply would help.`,
-      messages: [{ role: "user", content: msgs.map(m => `<email id="${m.id}">\nFrom: ${m.from}\nTo: ${m.to}${m.cc ? "\nCc: " + m.cc : ""}\nSubject: ${m.subject}\nDate: ${m.date}\n\n${(m.body || m.snippet).slice(0, 1200)}\n</email>`).join("\n\n") }]
+draft is true only when a short written reply would help.
+The Conversation line under each email says what has happened since. If ${u.name.split(" ")[0]} has already replied, it is fyi. If someone else at A&M has already replied and is dealing with it, it is not_yours unless ${u.name.split(" ")[0]} is still asked for something only they can give.
+handTo: only when the email is plainly another person's job and they are in this list. Colleagues: ${staff.map(x => `${x.name}${x.title ? " (" + x.title + ")" : ""} <${x.email}>`).join("; ") || "none listed"}.
+${rules}`,
+      messages: [{ role: "user", content: msgs.map(m => `<email id="${m.id}">\nFrom: ${m.from}\nTo: ${m.to}${m.cc ? "\nCc: " + m.cc : ""}\nSubject: ${m.subject}\nDate: ${m.date}${threadLine(m)}\n\n${(m.body || m.snippet).slice(0, 1200)}\n</email>`).join("\n\n") }]
     }).catch(e => { throw new Error("Sorting the mail did not work: " + e.message); });
     const arr = jsonFrom(text);
     sorted = Array.isArray(arr) ? arr : [];
   }
   const byId = Object.fromEntries(sorted.filter(x => x && x.id).map(x => [x.id, x]));
-  const items = msgs.map(m => { const c = byId[m.id] || {}; return { id: m.id, threadId: m.threadId, inbox: m.inbox, from: m.from, address: addressOf(m.from), subject: m.subject, date: m.date, messageId: m.messageId, snippet: (m.snippet || "").slice(0, 240),
+  const staffMail = new Set(staff.map(x => x.email));
+  const items = msgs.map(m => { const c = byId[m.id] || {}; return afterThread({ id: m.id, threadId: m.threadId, inbox: m.inbox, from: m.from, address: addressOf(m.from), subject: m.subject, date: m.date, messageId: m.messageId, snippet: (m.snippet || "").slice(0, 240),
     bucket: ["needs_you", "payment", "fyi", "not_yours", "junk"].includes(c.bucket) ? c.bucket : (hasKey() ? "fyi" : "unsorted"), why: String(c.why || "").slice(0, 120), who: String(c.who || "").slice(0, 80), action: String(c.action || "").slice(0, 100),
-    payment: c.payment && c.payment.name ? { direction: c.payment.direction === "out" ? "out" : "in", name: String(c.payment.name).slice(0, 80), amount: Number(c.payment.amount) || 0 } : null, wantsDraft: !!c.draft, at: new Date().toISOString() }; });
+    payment: c.payment && c.payment.name ? { direction: c.payment.direction === "out" ? "out" : "in", name: String(c.payment.name).slice(0, 80), amount: Number(c.payment.amount) || 0 } : null, wantsDraft: !!c.draft, at: new Date().toISOString(),
+    handTo: staffMail.has(String(c.handTo || "").toLowerCase()) ? String(c.handTo).toLowerCase() : "", othersReplied: (m.thread && m.thread.othersAfter) || [] }, m.thread); });
   /* Drafts for the top few that need a reply (scheduled runs only). */
   for (const it of items.filter(x => x.bucket === "needs_you" && x.wantsDraft).slice(0, autoDraft)) {
     try { const m = msgs.find(x => x.id === it.id); const dr = await draftReply(s, u, it, m); it.draft = dr; } catch (e) { it.draftError = e.message; }
@@ -147,13 +170,55 @@ draft is true only when a short written reply would help.`,
   return { at: new Date().toISOString(), count: items.length, needs: items.filter(x => x.bucket === "needs_you").length, listed, errors };
 }
 
-async function draftReply(s, u, it, full) {
+/* A few of the person's own sent emails, read once a week, so a draft
+   sounds like them and not like a robot. */
+async function voiceFor(s, u, inbox) {
+  const d = await readDoc(s, u.id);
+  if (d.voice && d.voice.inbox === inbox && Date.now() - Date.parse(d.voice.at) < 7 * 86400000) return d.voice.samples || [];
+  let samples = [];
+  try { samples = await sentSamples(await tokenFor(s, u.id, inbox), 5); } catch (e) {}
+  await change(s, u.id, doc => { doc.voice = { at: new Date().toISOString(), inbox, samples }; });
+  return samples;
+}
+async function draftReply(s, u, it, full, note) {
   const tok = await tokenFor(s, u.id, it.inbox);
+  const voice = await voiceFor(s, u, it.inbox);
+  const first = u.name.split(" ")[0];
   const body = await claude({ model: draftModel(), max_tokens: 700,
-    system: `You draft a short email reply for ${u.name} (${u.title || "A&M Abatement Services"}) to send himself after reading it. ${OUTSIDE_RULE} ${STYLE} Never promise money, dates or prices that are not in the email; where a decision is needed, leave a clear [square bracket] for ${u.name.split(" ")[0]} to fill in. Sign off with "${u.name.split(" ")[0]}". Return only the email body.`,
-    messages: [{ role: "user", content: `<email>\nFrom: ${it.from}\nSubject: ${it.subject}\n\n${((full && full.body) || it.snippet || "").slice(0, 3000)}\n</email>\n\nDraft the reply.` }] });
+    system: `You draft a short email reply for ${u.name} (${u.title || "A&M Abatement Services"}) to approve and send. ${OUTSIDE_RULE} ${STYLE} Never promise money, dates or prices that are not in the email; where a decision is needed, leave a clear [square bracket] for ${first} to fill in. Sign off with "${first}". Return only the email body.${voice.length ? "\nWrite the way " + first + " writes. These are emails " + first + " sent recently, for tone, length and sign-off only (do not reuse their content):\n" + voice.map(v => "<material>" + v + "</material>").join("\n") : ""}`,
+    messages: [{ role: "user", content: `<email>\nFrom: ${it.from}\nSubject: ${it.subject}\n\n${((full && full.body) || it.snippet || "").slice(0, 3000)}\n</email>\n\n${note ? "<saying>" + String(note).slice(0, 400) + "</saying>\nDraft the reply, saying what " + first + " asked for above." : "Draft the reply."}` }] });
   const subject = /^re:/i.test(it.subject) ? it.subject : "Re: " + it.subject;
-  return makeDraft(tok, { to: it.address, subject, body, threadId: it.threadId, inReplyTo: it.messageId });
+  const made = await makeDraft(tok, { to: it.address, subject, body, threadId: it.threadId, inReplyTo: it.messageId });
+  return { ...made, to: it.address, subject, body };
+}
+
+/* The people a piece of mail can be handed to: every active account but this one. */
+async function staffList(s, u) {
+  const { accounts } = await readAccounts(s);
+  return Object.values(accounts).filter(a => a.active !== false && a.email && a.id !== u.id).map(a => ({ name: a.name, title: a.title || "", email: String(a.email).toLowerCase() })).sort((x, y) => x.name.localeCompare(y.name));
+}
+
+/* Today's meetings and the invites still waiting for an answer, from every
+   connected inbox that has calendar permission. Kept five minutes. */
+async function calendarFor(s, u, d, inboxes, fresh) {
+  const withCal = inboxes.filter(hasCalendar);
+  if (!withCal.length) return { connected: false, needsReconnect: inboxes.length > 0, today: [], invites: [] };
+  if (!fresh && d.cal && Date.now() - Date.parse(d.cal.at) < 300000 && d.cal.day === localNow().date) return { connected: true, ...d.cal };
+  const L = localNow(), now = new Date();
+  const dayStart = new Date(now.getTime() - (L.hour * 60 + L.minute) * 60000 - now.getSeconds() * 1000);
+  const today = [], invites = [], errors = [];
+  for (const ib of withCal) {
+    try {
+      const tok = await tokenFor(s, u.id, ib.email);
+      const ev = await calEvents(tok, dayStart.toISOString(), new Date(dayStart.getTime() + 14 * 86400000).toISOString());
+      const endToday = new Date(dayStart.getTime() + 86400000).toISOString();
+      for (const e of ev) { const x = { ...e, inbox: ib.email }; if (e.start < endToday) today.push(x); if (e.status === "needsAction") invites.push(x); }
+    } catch (e) { errors.push(ib.email + ": " + e.message); }
+  }
+  today.sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  const cal = { at: now.toISOString(), day: L.date, today: today.slice(0, 20), invites: invites.slice(0, 20), errors };
+  await change(s, u.id, doc => { doc.cal = cal; }).catch(() => {});
+  return { connected: true, ...cal };
 }
 
 /* ----------------------------------------------------- the chase */
@@ -199,7 +264,7 @@ export async function runFor(s, u, slot, { heavy = true } = {}) {
   /* Mail is sorted at every check-in and, between them, every half hour
      (slot "sort": the mail only, no check-in and no email to the person). */
   if (heavy) {
-    try { const t = await triage(s, u, { max: 25, autoDraft: slot === "morning" ? 3 : slot === "noon" ? 1 : 0 }); if (t.count) notes.push(`Sorted ${t.count} new email${t.count === 1 ? "" : "s"}${t.listed && t.listed.length ? ", " + t.listed.length + " put on your list" : ""}.`); } catch (e) { notes.push(e.message); }
+    try { const t = await triage(s, u, { max: 25, autoDraft: 8 }); if (t.count) notes.push(`Sorted ${t.count} new email${t.count === 1 ? "" : "s"}${t.listed && t.listed.length ? ", " + t.listed.length + " put on your list" : ""}.`); } catch (e) { notes.push(e.message); }
   }
   if (slot === "sort") return { slot, at: now.toISOString(), notes };
   if (slot === "morning") { try { notes.push(...await runChases(s, u, L.date)); } catch (e) { notes.push("The chases did not run: " + e.message); } }
@@ -282,6 +347,11 @@ export default async (req) => {
         checkins: d.checkins.slice(0, 6),
         chases: (d.chases || []).filter(c => !c.closed).map(c => ({ ...c, status: chaseStatus(c, today), step: chaseStep(c, today).step })),
         inboxes: ib.map(x => ({ email: x.email, addedAt: x.addedAt })),
+        queue: hideMail ? [] : queueOf(d, today).slice(0, 40),
+        staff: hideMail ? [] : await staffList(s, u),
+        rules: hideMail ? { notMine: [], vip: [] } : d.rules,
+        handoffs: hideMail ? [] : (d.handoffs || []).slice(0, 10),
+        calendar: hideMail ? { connected: false, hidden: true, today: [], invites: [] } : await calendarFor(s, u, d, ib, false).catch(e => ({ connected: false, today: [], invites: [], errors: [e.message] })),
         triage: hideMail ? { at: d.triage.at, hidden: true, counts: countBuckets(d.triage.items) } : { at: d.triage.at, items: (d.triage.items || []).filter(x => !x.handled).slice(0, 60), errors: d.triage.errors || [] },
         claude: hasKey()
       });
@@ -344,6 +414,85 @@ export default async (req) => {
       const dr = await draftReply(s, u, it, full);
       await change(s, u.id, d2 => { const x = (d2.triage.items || []).find(y => y.id === it.id); if (x) x.draft = dr; });
       return json({ ok: true, draft: dr });
+    }
+    /* ---- the queue's buttons (2026-11-17). Each acts on one email the person
+       is looking at, and only when they press it. */
+    if (["send", "notMine", "later", "handoff", "redraft"].includes(A)) {
+      const d0 = await readDoc(s, u.id);
+      const it = (d0.triage.items || []).find(x => x.id === b.id);
+      if (!it) return json({ error: "missing", message: "That email is not in your queue any more." }, 404);
+      const tok = await tokenFor(s, u.id, it.inbox);
+      const finish = (extra, why) => change(s, u.id, d => {
+        const x = (d.triage.items || []).find(y => y.id === it.id); if (x) Object.assign(x, { handled: nowIso }, extra || {});
+        const li = (d.items || []).find(y => y.mailId === it.id && !y.done); if (li) { li.done = true; li.doneAt = nowIso; li.doneWhy = why; }
+        return li;
+      });
+      if (A === "send") {
+        /* Approve and send: the draft the person has read (and perhaps
+           changed) goes from their own Gmail, as them. */
+        let dr = it.draft;
+        if (!dr || !dr.draftId) return json({ error: "nodraft", message: "There is no draft for that email yet. Press Draft a reply first." }, 409);
+        const body = b.body === undefined ? null : String(b.body).replace(/\r\n/g, "\n").trim();
+        if (body !== null && !body) return json({ error: "bad", message: "The reply is empty." }, 400);
+        const text = body === null ? dr.body : body;
+        if (/\[[^\]\n]{1,200}\]/.test(text || "")) return json({ error: "brackets", message: "The draft still has a [square bracket] to fill in. Press Edit, fill it in, then send." }, 409);
+        if (body !== null && body !== dr.body) await updateDraft(tok, dr.draftId, { to: dr.to || it.address, subject: dr.subject || ("Re: " + it.subject), body, threadId: it.threadId, inReplyTo: it.messageId });
+        const sentMsg = await sendDraft(tok, dr.draftId);
+        await finish({ sent: { at: nowIso, to: dr.to || it.address, id: sentMsg.id }, draft: { ...dr, body: text, sent: true } }, "You approved the reply and it was sent");
+        return json({ ok: true, sent: { to: dr.to || it.address } });
+      }
+      if (A === "redraft") {
+        const full = await getMessage(tok, it.id).catch(() => null);
+        const dr = await draftReply(s, u, it, full, b.note);
+        await change(s, u.id, d => { const x = (d.triage.items || []).find(y => y.id === it.id); if (x) x.draft = dr; });
+        return json({ ok: true, draft: dr });
+      }
+      if (A === "notMine") {
+        await change(s, u.id, d => { if (b.always) learnNotMine(d, it, nowIso); });
+        await finish({ bucket: "not_yours", why: "You said this is not yours" }, "You said it is not yours");
+        return json({ ok: true, learned: !!b.always });
+      }
+      if (A === "later") {
+        const until = /^\d{4}-\d{2}-\d{2}$/.test(String(b.until || "")) && b.until > today ? b.until : nextWorkingDay(today);
+        await change(s, u.id, d => { const x = (d.triage.items || []).find(y => y.id === it.id); if (x) x.snooze = until; const li = (d.items || []).find(y => y.mailId === it.id && !y.done); if (li) li.snooze = until; });
+        return json({ ok: true, until });
+      }
+      if (A === "handoff") {
+        /* Hand it to a colleague: they get the email with a note from this
+           person, sent from this person's Gmail, and a line goes on the list
+           to check it was dealt with in two working days. */
+        const staff = await staffList(s, u);
+        const to = staff.find(x => x.email === String(b.to || "").toLowerCase());
+        if (!to) return json({ error: "bad", message: "Pick who to hand it to." }, 400);
+        const note = String(b.note || "").trim().slice(0, 600);
+        const full = await getMessage(tok, it.id).catch(() => null);
+        const first = u.name.split(" ")[0];
+        const body = `Hi ${to.name.split(" ")[0]},\n\n${note || "Can you look after this one, please?"}\n\n${first}\n\n---------- Handed on ----------\nFrom: ${it.from}\nSubject: ${it.subject}\nDate: ${it.date}\n\n${((full && full.body) || it.snippet || "").slice(0, 4000)}`;
+        await sendNow(tok, { to: to.email, cc: it.address && b.copySender ? it.address : "", subject: /^fwd?:/i.test(it.subject) ? it.subject : "Fwd: " + it.subject, body });
+        const check = nextWorkingDay(today, 2);
+        await finish({ handoff: { to: to.email, name: to.name, at: nowIso, check } }, "Handed to " + to.name);
+        await change(s, u.id, d => {
+          d.handoffs = [{ id: newId(), mailId: it.id, to: to.email, name: to.name, subject: it.subject, from: it.who || it.address, at: nowIso, check }].concat(d.handoffs || []);
+          addItem(d, { text: `Check ${to.name.split(" ")[0]} dealt with: ${it.who || it.address}, ${it.subject}`.slice(0, 300), kind: "chase", who: to.name, amount: null, due: check, source: "handoff", pinned: false, jobId: "", jobNumber: "", since: today, snooze: check, mailThread: "", handoffOf: it.id }, nowIso);
+        });
+        return json({ ok: true, to: to.name, check });
+      }
+    }
+    if (A === "vip") {
+      const okV = await change(s, u.id, d => setVip(d, b.address, b.on !== false));
+      return okV ? json({ ok: true }) : json({ error: "bad", message: "That does not look like an email address." }, 400);
+    }
+    if (A === "forget") { await change(s, u.id, d => { d.rules = d.rules || {}; d.rules.notMine = (d.rules.notMine || []).filter(r => !(r.address === String(b.address || "").toLowerCase() && r.subject === String(b.subject || ""))); }); return json({ ok: true }); }
+    if (A === "rsvp") {
+      /* Accept or decline a meeting invite, as this person. */
+      const status = { accept: "accepted", decline: "declined", maybe: "tentative" }[b.answer];
+      if (!status) return json({ error: "bad", message: "Accept, decline or maybe." }, 400);
+      const ib = (await readInboxes(s, u.id)).find(x => x.email === String(b.inbox || "").toLowerCase() && hasCalendar(x));
+      if (!ib) return json({ error: "calendar", message: "That calendar is not connected. Connect the inbox again to add its calendar." }, 409);
+      await calRespond(await tokenFor(s, u.id, ib.email), String(b.eventId || ""), status);
+      const d = await readDoc(s, u.id);
+      const calNow = await calendarFor(s, u, d, await readInboxes(s, u.id), true);
+      return json({ ok: true, calendar: calNow });
     }
     if (A === "handled") { await change(s, u.id, d => { const x = (d.triage.items || []).find(y => y.id === b.id); if (x) { x.handled = nowIso; listDoneForMail(d, x.id, nowIso); } }); return json({ ok: true }); }
     if (A === "chase") {

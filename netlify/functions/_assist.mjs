@@ -91,7 +91,9 @@ export function mailToList(doc, today, nowIso) {
   for (const m of (doc.triage && doc.triage.items) || []) {
     if (m.bucket !== "needs_you" || m.handled || m.listed) continue;
     const thread = m.threadId || m.id;
-    const same = doc.items.find(x => x.mailThread === thread);
+    /* A newer email in a conversation whose line is still open joins that
+       line; if the line was already ticked, it gets a new one. */
+    const same = doc.items.find(x => x.mailThread === thread && !x.done);
     if (same) { m.listed = same.id; continue; }
     const who = String(m.who || m.address || "").trim();
     const what = String(m.action || m.subject || "Email needs you").trim();
@@ -102,6 +104,62 @@ export function mailToList(doc, today, nowIso) {
   }
   return added;
 }
+/* ------------------------------------------------------- the assistant's queue
+   (2026-11-17) What an executive assistant does with the mail: puts in front
+   of the person only what they have to act on, each with a reply drafted,
+   and buttons to approve it, hand it on, say it is not theirs, or leave it
+   until tomorrow. These are the rules behind those buttons. */
+
+/* The next working day after a date (Monday after a Friday). */
+export function nextWorkingDay(d, n = 1) {
+  let t = Date.parse(d + "T12:00:00Z");
+  while (n > 0) { t += DAY; const w = new Date(t).getUTCDay(); if (w !== 0 && w !== 6) n--; }
+  return new Date(t).toISOString().slice(0, 10);
+}
+const subjKey = s => String(s || "").replace(/^\s*((re|fwd?|fw)\s*:\s*)+/i, "").replace(/\s+/g, " ").trim().slice(0, 80);
+/* "Not mine, and others like it": remembered, and told to Claude at every
+   sort from then on. One line per sender and subject, newest first, 60 kept. */
+export function learnNotMine(doc, m, nowIso) {
+  doc.rules = doc.rules || { notMine: [], vip: [] };
+  doc.rules.notMine = doc.rules.notMine || [];
+  const rule = { address: String(m.address || "").toLowerCase(), name: String(m.who || "").slice(0, 80), subject: subjKey(m.subject), at: nowIso };
+  if (!rule.address) return null;
+  doc.rules.notMine = [rule].concat(doc.rules.notMine.filter(r => !(r.address === rule.address && r.subject === rule.subject))).slice(0, 60);
+  return rule;
+}
+/* Senders who always matter: never filed away. */
+export function setVip(doc, address, on) {
+  doc.rules = doc.rules || { notMine: [], vip: [] };
+  const a = String(address || "").toLowerCase().trim();
+  if (!/^[^\s@]+@[^\s@]+$/.test(a)) return false;
+  doc.rules.vip = (doc.rules.vip || []).filter(x => x !== a);
+  if (on) doc.rules.vip = [a].concat(doc.rules.vip).slice(0, 40);
+  return true;
+}
+export function rulesText(doc) {
+  const r = (doc && doc.rules) || {}, out = [];
+  if ((r.vip || []).length) out.push("Senders who always matter to this person (their mail is needs_you whenever it asks for anything, and never not_yours or junk): " + r.vip.join(", ") + ".");
+  if ((r.notMine || []).length) out.push("This person has said mail like the following is NOT theirs to act on. Put mail like it in not_yours:\n" + r.notMine.slice(0, 40).map(x => `- from ${x.name ? x.name + " " : ""}<${x.address}>${x.subject ? ', about "' + x.subject + '"' : ""}`).join("\n"));
+  return out.join("\n");
+}
+/* What has already happened in the conversation overrides the sort: an email
+   the person has answered, or that the same sender has since replaced with a
+   newer one, does not need them. */
+export function afterThread(item, thread) {
+  if (!thread || item.bucket !== "needs_you") return item;
+  if (thread.repliedAfter) return { ...item, bucket: "fyi", why: "You already replied in this conversation", wantsDraft: false };
+  if (thread.newerFromSender) return { ...item, bucket: "fyi", why: "They wrote again since: see their newer email", wantsDraft: false };
+  return item;
+}
+/* The queue: what needs the person, not dealt with and not put off, senders
+   who always matter first, then newest first. */
+export function queueOf(doc, today) {
+  const vip = new Set(((doc.rules && doc.rules.vip) || []));
+  return ((doc.triage && doc.triage.items) || []).filter(x => x.bucket === "needs_you" && !x.handled && !(x.snooze && x.snooze > today))
+    .map(x => ({ ...x, vip: vip.has(String(x.address || "").toLowerCase()) }))
+    .sort((a, b) => (b.vip - a.vip) || String(b.at || "").localeCompare(String(a.at || "")));
+}
+
 /* Ticking the line marks the email dealt with, and the other way round. */
 export function mailDone(doc, mailId, nowIso) {
   const m = ((doc.triage && doc.triage.items) || []).find(x => x.id === mailId);
@@ -129,7 +187,7 @@ export function rank(items, today) {
     s += Math.min(30, Math.round((Date.parse(today) - Date.parse((it.createdAt || today).slice(0, 10))) / DAY));
     return s;
   };
-  return (items || []).filter(it => !it.done && !it.held).map(it => ({ ...it, score: score(it) })).sort((a, b) => b.score - a.score);
+  return (items || []).filter(it => !it.done && !it.held && !(it.snooze && it.snooze > today)).map(it => ({ ...it, score: score(it) })).sort((a, b) => b.score - a.score);
 }
 
 /* A check-in: what is done today, what is left, hours left, and what rolls. */
