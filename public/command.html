@@ -2175,6 +2175,8 @@ function asDo(body, ok){
   return asCall("", body).then(r => { AS.busy = false; if(ok) AS.msg = typeof ok === "function" ? ok(r) : ok; return asLoad().then(() => r); })
     .catch(e => { AS.busy = false; AS.msg = errCopy(e); render(); });
 }
+/* A Gmail link that opens in the right inbox when a person has more than one. */
+function asMailLink(inbox, thread){ return "https://mail.google.com/mail/" + (inbox ? "?authuser=" + encodeURIComponent(inbox) : "u/0/") + "#all/" + encodeURIComponent(thread || ""); }
 const AS_KIND = { todo:"To do", pay:"Pay", expect:"Coming in", call:"Call", ask:"Asked", chase:"Chase" };
 function asItem(it){
   const past = it.due && it.due < iso(today());
@@ -2183,12 +2185,12 @@ function asItem(it){
     it.amount ? '<span class="md-chip">' + E(M(it.amount)) + '</span>' : "",
     it.due ? '<span class="md-chip' + (past ? " stop" : "") + '">' + (past ? "Was due " : "Due ") + E(mdDay(it.due)) + '</span>' : "",
     it.who && !String(it.text).includes(it.who) ? '<span class="md-chip">' + E(it.who) + '</span>' : "",
-    it.source === "voice" ? '<span class="md-chip">You said it</span>' : it.source === "photo" ? '<span class="md-chip">From your paper list</span>' : it.source === "chase" ? '<span class="md-chip">From a chase</span>' : "",
+    it.source === "voice" ? '<span class="md-chip">You said it</span>' : it.source === "photo" ? '<span class="md-chip">From your paper list</span>' : it.source === "chase" ? '<span class="md-chip">From a chase</span>' : it.source === "email" ? '<span class="md-chip cy">From your email</span>' : "",
     it.cfItemId ? '<span class="md-chip cy">In the cash flow</span>' : ""
   ].filter(Boolean).join("");
   return '<li class="asit' + (it.pinned ? " pin" : "") + '"><button type="button" class="tick" data-as-tick="' + E(it.id) + '" aria-label="Done: ' + E(it.text) + '">' + ico("check") + '</button>' +
     '<div class="tx"><b>' + E(it.text) + '</b>' + (chips ? '<div class="md-chips">' + chips + '</div>' : '') + '</div>' +
-    '<div class="ac"><button type="button" class="linkish" data-as-pin="' + E(it.id) + '">' + (it.pinned ? "Unpin" : "Move to top") + '</button><button type="button" class="linkish" data-as-remove="' + E(it.id) + '">Remove</button></div></li>';
+    '<div class="ac">' + (it.mailThread ? '<a class="linkish" href="' + E(asMailLink(it.inbox, it.mailThread)) + '" target="_blank" rel="noopener" title="' + E(it.subject || "") + '">Open email</a>' : '') + '<button type="button" class="linkish" data-as-pin="' + E(it.id) + '">' + (it.pinned ? "Unpin" : "Move to top") + '</button><button type="button" class="linkish" data-as-remove="' + E(it.id) + '">Remove</button></div></li>';
 }
 /* "2026-11-21" as "Sat, Nov 21"; today and tomorrow by name. */
 function mdDay(d){
@@ -2215,18 +2217,20 @@ function asInbox(){
   const needN = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
   let h = '<div class="card wide o-inbox" data-nofold data-tour="as-inbox"><h2>Your inbox' + (needN ? ' <span class="md-count stop">' + needN + ' need you</span>' : '') + '</h2>';
   if(d.triage && d.triage.hidden) return h + '<p class="lede">Their mail stays private. Only the master admin can see another person\'s mail.</p></div>';
-  if(!ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it at the morning and noon check-ins: what needs you, payments, what is just for your information, and what is someone else\'s (estimating mail stays out of your way). It drafts replies for you to check and send yourself. It never sends anything.</p>' +
+  if(!ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it every half hour through the working day: what needs you (it goes on your hit list), payments, what is just for your information, and what is someone else\'s (estimating mail stays out of your way). It drafts replies for you to check and send yourself. It never sends anything.</p>' +
     (AS.inbox && AS.inbox.ready === false ? '<div class="state wait">Google sign-in is not set up in Netlify yet.</div>' : '<button class="btn" data-as-connect>Connect my inbox</button>') + '</div>';
   const t = d.triage || {}, items = t.items || [];
   const group = (b, title, open) => { const g = items.filter(x => x.bucket === b); if(!g.length) return "";
     return '<details class="asmail"' + (open ? " open" : "") + '><summary><b>' + E(title) + '</b> <span class="tag ' + (b === "needs_you" ? "stop" : b === "payment" ? "clear" : "mute") + '">' + g.length + '</span></summary><ul>' + g.map(x =>
       '<li><div><b>' + E(x.who || x.address) + '</b> <span class="sm">' + E(x.inbox) + '</span><div>' + E(x.subject) + '</div><span class="sm">' + E([x.why, x.action, x.payment ? (x.payment.direction === "in" ? "Money in: " : "Money out: ") + x.payment.name + " " + M(x.payment.amount) : ""].filter(Boolean).join(" · ")) + '</span></div>' +
       '<div class="ac">' + (x.draft ? '<a class="btn ghost sm" href="' + E(x.draft.link || "https://mail.google.com/mail/u/0/#drafts") + '" target="_blank" rel="noopener">Draft is in Gmail</a>' : b === "needs_you" ? '<button type="button" class="btn ghost sm" data-as-draft="' + E(x.id) + '">Draft a reply</button>' : '') +
-      '<a class="linkish" href="https://mail.google.com/mail/u/0/#inbox/' + E(x.threadId || x.id) + '" target="_blank" rel="noopener">Open</a> <button type="button" class="linkish" data-as-handled="' + E(x.id) + '">Done</button></div></li>').join("") + '</ul></details>'; };
-  h += '<p class="lede">' + (t.at ? "Sorted " + whenSeen(t.at) + ". " : "Not sorted yet. ") + plural(ib.length, "inbox", "inboxes") + ': ' + E(ib.map(x => x.email).join(", ")) + '.</p>' +
+      '<a class="linkish" href="' + E(asMailLink(x.inbox, x.threadId || x.id)) + '" target="_blank" rel="noopener">Open</a> <button type="button" class="linkish" data-as-handled="' + E(x.id) + '">Done</button></div></li>').join("") + '</ul></details>'; };
+  h += '<p class="lede">' + (t.at ? "Sorted " + whenSeen(t.at) + ". " : "Not sorted yet. ") + "Sorted every half hour, 7:00 to 5:30 on weekdays. What needs you goes on your hit list.</p>" +
+    '<ul class="plain asboxes">' + ib.map(x => '<li><b>' + E(x.email) + '</b>' + (d.role && !(d.triage && d.triage.hidden) && !VIEW_AS ? ' <button type="button" class="linkish" data-as-rminbox="' + E(x.email) + '">Disconnect</button>' : '') + '</li>').join("") + '</ul>' +
+    (AS.inbox && AS.inbox.personal ? '<p class="sm">You can also add your personal Gmail: press Add another inbox and pick it on the Google screen.</p>' : '') +
     '<div class="row-btns"><button class="btn ghost" data-as-triage>' + (AS.busy ? "Working…" : "Sort new mail now") + '</button><button class="linkish" data-as-connect>Add another inbox</button></div>' +
     ((t.errors || []).length ? '<div class="state wait">' + t.errors.map(E).join("<br>") + '</div>' : '') +
-    group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", "Someone else's (estimating and the like)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true);
+    group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", "Someone else is handling it (you are copied)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true);
   return h + '</div>';
 }
 function asMoney(){ return mdCash() + mdBank() + mdDue(); }
@@ -2716,7 +2720,7 @@ document.addEventListener("click", ev => {
   acctCall("", { action:"settings", projectAssistantLive: p.dataset.acPmlive === "1" }).then(() => { toast(p.dataset.acPmlive === "1" ? "The project assistant is on for staff with a project assistant set." : "The project assistant is off for staff."); loadAccounts(); }).catch(e => { p.disabled = false; toast(errCopy(e), "bad"); });
 });
 document.addEventListener("click", ev => {
-  const t = ev.target.closest && ev.target.closest("[data-as-talk],[data-as-tick],[data-as-untick],[data-as-pin],[data-as-remove],[data-as-log],[data-as-connect],[data-as-triage],[data-as-draft],[data-as-handled],[data-as-seenbank],[data-as-checkin],[data-as-chasefor],[data-as-chasego],[data-as-chasecancel],[data-as-called],[data-as-chaseclose],[data-as-preview]");
+  const t = ev.target.closest && ev.target.closest("[data-as-talk],[data-as-tick],[data-as-untick],[data-as-pin],[data-as-remove],[data-as-log],[data-as-connect],[data-as-rminbox],[data-as-triage],[data-as-draft],[data-as-handled],[data-as-seenbank],[data-as-checkin],[data-as-chasefor],[data-as-chasego],[data-as-chasecancel],[data-as-called],[data-as-chaseclose],[data-as-preview]");
   if(!t) return;
   const D = t.dataset;
   if(D.asTalk !== undefined) return asSpeak();
@@ -2725,8 +2729,9 @@ document.addEventListener("click", ev => {
   if(D.asPin) return asDo({ action:"pin", id: D.asPin });
   if(D.asRemove) return asDo({ action:"remove", id: D.asRemove }, "Removed.");
   if(D.asLog !== undefined){ const i = $("asText"); const text = i && i.value.trim(); if(!text){ AS.msg = "Type what happened in the box first (someone at the door, a phone call), then press Log."; render(); setTimeout(() => { const x = $("asText"); if(x) x.focus(); }, 0); return; } i.value = ""; return asDo({ action:"log", text }, "Logged. It joins your list at the next check-in."); }
-  if(D.asConnect !== undefined) return fetch("/api/inbox?action=start", { headers:{ authorization:"Bearer " + TOKEN } }).then(r => r.json()).then(b => { if(b.url) location.href = b.url; else { AS.msg = b.message || "Could not start the Google sign-in."; render(); } });
-  if(D.asTriage !== undefined) return asDo({ action:"triage" }, r => r.count ? "Sorted " + plural(r.count, "new email") + "." : "No new mail since the last sort.");
+  if(D.asRminbox) return fetch("/api/inbox", { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify({ action:"remove", email: D.asRminbox }) }).then(r => r.json()).then(b => { AS.msg = b.ok ? D.asRminbox + " is disconnected. Its mail is no longer read." : (b.message || "Could not disconnect that inbox."); return asLoad(); });
+  if(D.asConnect !== undefined) return fetch("/api/inbox?action=start" + (((AS.inbox && AS.inbox.inboxes) || []).length ? "&another=1" : ""), { headers:{ authorization:"Bearer " + TOKEN } }).then(r => r.json()).then(b => { if(b.url) location.href = b.url; else { AS.msg = b.message || "Could not start the Google sign-in."; render(); } });
+  if(D.asTriage !== undefined) return asDo({ action:"triage" }, r => r.count ? "Sorted " + plural(r.count, "new email") + "." + ((r.listed || []).length ? " " + plural(r.listed.length, "is", "are") + " on your list." : "") : "No new mail since the last sort.");
   if(D.asDraft) return asDo({ action:"draft", id: D.asDraft }, "Drafted. It is in your Gmail drafts for you to check and send.");
   if(D.asHandled) return asDo({ action:"handled", id: D.asHandled });
   if(D.asSeenbank !== undefined) return asDo({ action:"seenBank" }, "Noted. Next time it shows what moved after now.").then(() => { AS.bank = null; AS.bankErr = null; render(); });

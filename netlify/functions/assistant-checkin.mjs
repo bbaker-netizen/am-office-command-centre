@@ -1,27 +1,35 @@
-/* A&M - the assistants' three check-ins a day, in the cloud.
+/* A&M - the assistants' three check-ins a day, and the mail sort between
+   them, in the cloud.
 
-   Runs at the top of every hour from 6 am to 5 pm Mountain on weekdays (the
-   UTC hours cover both standard and daylight time) and acts only at 7:00
-   (morning), 12:00 (noon) and 17:00 (end of day), Edmonton time. Nothing
-   runs outside A&M's working hours (Monday to Friday, 7:00 to 5:30).
+   Runs on the hour and the half hour from 6 am to 5:30 pm Mountain on
+   weekdays (the UTC hours cover both standard and daylight time).
+   - At 7:00 (morning), 12:00 (noon) and 17:00 (end of day), Edmonton time:
+     the check-in, once per slot per day.
+   - Every other half hour from 7:00 to 5:30: the mail sort only, so what
+     needs a person reaches their hit list within about half an hour instead
+     of waiting for the next check-in (2026-11-17). No email is sent for it.
+   Nothing runs outside A&M's working hours (Monday to Friday, 7:00 to 5:30).
 
-   Each person's check-in can take longer than a scheduled function's 30
-   seconds (sorting mail with Claude, drafting replies), so this hands each
-   person to assistant-run-background, which may run for up to 15 minutes. If
-   the site cannot run background functions, it does a light check-in here
-   instead (the list, the chase, the email) without sorting mail. */
+   Each person's run can take longer than a scheduled function's 30 seconds
+   (sorting mail with Claude, drafting replies), so this hands each person to
+   assistant-run-background, which may run for up to 15 minutes. If the site
+   cannot run background functions, a check-in is done light here instead
+   (the list, the chase, the email) without sorting mail, and the half-hour
+   sorts are skipped. */
 
 import { getStore } from "@netlify/blobs";
-import { localNow, checkinSlot } from "./_assist.mjs";
+import { localNow, checkinSlot, inWorkingHours } from "./_assist.mjs";
 import { assistantPeople, runFor } from "./assistant.mjs";
 import { runSecret } from "./_runsecret.mjs";
 
 export default async () => {
   const s = getStore({ name: "am-inventory", consistency: "strong" });
-  const L = localNow(), slot = checkinSlot(L);
-  if (!slot) return new Response("Not a check-in hour (" + L.weekday + " " + L.time + ").");
-  /* Once per slot per day, even if the schedule fires twice. */
-  const mark = "assist-ran-" + L.date + "-" + slot;
+  const L = localNow();
+  if (!inWorkingHours(L)) return new Response("Outside working hours (" + L.weekday + " " + L.time + ").");
+  const half = L.minute >= 30 ? "30" : "00";
+  const slot = (half === "00" && checkinSlot(L)) || "sort";
+  /* Once per slot per day (or per half hour for the sort), even if the schedule fires twice. */
+  const mark = slot === "sort" ? "assist-sort-" + L.date + "-" + String(L.hour).padStart(2, "0") + half : "assist-ran-" + L.date + "-" + slot;
   if (await s.get(mark)) return new Response("Already ran.");
   await s.set(mark, new Date().toISOString());
   const people = await assistantPeople(s);
@@ -36,10 +44,10 @@ export default async () => {
         handed = r.status === 202 || r.ok;
       } catch (e) {}
     }
-    if (!handed) { try { await runFor(s, u, slot, { heavy: false }); } catch (e) {} }
-    done.push(u.name + (handed ? " (background)" : " (light)"));
+    if (!handed && slot !== "sort") { try { await runFor(s, u, slot, { heavy: false }); } catch (e) {} }
+    done.push(u.name + (handed ? " (background)" : slot === "sort" ? " (skipped)" : " (light)"));
   }
   return new Response(slot + ": " + done.join(", "));
 };
 
-export const config = { schedule: "0 12-23 * * 1-5" };
+export const config = { schedule: "0,30 12-23 * * 1-5" };

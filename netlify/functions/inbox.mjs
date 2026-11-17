@@ -1,7 +1,8 @@
 /* A&M - connecting a person's own inboxes to their assistant.
 
    GET  /api/inbox                       which inboxes this person has connected
-   GET  /api/inbox?action=start&hint=..  where to sign in to Google (returns a URL)
+   GET  /api/inbox?action=start&hint=..  where to sign in to Google (returns a URL);
+                                         another=1 shows Google's account chooser
    POST /api/inbox { action:"remove", email }
 
    The Google sign-in comes back through the robots' mailbox callback
@@ -10,8 +11,8 @@
    to the Google app. See _gmail.mjs for what is kept and why. */
 
 import { getStore } from "@netlify/blobs";
-import { accountGate } from "./_accounts.mjs";
-import { SCOPES, readInboxes, writeInboxes, allowedAddress } from "./_gmail.mjs";
+import { accountGate, readAccounts } from "./_accounts.mjs";
+import { SCOPES, readInboxes, writeInboxes, allowedAddress, personalAllowed } from "./_gmail.mjs";
 import { withLock } from "./_lock.mjs";
 
 const store = () => getStore({ name: "am-inventory", consistency: "strong" });
@@ -34,13 +35,18 @@ export async function inboxCallback(url) {
   if (!r.ok || !t.refresh_token) return page("That did not work", "Google did not hand over a lasting sign-in. " + (t.error_description || t.error || "") + " Try again from My day.");
   const prof = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: { authorization: "Bearer " + t.access_token } }).then(x => x.json()).catch(() => ({}));
   const email = String(prof.emailAddress || "").toLowerCase();
-  if (!allowedAddress(email)) return page("Not connected", `${email || "That inbox"} cannot be connected here. Only A&amp;M work inboxes can be added to an assistant, and never the robots' mailbox.`);
+  /* Whose assistant this is decides what may be connected: A&M work inboxes
+     for everyone, a personal Gmail for Craig and Amir only. */
+  const { accounts } = await readAccounts(s);
+  const account = accounts[saved.userId];
+  if (!account || account.active === false) return page("Not connected", "That account is not active any more.");
+  if (!allowedAddress(email, account)) return page("Not connected", `${email || "That inbox"} cannot be connected here. Only A&amp;M work inboxes can be added to an assistant, and never the robots' mailbox.${personalAllowed(account) ? "" : " A personal Gmail can be added by Craig and Amir only."} If Google signed you in to the wrong account, start again from My day with Add another inbox and pick the right one.`);
   await withLock(s, "inbox-" + saved.userId, async () => {
     const list = (await readInboxes(s, saved.userId)).filter(x => x.email !== email);
     list.push({ email, refresh_token: t.refresh_token, access_token: t.access_token, expires_at: Date.now() + (t.expires_in || 3600) * 1000, addedAt: new Date().toISOString() });
     await writeInboxes(s, saved.userId, list);
   });
-  return page(email + " is connected", "Your assistant will sort this inbox at the morning and noon check-ins, and offer drafts for you to send yourself. Nothing is ever sent from it by the app.");
+  return page(email + " is connected", "Your assistant sorts this inbox every half hour through the working day, puts what needs you on your list, and offers drafts for you to send yourself. Nothing is ever sent from it by the app.");
 }
 
 export default async (req) => {
@@ -50,13 +56,21 @@ export default async (req) => {
   const u = req.amUser, url = new URL(req.url), action = url.searchParams.get("action") || "";
   if (req.method === "GET" && !action) {
     const list = await readInboxes(s, u.id);
-    return json({ inboxes: list.map(x => ({ email: x.email, addedAt: x.addedAt })), ready: !missing().length, missing: missing() });
+    const { accounts } = await readAccounts(s);
+    return json({ inboxes: list.map(x => ({ email: x.email, addedAt: x.addedAt })), ready: !missing().length, missing: missing(), personal: !u.viewAs && personalAllowed(accounts[u.id]) });
   }
   if (req.method === "GET" && action === "start") {
     if (missing().length) return json({ error: "setup", message: "Google sign-in is not set up in Netlify yet: " + missing().join(", ") }, 409);
     const nonce = crypto.randomUUID();
     await s.setJSON(STATE(nonce), { userId: u.id, at: Date.now() });
-    const q = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: process.env.GOOGLE_REDIRECT_URI, response_type: "code", scope: SCOPES.join(" "), access_type: "offline", prompt: "consent", state: "inbox." + nonce, login_hint: url.searchParams.get("hint") || u.email || "" });
+    /* The first inbox: Google is pointed at the person's own work address.
+       "Add another inbox": Google shows its account chooser instead, so a
+       second inbox (or Craig's and Amir's personal Gmail) can be picked and
+       the browser's current account is not connected by mistake. */
+    const another = url.searchParams.get("another") === "1";
+    const q = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: process.env.GOOGLE_REDIRECT_URI, response_type: "code", scope: SCOPES.join(" "), access_type: "offline", prompt: another ? "select_account consent" : "consent", state: "inbox." + nonce });
+    const hint = url.searchParams.get("hint") || (another ? "" : u.email || "");
+    if (hint) q.set("login_hint", hint);
     return json({ url: "https://accounts.google.com/o/oauth2/v2/auth?" + q });
   }
   if (req.method === "POST") {

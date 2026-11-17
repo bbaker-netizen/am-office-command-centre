@@ -12,6 +12,6 @@ export default async (req) => {
   const b = await req.json().catch(() => ({}));
   const { accounts, settings } = await readAccounts(s);
   const a = accounts[b.userId]; if (!a || a.active === false) return new Response("No such person.", { status: 404 });
-  await runFor(s, userOf(a, settings), ["morning", "noon", "end"].includes(b.slot) ? b.slot : "noon", { heavy: true });
+  await runFor(s, userOf(a, settings), ["morning", "noon", "end", "sort"].includes(b.slot) ? b.slot : "sort", { heavy: true });
   return new Response("ok");
 };
