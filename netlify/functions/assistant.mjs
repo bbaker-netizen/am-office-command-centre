@@ -70,7 +70,13 @@ async function linkToCashFlow(s, u, it, today) {
 }
 async function tickCashFlow(s, u, it, done) {
   if (!it.cfItemId || !it.cfDate) return;
-  await planChange(s, p => { const k = "item:" + it.cfItemId + ":" + it.cfDate; if (done) p.done[k] = { at: new Date().toISOString(), by: u.name, via: "My day" }; else delete p.done[k]; });
+  await planChange(s, p => {
+    const k = "item:" + it.cfItemId + ":" + it.cfDate, at = new Date().toISOString();
+    /* The tick moves the room on the line now (see movesSince in _cashflow.mjs). */
+    p.moves = (p.moves || []).filter(m => m.key !== k);
+    if (done) { p.done[k] = { at, by: u.name, via: "My day" }; if (it.amount) p.moves.push({ key: k, side: it.kind === "expect" ? "in" : "out", amount: it.amount, name: it.who || it.text, at, day: localNow().date, by: u.name }); }
+    else delete p.done[k];
+  });
 }
 
 /* ----------------------------------------------------- payments seen */

@@ -74,18 +74,42 @@ export function occurrences(item, from, to) {
   return out;
 }
 
-/* The bank balance the weeks start from: the figure for the Sunday before
-   this week if Craig typed one, else his latest before that, else QuickBooks. */
+/* The bank balance the room is worked from: the NEWEST figure there is, for
+   any day up to today. Craig's typed figure wins while QuickBooks has no bank
+   entry on or after its date; QuickBooks wins once Danielle's import has
+   passed it.
+   Until 2026-11-17 this took the Sunday figure (or the last one before
+   Sunday) and ignored a balance typed during the week, so "Room on the line
+   now" sat still from Monday to Sunday whatever was typed or ticked. */
 export function openingBalance({ today, history, qbo }) {
   const w0 = weekZero(today), sunday = addDays(w0, -1);
   const typed = (history || []).filter(h => h && h.date && h.date <= today).sort((a, b) => b.date.localeCompare(a.date) || String(b.at).localeCompare(String(a.at)));
-  const onSunday = typed.find(h => h.date === sunday);
-  if (onSunday) return { amount: onSunday.amount, date: sunday, source: "you", sunday: true };
-  const before = typed.find(h => h.date <= sunday) || typed[0];
+  const newest = typed[0];
   const q = qbo || {};
-  if (before && (!q.lastEntry || before.date >= q.lastEntry)) return { amount: before.amount, date: before.date, source: "you", sunday: false };
-  if (q.amount !== null && q.amount !== undefined) return { amount: q.amount, date: q.lastEntry || null, source: "quickbooks", sunday: q.lastEntry === sunday };
-  return { amount: null, date: null, source: "none", sunday: false };
+  if (newest && (!q.lastEntry || newest.date >= q.lastEntry)) return { amount: newest.amount, date: newest.date, source: "you", sunday: newest.date === sunday, at: newest.at || null };
+  if (q.amount !== null && q.amount !== undefined) return { amount: q.amount, date: q.lastEntry || null, source: "quickbooks", sunday: q.lastEntry === sunday, at: null };
+  if (newest) return { amount: newest.amount, date: newest.date, source: "you", sunday: newest.date === sunday, at: newest.at || null };
+  return { amount: null, date: null, source: "none", sunday: false, at: null };
+}
+
+/* Money ticked as received or paid AFTER the bank balance was read. The
+   balance cannot know about it yet, so it is added to (or taken off) the room
+   straight away: that is what makes the room move the moment Craig ticks
+   something, not at the next Sunday.
+   moves: [{ key, side:"in"|"out", amount, at, day }]   kept in the plan
+   A move counts when it was ticked on a later day than the balance, or on the
+   same day but after the balance was typed (when it was typed that day). */
+export function movesSince(moves, opening) {
+  const out = { in: 0, out: 0, count: 0, list: [] };
+  if (!opening || opening.amount === null || opening.amount === undefined || !opening.date) return out;
+  for (const m of moves || []) {
+    if (!m || !(Number(m.amount) > 0) || !m.day) continue;
+    const after = m.day > opening.date || (m.day === opening.date && opening.at && opening.atDay === opening.date && String(m.at) > String(opening.at));
+    if (!after) continue;
+    out[m.side === "in" ? "in" : "out"] += Number(m.amount); out.count++; out.list.push(m);
+  }
+  out.in = r2(out.in); out.out = r2(out.out);
+  return out;
 }
 
 export const docKey = (kind, d) => kind + ":" + [d.type || "", d.num || "", d.name || "", d.date || ""].join("|").toLowerCase();
@@ -154,7 +178,8 @@ export function buildCashFlow(input) {
 
   /* Totals and the running room on the line */
   const opening = input.opening || { amount: null };
-  let room = opening.amount === null || opening.amount === undefined ? null : r2(opening.amount + limit);
+  const moved = movesSince(plan.moves, opening);
+  let room = opening.amount === null || opening.amount === undefined ? null : r2(opening.amount + limit + moved.in - moved.out);
   const sum = a => r2(a.reduce((s, x) => s + x.amount, 0));
   for (const w of weeks) {
     w.in.sort((a, b) => b.amount - a.amount); w.out.sort((a, b) => (CAT_ORDER(a) - CAT_ORDER(b)) || b.amount - a.amount);
@@ -171,14 +196,55 @@ export function buildCashFlow(input) {
   const allBills = sum((input.bills || []).filter(x => !done[docKey("bill", { type: x.type, num: x.num, name: x.vendor, date: x.date })]).map(x => ({ amount: Math.max(0, Number(x.open) || 0) })));
   const plannedOut = r2(weeks.reduce((s, w) => s + sum(w.out.filter(x => x.kind === "item")), 0));
   const plannedIn = r2(weeks.reduce((s, w) => s + sum(w.in.filter(x => x.kind === "item")), 0));
-  const roomNow = opening.amount === null || opening.amount === undefined ? null : r2(opening.amount + limit);
+  const roomNow = opening.amount === null || opening.amount === undefined ? null : r2(opening.amount + limit + moved.in - moved.out);
   const everyone = roomNow === null ? null : { room: roomNow, allIn, allBills, plannedIn, plannedOut, result: r2(roomNow + allIn + plannedIn - allBills - plannedOut) };
 
-  const out = { today, weekZero: w0, limit, floor, reserveGrowth: growth, graceDays: grace, opening, roomNow, weeks, later: { in: later.in, out: later.out, totalIn: sum(later.in), totalOut: sum(later.out) },
+  const out = { today, weekZero: w0, limit, floor, reserveGrowth: growth, graceDays: grace, opening, roomNow, sinceBalance: { in: moved.in, out: moved.out, count: moved.count }, weeks, later: { in: later.in, out: later.out, totalIn: sum(later.in), totalOut: sum(later.out) },
     chase, chaseTotal: sum(chase), lateBills, lateBillsTotal: sum(lateBills), everyone };
   out.advice = advise(out);
   return out;
 }
+/* The look ahead: the same sums carried out to 13 weeks, one line a week,
+   for the chart that shows where it gets tight. Each week says whether it
+   ends over the line's limit (below zero) or under the reserve.
+   WHAT IS IN IT: invoices already sent and bills already entered, on their
+   dates, and the planned payments. WHAT IS NOT: work not billed yet. So the
+   far weeks read low on money in unless Craig adds "Other money in" lines
+   for billing he expects. `known` is how many weeks ahead have invoices;
+   `horizon` is how many weeks the headline trusts. */
+export function outlookOf(cf) {
+  const weeks = (cf.weeks || []).map((w, i) => {
+    const reserve = w.reserve ?? cf.floor;
+    return { start: w.start, end: w.end, open: w.open, close: w.close, in: w.totalIn, out: w.totalOut, receivables: w.receivables, otherIn: w.otherIn, reserve,
+      state: w.close === null ? "none" : w.close < 0 ? "over" : w.close < reserve ? "under" : "ok", i };
+  });
+  let known = 0; weeks.forEach((w, i) => { if (w.receivables > 0) known = i + 1; });
+  /* The weeks that can be trusted: as far ahead as invoices are already sent,
+     and never fewer than four. The headline is taken from these. Weeks past
+     it are still shown, drawn lighter, because their money in is not known. */
+  const horizon = Math.min(weeks.length, Math.max(known, 4));
+  weeks.forEach(w => { w.firm = w.i < horizon; });
+  const have = weeks.filter(w => w.close !== null), firm = have.filter(w => w.firm);
+  const slim = w => w ? { start: w.start, close: w.close, reserve: w.reserve, state: w.state, firm: w.firm } : null;
+  const tightest = firm.reduce((lo, w) => (!lo || w.close - w.reserve < lo.close - lo.reserve) ? w : lo, null);
+  return { weeks, horizon, known, tightest: slim(tightest), firstUnder: slim(firm.find(w => w.state !== "ok")), firstOver: slim(have.find(w => w.state === "over")),
+    laterIn: cf.later.totalIn, laterOut: cf.later.totalOut };
+}
+/* Every line the build knows, by key, for the amount behind a tick. */
+export function findLine(cf, key) {
+  for (const w of cf.weeks || []) { for (const x of w.in) if (x.key === key) return { amount: x.amount, side: "in", name: x.name }; for (const x of w.out) if (x.key === key) return { amount: x.amount, side: "out", name: x.name }; }
+  for (const x of cf.later.in) if (x.key === key) return { amount: x.amount, side: "in", name: x.name };
+  for (const x of cf.later.out) if (x.key === key) return { amount: x.amount, side: "out", name: x.name };
+  for (const x of cf.chase || []) if (x.key === key) return { amount: x.amount, side: "in", name: x.name };
+  for (const x of cf.lateBills || []) if (x.key === key) return { amount: x.amount, side: "out", name: x.name };
+  return null;
+}
+/* Keep the moves list short: drop those older than 60 days. */
+export function tidyMoves(moves, today) {
+  const cut = addDays(today, -60);
+  return (moves || []).filter(m => m && m.day && m.day >= cut).slice(-400);
+}
+
 const ORDER = ["payroll", "source", "wcb", "benefits", "subs", "loans", "tax", "oneoff", "bills", "running", "owner"];
 const CAT_ORDER = x => { const i = ORDER.indexOf(x.kind === "bill" ? "bills" : x.cat); return i < 0 ? 99 : i; };
 
@@ -216,7 +282,7 @@ export function advise(cf) {
   const promisedLate = w.in.filter(x => x.rolled && x.kind === "inv");
   const lines = [];
   const kinds = [...new Set(must.map(x => SAY[x.cat] || x.cat))];
-  lines.push(`You start the week with ${M(w.open)} of room on the line. ${M(w.totalIn)} is expected in, and ${M(mustTotal)} has to go out${kinds.length ? " for " + kinds.join(", ") : ""}.`);
+  lines.push(`You have ${M(w.open)} of room on the line now. ${M(w.totalIn)} is expected in, and ${M(mustTotal)} has to go out${kinds.length ? " for " + kinds.join(", ") : ""}.`);
   if (tight) lines.push(`The tightest week is the week of ${day(tight.start)}. ${tight.close < 0 ? "As things stand it ends " + M(-tight.close) + " over the line's limit." : "As things stand it ends with " + M(tight.close) + " of room."}`);
   const payAll = pay.concat(extra);
   if (payAll.length) lines.push(`You can pay ${payAll.length === 1 ? "this bill" : "these " + payAll.length + " bills"}: ${names(payAll)}. That keeps ${cf.reserveGrowth ? "the reserve, growing " + M(cf.reserveGrowth) + " a week," : "at least " + M(cf.floor) + " of room"} in every one of the four weeks.`);

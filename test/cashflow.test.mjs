@@ -1,7 +1,7 @@
 /* The weekly cash flow, on Craig's method.
    Run: node test/cashflow.test.mjs */
 import { strict as assert } from "node:assert";
-import { buildCashFlow, openingBalance, occurrences, weekZero, mondayOf, cleanItem, docKey } from "../netlify/functions/_cashflow.mjs";
+import { movesSince, outlookOf, findLine, tidyMoves, buildCashFlow, openingBalance, occurrences, weekZero, mondayOf, cleanItem, docKey } from "../netlify/functions/_cashflow.mjs";
 import { SEED_ITEMS } from "../netlify/functions/_cfseed.mjs";
 
 let n = 0; const ok = m => { n++; console.log("ok", m); };
@@ -18,10 +18,30 @@ assert.deepEqual(occurrences({ amount: 0, every: "week", start: "2026-11-16" }, 
 ok("every week, every two weeks, monthly on the 31st (30 Nov in November), end dates");
 
 const hist = [{ amount: -540000, date: "2026-11-13", at: "a" }, { amount: -548000, date: "2026-11-15", at: "b" }];
-assert.deepEqual(openingBalance({ today: T, history: hist, qbo: { amount: -514433, lastEntry: "2026-11-09" } }), { amount: -548000, date: "2026-11-15", source: "you", sunday: true });
+assert.deepEqual(openingBalance({ today: T, history: hist, qbo: { amount: -514433, lastEntry: "2026-11-09" } }), { amount: -548000, date: "2026-11-15", source: "you", sunday: true, at: "b" });
 assert.equal(openingBalance({ today: T, history: hist.slice(0, 1), qbo: { amount: -514433, lastEntry: "2026-11-09" } }).date, "2026-11-13");
 assert.equal(openingBalance({ today: T, history: [], qbo: { amount: -514433, lastEntry: "2026-11-09" } }).source, "quickbooks");
 ok("starts from Sunday's typed balance, else the latest typed, else QuickBooks");
+
+/* A balance typed during the week is used straight away (it was ignored until 2026-11-17). */
+const midweek = openingBalance({ today: "2026-11-17", history: hist.concat([{ amount: -573594, date: "2026-11-17", at: "2026-11-17T17:00:00Z" }]), qbo: { amount: -514433, lastEntry: "2026-11-09" } });
+assert.deepEqual([midweek.amount, midweek.date, midweek.sunday], [-573594, "2026-11-17", false]);
+assert.equal(openingBalance({ today: "2026-11-17", history: hist, qbo: { amount: -500000, lastEntry: "2026-11-16" } }).source, "quickbooks");
+ok("a balance typed on a Tuesday is the one used, not last Sunday's; QuickBooks takes over once its bank entries pass it");
+
+const op2 = { amount: -540000, date: "2026-11-15", source: "you", at: "2026-11-16T02:00:00Z", atDay: "2026-11-15" };
+const mv = [
+  { key: "a", side: "in", amount: 50000, at: "2026-11-17T16:00:00Z", day: "2026-11-17" },
+  { key: "b", side: "out", amount: 20000, at: "2026-11-17T17:00:00Z", day: "2026-11-17" },
+  { key: "c", side: "in", amount: 9999, at: "2026-11-14T17:00:00Z", day: "2026-11-14" },
+  { key: "d", side: "out", amount: 1, at: "2026-11-15T20:00:00Z", day: "2026-11-15" },
+  { key: "e", side: "out", amount: 700, at: "2026-11-16T03:00:00Z", day: "2026-11-15" }];
+const ms = movesSince(mv, op2);
+assert.deepEqual([ms.in, ms.out, ms.count], [50000, 20700, 3]);
+const live = buildCashFlow({ today: "2026-11-17", weeks: 4, limit: 750000, floor: 25000, opening: op2, invoices: [], bills: [], plan: { items: [], moves: mv } });
+assert.equal(live.roomNow, 239300); assert.equal(live.weeks[0].open, 239300); assert.deepEqual(live.sinceBalance, { in: 50000, out: 20700, count: 3 });
+assert.equal(tidyMoves(mv.concat([{ key: "old", side: "in", amount: 1, day: "2026-08-01" }]), "2026-11-17").length, 5);
+ok("room on the line moves when something is ticked: money ticked in or out after the bank balance was read is added or taken off straight away");
 
 const opening = { amount: -540000, date: "2026-11-15", source: "you", sunday: true };
 const invoices = [
@@ -73,7 +93,7 @@ ok("if everyone paid me and I paid everyone: every open invoice and bill, plus f
 
 /* -$540,000 in the bank: the week of 7 Dec is the tightest, so every bill waits. */
 assert.equal(cf.advice.pay.length, 0);
-assert.ok(cf.advice.lines[0].startsWith("You start the week with $210,000 of room on the line."));
+assert.ok(cf.advice.lines[0].startsWith("You have $210,000 of room on the line now."));
 assert.ok(cf.advice.lines.some(l => /^The tightest week is the week of December 7\./.test(l)));
 assert.ok(cf.advice.lines.some(l => /^Hold the supplier bills this week/.test(l)));
 assert.ok(cf.advice.chase.find(x => x.name === "Bird Construction"));
@@ -126,5 +146,16 @@ assert.equal(cleanItem({ name: "X", amount: "-5" }, T).ok, false);
 assert.equal(cleanItem({ name: "X", amount: "5", start: "21/11/2026" }, T).ok, false);
 assert.equal(cleanItem({ name: "X", amount: "5", cat: "nonsense" }, T).value.cat, "running");
 ok("planned payments are checked: name, amount above zero, real date, known group");
+
+/* The look ahead: 13 weeks, with the week it goes under the reserve and the week it goes over the line. */
+const ahead = buildCashFlow({ today: T, weeks: 13, limit: 750000, floor: 25000, graceDays: 14, opening: { amount: -700000, date: "2026-11-15" }, invoices: [{ type: "Invoice", num: "1", customer: "Northwind", date: "2026-11-01", due: "2026-11-25", open: 30000 }], bills: [],
+  plan: { items: [{ id: "p", name: "Payroll", amount: 20000, every: "week", start: "2026-11-20", cat: "payroll" }] } });
+const o = outlookOf(ahead);
+assert.equal(o.weeks.length, 13); assert.deepEqual(o.weeks.slice(0, 5).map(w => w.close), [30000, 40000, 20000, 0, -20000]);
+assert.deepEqual(o.weeks.slice(0, 5).map(w => w.state), ["ok", "ok", "under", "under", "over"]);
+assert.equal(o.firstUnder.start, "2026-11-30"); assert.equal(o.known, 2); assert.equal(o.horizon, 4); assert.equal(o.tightest.start, "2026-12-07");
+assert.equal(o.firstOver.start, "2026-12-14"); assert.equal(o.firstOver.firm, false); assert.deepEqual(o.weeks.map(w => w.firm).slice(2, 6), [true, true, false, false]);
+assert.deepEqual(findLine(ahead, ahead.weeks[1].in[0].key), { amount: 30000, side: "in", name: "Northwind" });
+ok("the 13-week look ahead says which week first drops under the reserve and which first goes over the line; weeks past the last sent invoice are marked as not firm");
 
 console.log(`\n${n} cash flow checks pass`);
