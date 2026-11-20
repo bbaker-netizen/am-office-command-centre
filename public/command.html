@@ -187,7 +187,9 @@ tr[data-ac-edit]:hover td{background:var(--panel-2)}
 #ccCard h3{margin:6px 0 8px;font-size:18px;font-weight:800;letter-spacing:-.01em;text-wrap:balance}
 .cct-head{display:flex;justify-content:space-between;align-items:center}
 .cct-count{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3)}
-.cct-x{background:none;border:0;color:var(--ink-3);cursor:pointer;font:inherit;font-size:13px;padding:4px}
+.cct-x{background:var(--panel);border:1px solid var(--rule);color:var(--ink);cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}
+.cct-x:hover{border-color:var(--cyan)}
+.cct-x span{font-size:18px;line-height:1}
 .cct-body{margin:0;font-size:14.5px;line-height:1.55;color:var(--ink-2)}
 .cct-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px}
 .cct-nav{display:flex;gap:8px}
@@ -679,6 +681,9 @@ button,input,select,textarea,optgroup{font-family:inherit}
 .refresh[data-ico]::before{content:"";width:14px;height:14px;flex:none;background:currentColor;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-position:center;mask-position:center}
 .refresh[data-ico="refresh"][disabled]::before{animation:am-spin .9s linear infinite}
 @media (max-width:640px){.refresh[data-ico]{font-size:0;gap:0;padding:8px 10px}.refresh[data-ico]::before{width:18px;height:18px}}
+.refresh.signout{border-color:var(--cyan);color:var(--cyan);margin-left:8px;font-weight:700}
+.refresh.signout:hover{background:var(--cyan);color:#fff}
+@media (max-width:640px){.refresh.signout[data-ico]{font-size:12px;gap:6px;padding:8px 12px}}
 .btn .ico{width:15px;height:15px}
 /* Sticky notes on My day: the newest few, and a box to stick one on. */
 .md-notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px 14px;margin:14px 0 6px;padding:4px 2px}
@@ -1155,7 +1160,10 @@ function drawTabs(){
   /* The shop is part of Field. Its screens (stock out and back, transfers,
      shelf, orders, filter certificates) are the inventory side of this same
      app, so the Shop page opens them. */
-  if(PLATFORM === "app" && here === "Field") html += '<a class="tab" href="/shop.html#/" data-tour="shop">' + ico("shop") + 'Shop</a>';
+  if(PLATFORM === "app" && here === "Field") html += '<a class="tab" href="/shop.html#/" data-tour="shop" data-shop="/">' + ico("shop") + 'Shop</a>';
+  /* Admins reach the shop from Admin too, whether or not they see Field, and
+     go in as themselves without a PIN (2026-11-20). */
+  if(PLATFORM === "app" && here === "Admin" && ME.admin && !VIEW_AS) html += '<a class="tab" href="/shop.html#/" data-shop="/">' + ico("shop") + 'Shop</a>';
   $("tabs").innerHTML = html;
   $("tabs").hidden = !pages.length;
 }
@@ -1630,6 +1638,24 @@ function idbSet(k, v){
   })).catch(() => {});
 }
 /* Back to the front door: signing in again, or signing out. */
+/* The shop, for an admin: a short pass from the account, handed to the shop
+   in this tab, so they go in as themselves with no PIN. Anyone else goes in
+   the usual way, with their name and PIN. */
+async function openShop(route){
+  const url = "/shop.html#" + (route || "/");
+  if(!ME.admin || VIEW_AS) return location.assign(url);
+  try{
+    const b = await acctCall("", { action:"shopPass" });
+    try{ sessionStorage.setItem("am.shopPass", JSON.stringify({ token: b.token, user: b.user })); }catch(e){}
+  }catch(e){ /* no pass: the shop asks for a PIN, as it always has */ }
+  location.assign(url);
+}
+document.addEventListener("click", ev => {
+  const a = ev.target.closest && ev.target.closest("[data-shop]");
+  if(!a || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button) return;
+  if(!ME.admin || VIEW_AS) return;
+  ev.preventDefault(); openShop(a.dataset.shop);
+});
 async function toDoor(out){
   if(out){ await idbSet("acctToken", null); await idbSet("acctSession", null); return location.replace("/?out=1"); }
   const sec = current || (location.hash || "").replace("#", "");
@@ -1721,7 +1747,10 @@ async function startApp(){
   mine.className = "refresh"; mine.textContent = "My account"; mine.dataset.meOpen = ""; mine.dataset.ico = "account"; mine.setAttribute("aria-label", "My account"); mine.title = "Who you are signed in as, and changing your password";
   $("refresh").parentNode.appendChild(mine);
   const out = document.createElement("button");
-  out.className = "refresh"; out.textContent = "Sign out"; out.dataset.ico = "signout"; out.setAttribute("aria-label", "Sign out"); out.title = "Sign out of the command centre on this device"; out.onclick = () => toDoor(true);
+  /* Sign out is the one button people hunt for, so it looks unlike the rest:
+     cyan, set apart, and it keeps its words on a phone where the others shrink
+     to icons (2026-11-20, people could not find it). */
+  out.className = "refresh signout"; out.textContent = "Sign out"; out.dataset.ico = "signout"; out.setAttribute("aria-label", "Sign out"); out.title = "Sign out of the command centre on this device"; out.onclick = () => toDoor(true);
   $("refresh").parentNode.appendChild(out);
   TOKEN = await idbToken();
   const sess = await idbGet("acctSession");
@@ -4115,7 +4144,7 @@ VIEWS.people = {
     return out;
   },
   render(){
-    let h = head("People and access", "Who can sign in to the command centre, what each person is responsible for, and what they can do. Only admins see this page. The shop's names and PINs are separate and stay in the shop's Settings.");
+    let h = head("People and access", "Who can sign in to the command centre, what each person is responsible for, and what they can do. Only admins see this page. The shop's names and four-digit PINs are kept in the shop, one button away below.");
     if(ADM.err) return h + failBox(ADM.err, "People and access");
     if(!ADM.list) return h + wait("the accounts");
     const on = ADM.list.filter(a => a.active), off = ADM.list.filter(a => !a.active);
@@ -4130,6 +4159,9 @@ VIEWS.people = {
         '<td>' + E(respLabel(a.areas)) + '</td><td class="ac-chips">' + areaChips(a.areas) + '</td><td>' + (a.master ? '<b>Master admin</b>' : E(LEVEL_INFO[a.level] ? LEVEL_INFO[a.level].label : a.level)) + '</td>' +
         '<td>' + E(whenSeen(a.lastSignIn)) + '</td><td>' + acStatus(a) + '</td></tr>'), "Nobody yet.", 60) + '</div>';
 
+    h += '<div class="card" data-tour="shop-pins"><h2>Shop PINs</h2><p class="lede">The crew sign in to the shop with their name and a four-digit PIN. Add a person, issue a PIN, or reset one that is forgotten or was seen by somebody else. As an admin you go straight in as yourself, no PIN needed.</p>' +
+      '<div class="actions"><a class="btn" href="/shop.html#/setup?at=pins" data-shop="/setup?at=pins">Change or reset shop PINs</a></div>' +
+      '<p class="sub">Opens the shop\'s Settings, at Who can use it. A new PIN shows once, so have the person there, and give it to them face to face.</p></div>';
     h += '<div class="card"><h2>What each responsibility sees</h2><p class="lede">A shortcut for a set of areas. Tick the areas yourself for anything in between; that shows as Custom.</p><p class="ac-sub">Responsibilities</p><dl class="facts">' +
       RESP.filter(r => r[0] !== "custom").map(r => '<dt>' + E(r[1]) + '</dt><dd>' + RESP_AREAS[r[0]].map(k => AREA_INFO[k].label).join(", ") + '</dd>').join("") + '</dl>' +
       '<p class="ac-sub">Areas</p><dl class="facts">' + AREA_KEYS.map(k => '<dt>' + E(AREA_INFO[k].label) + '</dt><dd>' + E(AREA_INFO[k].what) + '</dd>').join("") + '</dl></div>';
@@ -4346,14 +4378,14 @@ function meOpen(){
     '<dl class="facts"><dt>Email</dt><dd>' + E(ME.email) + '</dd>' + (ME.title ? '<dt>Job title</dt><dd>' + E(ME.title) + '</dd>' : '') +
     '<dt>Responsible for</dt><dd>' + E(respLabel(ME.areas)) + '</dd><dt>Sees</dt><dd>' + E(areas) + '</dd><dt>Can do</dt><dd>' + E(LEVEL_INFO[ME.level] ? LEVEL_INFO[ME.level].label : ME.level) + '</dd></dl>' +
     '<p class="sub">To see more or less, ask an admin' + (ME.admin ? ' (you are one: Admin, People and access)' : '') + '.</p>' +
+    '<div class="actions"><button type="button" class="btn" onclick="toDoor(true)">Sign out on this device</button></div>' +
     driveBlock() +
     '<h3>Change my password</h3><form id="meForm" class="ac-form" onsubmit="return false">' +
     '<input type="email" autocomplete="username" value="' + E(ME.email) + '" hidden>' +
     '<label class="fld"><span>Current password</span><input type="password" name="cur" autocomplete="current-password"></label>' +
     '<label class="fld"><span>New password</span><input type="password" name="n1" autocomplete="new-password"></label>' +
     '<label class="fld"><span>Type it again</span><input type="password" name="n2" autocomplete="new-password"></label>' +
-    '<div class="actions"><button type="button" class="btn" data-me-save>Change my password</button></div><p class="sub" id="meMsg" role="status">At least 10 characters. Changing it signs you out on every other device.</p></form>' +
-    '<div class="actions"><button type="button" class="btn ghost" onclick="toDoor(true)">Sign out on this device</button></div>');
+    '<div class="actions"><button type="button" class="btn" data-me-save>Change my password</button></div><p class="sub" id="meMsg" role="status">At least 10 characters. Changing it signs you out on every other device.</p></form>');
 }
 function meSave(btn){
   const f = $("meForm"), v = n => f.querySelector('[name="' + n + '"]').value, m = $("meMsg");
@@ -6144,6 +6176,24 @@ function hrSlotCard(){
    own voice if its clip is missing. */
 const CCTOUR = (function(){
   const SEEN = "am-command-tour-seen.v1", NEW_SEEN = "am-command-whatsnew-2026-11-17", MUTE = "am-command-tour-muted", RELEASE_MS = 45000;
+  /* The same two, as they are kept on the person's account. */
+  const ACCT = { [SEEN]: "command-tour.v1", [NEW_SEEN]: "command-whatsnew-2026-11-17" };
+  /* Amir, 2026-11-20: the walkthrough opened every time he signed in. It was
+     only marked seen in this browser, and only once it was finished or
+     skipped, so closing the tab part way, another computer, or a browser that
+     clears its storage brought it straight back. Now it is marked the moment
+     it opens on its own, in this browser and on the account, so it opens on
+     its own once per person. The Tour button still replays it any time. */
+  function seenHere(k){ try{ return localStorage.getItem(k) === "1"; }catch(e){ return false; } }
+  function seenOnAccount(k){ return !!(ME && ME.tours && ME.tours[ACCT[k]]); }
+  const seen = k => seenHere(k) || seenOnAccount(k);
+  function markSeen(...ks){
+    ks.forEach(k => { try{ localStorage.setItem(k, "1"); }catch(e){} });
+    if(VIEW_AS) return;
+    const keys = ks.map(k => ACCT[k]).filter(Boolean), at = new Date().toISOString();
+    ME.tours = ME.tours || {}; keys.forEach(k => { if(!ME.tours[k]) ME.tours[k] = at; });
+    if(keys.length) acctCall("", { action:"tourSeen", keys }).catch(() => {});
+  }
   const q = s => document.querySelector(s);
   const has = sec => CFG.tabs.some(t => secOf(t) === sec);
 
@@ -6433,7 +6483,7 @@ const CCTOUR = (function(){
     const total = countable().length, no = step.bookend ? 0 : countable().indexOf(step) + 1, last = i === steps.length - 1;
     q("#ccCard").innerHTML =
       '<div class="cct-head"><span class="cct-count">' + (no ? "Step " + no + " of " + total : (last ? "Done" : "Welcome")) + '</span>' +
-      '<button class="cct-x" id="cctSkip">' + (last ? "Close" : "Skip the tour") + '</button></div>' +
+      '<button class="cct-x" id="cctSkip" aria-label="Close the walkthrough" title="Close. It will not open on its own again. The Tour button at the top brings it back.">' + (last ? "Close" : "Close the tour") + ' <span aria-hidden="true">&times;</span></button></div>' +
       '<h3>' + E(step.title) + '</h3><p class="cct-body">' + E(step.body) + '</p>' +
       '<div class="cct-foot"><button class="cct-mute" id="cctMute">' + (muted ? "Play the voice" : "Stop the voice") + '</button>' +
       '<div class="cct-nav">' + (i > 0 ? '<button class="cct-back" id="cctBack">Back</button>' : '') +
@@ -6479,7 +6529,7 @@ const CCTOUR = (function(){
     const BY = { payroll: payrollChapters, myday: mydayChapters, cashflow: cashflowChapters, whatsnew: whatsNewChapters };
     steps = (BY[SET] || chapters)().filter(s => (!s.at || CFG.tabs.includes(s.at)) && (!s.when || s.when()));
     /* A short set with nothing left for this person but its bookends is not worth showing. */
-    if(SET === "whatsnew" && !steps.some(s => !s.bookend)){ liveTour = false; SET = ""; try{ localStorage.setItem(NEW_SEEN, "1"); }catch(e){} return; }
+    if(SET === "whatsnew" && !steps.some(s => !s.bookend)){ liveTour = false; SET = ""; markSeen(NEW_SEEN); return; }
     if(!q("#ccTour")){
       const d = document.createElement("div"); d.id = "ccTour";
       d.innerHTML = '<div id="ccSpot"></div><div id="ccCard" role="dialog" aria-live="polite" aria-label="Walkthrough"></div>';
@@ -6494,11 +6544,12 @@ const CCTOUR = (function(){
     document.body.classList.remove("cct-on");
     if(drawerState) closeDrawer();
     const home = { payroll:"payroll", myday:"brief", cashflow:"cashflow" }[SET];
-    if(!home){ try{ localStorage.setItem(SEEN, "1"); localStorage.setItem(NEW_SEEN, "1"); }catch(e){} }
+    if(!home) markSeen(SEEN, NEW_SEEN);
     go(home && CFG.tabs.includes(home) ? home : (CFG.tabs.includes("brief") && ME.landing === "brief" ? "brief" : "overview")); SET = "";
   }
   window.addEventListener("resize", () => { if(liveTour) paint(); });
   window.addEventListener("scroll", () => { if(liveTour) paint(); }, true);
+  document.addEventListener("keydown", e => { if(liveTour && e.key === "Escape") finish(); });
   /* The page redraws itself every few minutes. Put the spotlight back on top. */
   const keep = new MutationObserver(() => { if(liveTour) requestAnimationFrame(paint); });
   const watchMain = () => { const m = q("#main"); if(m) keep.observe(m, { childList:true }); };
@@ -6507,11 +6558,11 @@ const CCTOUR = (function(){
   return {
     start,
     ready(){
-      if(VIEW_AS) return;
-      try{
-        if(localStorage.getItem(SEEN) !== "1") return start();
-        if(localStorage.getItem(NEW_SEEN) !== "1") return start("whatsnew");
-      }catch(e){}
+      if(VIEW_AS || liveTour) return;
+      /* Seen on the account but not in this browser: copy it here and stay shut. */
+      [SEEN, NEW_SEEN].forEach(k => { if(seenOnAccount(k) && !seenHere(k)) try{ localStorage.setItem(k, "1"); }catch(e){} });
+      if(!seen(SEEN)){ markSeen(SEEN, NEW_SEEN); return start(); }
+      if(!seen(NEW_SEEN)){ markSeen(NEW_SEEN); return start("whatsnew"); }
     },
     replay(){ try{ localStorage.removeItem(SEEN); }catch(e){} start(); },
     payroll(){ start("payroll"); },

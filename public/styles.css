@@ -106,6 +106,7 @@ nav.tabs .tab-swap:hover { background: #3fb2d1; color: #fff; }
   background: rgba(255,255,255,.14); border: 0; color: #fff; font-size: 13px;
   padding: 6px 11px; border-radius: 20px; cursor: pointer;
 }
+.who.out { background: transparent; border: 1px solid var(--brand-2); color: #fff; font-weight: bold; }
 .pill { font-size: 12px; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
 .pill.good { background: rgba(18,128,92,.9); color: #fff; }
 .pill.busy { background: rgba(50,157,187,.9); color: #fff; }
@@ -604,7 +605,7 @@ code { background: var(--line-2); padding: 1px 5px; border-radius: 4px; font-siz
 #tourCard h3 { margin: 6px 0 8px; font-size: 17px; }
 .tour-head { display: flex; justify-content: space-between; align-items: center; }
 .tour-count { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--wt-ink-muted); }
-.tour-x { background: none; border: 0; color: var(--wt-ink-muted); cursor: pointer; font-size: 13px; padding: 4px; }
+.tour-x { background: #fff; border: 1px solid var(--line); color: var(--ink); cursor: pointer; font-size: 13px; font-weight: bold; padding: 6px 10px; border-radius: 8px; }
 .tour-body { margin: 0; font-size: 14px; line-height: 1.5; color: var(--wt-ink); }
 .tour-note { margin: 8px 0 0; font-size: 12px; color: var(--wt-accent); }
 .tour-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }

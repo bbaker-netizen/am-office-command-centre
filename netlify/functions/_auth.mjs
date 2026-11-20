@@ -170,6 +170,7 @@ export function roleOf(user) {
 
 export function requireOffice(req) {
   if (!req.amUser) return null;            /* gate is open: nobody has a PIN yet */
+  if (req.amUser.viaAccount && req.amUser.office === true) return null;   /* a command centre admin */
   if (isOffice(req.amUser)) return null;
   return refuse("office", "Only the office can do that. Ask Jen.", 403);
 }
@@ -191,6 +192,30 @@ function refuse(reason, message, status = 401) {
     status,
     headers: { "content-type": "application/json", "cache-control": "no-store" }
   });
+}
+
+/* THE SHOP FOR COMMAND CENTRE ADMINS
+   Admins sign in to the command centre with an email and password. Many of
+   them have no shop PIN, and the shop's people screen (where PINs are issued
+   and reset) is inside the shop, so they could not get in to fix anybody's
+   PIN. The command centre now hands an admin a short shop pass of its own
+   (account.mjs, action shopPass). It names the account, not a shop person,
+   and is checked against the account every time: switched off, no longer an
+   admin, or password changed, and it stops working. The accounts record is
+   read by its key here, not imported, because _accounts.mjs imports this file. */
+export const SHOP_PASS = "shop-acct";
+export const SHOP_PASS_HOURS = Number(process.env.SHOP_PASS_HOURS || 12);
+const ACCOUNTS_KEY = "app-accounts";   /* same as ACCOUNTS in _accounts.mjs; a test holds them together */
+export const SHOP_PASS_ACCOUNTS_KEY = ACCOUNTS_KEY;
+async function shopPassGate(req, s, claim) {
+  const again = () => refuse("auth", "Open the shop again from the command centre.");
+  if (!claim.t || Date.now() - Number(claim.t) > SHOP_PASS_HOURS * 3600000) return again();
+  let doc = null;
+  try { doc = await s.get(ACCOUNTS_KEY, { type: "json" }); } catch (e) {}
+  const a = doc && doc.accounts && doc.accounts[claim.a];
+  if (!a || a.active === false || a.level !== "admin" || (a.pwv || "") !== (claim.v || "")) return again();
+  req.amUser = { id: "acct:" + a.id, name: a.name, office: true, role: "owner", viaAccount: true };
+  return null;
 }
 
 /* Returns null to let the request through, or the Response to send back.
@@ -216,6 +241,10 @@ export async function authGate(req, s = authStore(), opts = {}) {
   if (!tok) return refuse("auth", "Sign in on this phone before it can reach the office.");
 
   const claim = await readToken(s, tok);
+  /* An admin who came in from the command centre: no PIN, their account
+     instead (2026-11-20). Good for SHOP_PASS_HOURS, and only while they are
+     still an active admin with the same password. */
+  if (claim && claim.k === SHOP_PASS && claim.a) return shopPassGate(req, s, claim);
   if (!claim || !claim.u) return refuse("auth", "This phone needs to sign in again.");
   if (!claim.t || Date.now() - Number(claim.t) > TOKEN_DAYS * 86400000) {
     return refuse("auth", "It has been a while. Sign in again with your PIN.");

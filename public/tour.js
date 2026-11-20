@@ -286,7 +286,7 @@
     card.innerHTML = `
       <div class="tour-head">
         <span class="tour-count">${no ? 'Chapter ' + no + ' of ' + total : (last ? 'Done' : 'Welcome')}</span>
-        <button class="tour-x" id="tourSkip">${last ? 'Close' : 'Skip'}</button>
+        <button class="tour-x" id="tourSkip" aria-label="Close the walkthrough">${last ? 'Close' : 'Close the tour'} &times;</button>
       </div>
       <h3>${esc(step.title)}</h3>
       <p class="tour-body">${esc(step.body)}</p>
@@ -401,6 +401,9 @@
   TOUR.ready = function () {
     if (TOUR.seen() || live) return;
     if (!AM.state.me) return;   // the who step needs a person, not a blank phone
+    /* Marked seen as it opens, not only when finished, so closing the app part
+       way does not bring it back every time (2026-11-20). Tour replays it. */
+    try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
     TOUR.start();
   };
 })();

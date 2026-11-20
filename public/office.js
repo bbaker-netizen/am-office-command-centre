@@ -1520,7 +1520,7 @@
   /* What the one-at-a-time form is set to. Kept here rather than read off the
      screen, because the screen is redrawn whenever the phone syncs, and a
      redraw used to put the group back to the first one in the list. */
-  let addDraft = { kind: 'unit', group: '' };
+  let addDraft = { kind: 'unit', group: '', name: '' };
   let addedNow = [];   // tags added on this visit, so they can be printed together
 
   const wordsIn = t => String(t || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).map(w => w.length > 3 ? w.replace(/s$/, '') : w);
@@ -1577,6 +1577,59 @@
   }
   AM.nextTag = nextTag;
 
+  /* A tag typed by a person, put in the house form so it scans and sorts
+     like the rest: "amv #9118" becomes AMV-9118, "AMV9118" too. */
+  function cleanTag(t) {
+    return String(t || '').toUpperCase().trim()
+      .replace(/[#\s_\/.]+/g, '-').replace(/[^A-Z0-9-]/g, '')
+      .replace(/-+/g, '-').replace(/^-|-$/g, '')
+      .replace(/^([A-Z]+)(\d)/, '$1-$2');
+  }
+  AM.cleanTag = cleanTag;
+
+  /* The tag a new machine gets when nobody types one. The shop's list has
+     always tagged a machine by its own number (Air Mover #1 is AMV-1, Large
+     Dehumidifier #801 is DEH-801), so a unit number given here is used the
+     same way: Air Mover #9118 is AMV-9118. Only when there is no unit number,
+     or that tag is already taken, does it fall back to the next free number.
+     Typing the letters into the unit number ("AMV #9118") is understood too. */
+  function suggestTag(group, kind, opts = {}) {
+    const taken = opts.taken || takenIds();
+    const prefix = String(opts.prefix || suggestPrefix(group, opts.name, kind)).toUpperCase().replace(/[^A-Z]/g, '') || 'ITM';
+    let no = String(opts.unitNo || '').toUpperCase().replace(/[^A-Z0-9]+/g, '');
+    if (no.length > prefix.length && no.startsWith(prefix) && /\d/.test(no[prefix.length])) no = no.slice(prefix.length);
+    if (kind !== 'stock' && no) {
+      const id = `${prefix}-${no}`;
+      if (!taken.has(id)) return { id, fromNo: true };
+      return { id: nextTag(group, kind, { prefix, taken }), fromNo: false, wanted: id };
+    }
+    return { id: nextTag(group, kind, { prefix, taken }), fromNo: false };
+  }
+  AM.suggestTag = suggestTag;
+
+  /* Names already on the list, for the Name drop-down. The group's own names
+     first, then every other name of that kind, so a name used in one group can
+     still be picked in another. A new name typed once is on the list from then
+     on, because the list is read off the machines themselves. */
+  function namesOnList(kind, group) {
+    const list = kind === 'stock' ? S.catalog.stock : S.catalog.units;
+    const tidy = n => String(n || '').trim();
+    const inGroup = [...new Set(list.filter(x => group && x.group === group).map(x => tidy(x.name)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const mine = new Set(inGroup.map(n => n.toLowerCase()));
+    const rest = [...new Set(list.map(x => tidy(x.name)).filter(n => n && !mine.has(n.toLowerCase())))].sort((a, b) => a.localeCompare(b));
+    return { inGroup, rest };
+  }
+  AM.namesOnList = namesOnList;
+
+  function nameOptions(kind, group, chosen) {
+    const { inGroup, rest } = namesOnList(kind, group);
+    const opt = n => `<option value="${esc(n)}" ${n === chosen ? 'selected' : ''}>${esc(n)}</option>`;
+    return `<option value="" ${chosen ? '' : 'selected'}>Pick a name</option>` +
+      `<option value="__new" ${chosen === '__new' ? 'selected' : ''}>+ Add a new name</option>` +
+      (inGroup.length ? `<optgroup label="In ${esc(group)}">${inGroup.map(opt).join('')}</optgroup>` : '') +
+      (rest.length ? `<optgroup label="${group ? 'In other groups' : 'Names on the list'}">${rest.map(opt).join('')}</optgroup>` : '');
+  }
+
   /* A name that says one thing and a group that says another is how four HEPA
      vacuums ended up filed as air movers. Said before saving, not after. */
   function groupMismatch(group, name, kind) {
@@ -1628,11 +1681,15 @@
             <select id="a1Kind"><option value="unit" ${unitKind ? 'selected' : ''}>A machine</option><option value="stock" ${unitKind ? '' : 'selected'}>A material off the shelf</option></select></label>
           <label class="fld">Group
             <select id="a1Group"><option value="" ${addDraft.group ? '' : 'selected'}>Pick a group</option>${gs.map(g => `<option ${g === addDraft.group ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></label>
-          <label class="fld">Name<input id="a1Name" placeholder="HEPA Vacuum" autocomplete="off"></label>
-          <label class="fld">Unit number<input id="a1No" placeholder="#4" autocomplete="off"></label>
+          <label class="fld">Name
+            <select id="a1NameSel">${nameOptions(unitKind ? 'unit' : 'stock', addDraft.group, addDraft.name)}</select></label>
+          <label class="fld" id="a1NewWrap" style="${addDraft.name === '__new' ? '' : 'display:none'}">New name<input id="a1Name" placeholder="HEPA Vacuum" autocomplete="off">
+            <span class="fld-note">Once it is added, this name is in the Name list for next time.</span></label>
+          <label class="fld">Unit number<input id="a1No" placeholder="#9118" autocomplete="off"></label>
           <label class="fld">Serial<input id="a1Ser" placeholder="off the plate" autocomplete="off"></label>
           <label class="fld">Make and model<input id="a1Model" placeholder="Pullman Ermator S26" autocomplete="off"></label>
-          <label class="fld">Tag starts with<input id="a1Pre" placeholder="worked out for you" autocomplete="off" maxlength="6"></label>
+          <label class="fld">Tag (on the sticker)<input id="a1Id" placeholder="from the unit number" autocomplete="off" maxlength="24">
+            <span class="fld-note">Leave it empty and the tag follows the unit number. Type your own, like AMV-9118, to use that instead.</span></label>
         </div>
         <p class="clear-note" id="a1Tag">Pick a group and a name, and the tag it will get shows here before anything is saved.</p>
         <div class="row"><button class="btn" id="a1Go">Add it</button>
@@ -1651,7 +1708,7 @@
             <select id="apKind"><option value="unit">Machines</option><option value="stock">Materials off the shelf</option></select></label>
           <button class="btn-ghost" id="apRead">Read it</button>
         </div>
-        <p class="muted small" id="apHint">Machines: group, name, unit number, serial, make and model. One row each, in that order, headers or not. A tag is worked out for anything without one.</p>
+        <p class="muted small" id="apHint">Machines: group, name, unit number, serial, make and model. One row each, in that order, headers or not. Each machine is tagged from its unit number, like AMV-9118.</p>
         <textarea id="apText" class="paste" rows="8" placeholder="Vacuums&#9;HEPA Vacuum&#9;#4&#9;230784094770013&#9;Pullman Ermator S26"></textarea>
         <div id="apOut"></div>
       </div>
@@ -1659,46 +1716,98 @@
   };
 
   AM.after['#/add'] = function () {
-    const kindSel = $('#a1Kind'), groupSel = $('#a1Group');
+    const kindSel = $('#a1Kind'), groupSel = $('#a1Group'), nameSel = $('#a1NameSel'), newWrap = $('#a1NewWrap');
+    const kindNow = () => kindSel.value === 'unit' ? 'unit' : 'stock';
+    /* The name is the one picked off the list, or the one typed as new. A new
+       name that is already on the list in other capitals is the same name. */
+    const nameNow = () => {
+      if (nameSel.value !== '__new') return nameSel.value.trim();
+      const typed = $('#a1Name').value.trim();
+      const list = kindNow() === 'stock' ? S.catalog.stock : S.catalog.units;
+      const same = list.find(x => String(x.name || '').trim().toLowerCase() === typed.toLowerCase());
+      return same ? String(same.name).trim() : typed;
+    };
+    /* The tag typed by a person wins. Otherwise it follows the unit number. */
+    const tagNow = () => {
+      const group = groupSel.value, name = nameNow();
+      const typed = cleanTag($('#a1Id').value);
+      if (typed) return { id: typed, typed: true };
+      return suggestTag(group, kindNow(), { name, unitNo: $('#a1No').value });
+    };
     const preview = () => {
-      const unit = kindSel.value === 'unit';
-      const group = groupSel.value, name = $('#a1Name').value.trim();
+      const unit = kindNow() === 'unit';
+      const group = groupSel.value, name = nameNow();
       const out = $('#a1Tag');
       if (!group) { out.className = 'clear-note'; out.textContent = 'Pick a group and a name, and the tag it will get shows here before anything is saved.'; return; }
-      const pre = $('#a1Pre').value.trim();
-      const id = nextTag(group, unit ? 'unit' : 'stock', { name, prefix: pre });
-      if (!pre) $('#a1Pre').placeholder = prefixOf(id) + ' (worked out for you)';
+      const t = tagNow();
+      $('#a1Id').placeholder = t.typed ? 'from the unit number' : t.id;
       const warns = [groupMismatch(group, name, unit ? 'unit' : 'stock'),
-        unit ? alreadyOnList(group, name, $('#a1No').value, $('#a1Ser').value) : ''].filter(Boolean);
+        unit ? alreadyOnList(group, name, $('#a1No').value, $('#a1Ser').value) : '',
+        t.typed && !/^[A-Z0-9]+(-[A-Z0-9]+)*$/.test(t.id) ? 'A tag is letters and numbers with a hyphen, like AMV-9118.' : '',
+        t.typed && takenIds().has(t.id) ? `${t.id} is already taken, or was used once and removed. Pick another.` : '',
+        t.wanted ? `${t.wanted} is already taken, so this one gets the next free number. Type a tag to choose another.` : ''].filter(Boolean);
       out.className = warns.length ? 'clear-note bad' : 'clear-note';
-      out.innerHTML = `This one will be tagged <b>${esc(id)}</b> in <b>${esc(group)}</b>.` + warns.map(w => `<br><b class="bad">${esc(w)}</b>`).join('');
+      out.innerHTML = `This one will be tagged <b>${esc(t.id)}</b> in <b>${esc(group)}</b>.` + warns.map(w => `<br><b class="bad">${esc(w)}</b>`).join('');
+    };
+    const showNew = () => {
+      const isNew = nameSel.value === '__new';
+      newWrap.style.display = isNew ? '' : 'none';
+      return isNew;
+    };
+    const fillNames = () => {
+      const keep = nameSel.value;
+      nameSel.innerHTML = nameOptions(kindNow(), groupSel.value, keep);
+      if (![...nameSel.options].some(o => o.value === keep)) nameSel.value = '';
+      addDraft.name = nameSel.value;
+      showNew();
     };
     kindSel.onchange = () => {
-      addDraft = { kind: kindSel.value, group: '' };
-      const unit = kindSel.value === 'unit';
-      const gs = [...new Set((unit ? S.catalog.units : S.catalog.stock).map(x => x.group))].sort();
+      addDraft = { kind: kindSel.value, group: '', name: '' };
+      const gs = [...new Set((kindNow() === 'unit' ? S.catalog.units : S.catalog.stock).map(x => x.group))].sort();
       groupSel.innerHTML = '<option value="">Pick a group</option>' + gs.map(g => `<option>${esc(g)}</option>`).join('');
+      nameSel.value = ''; fillNames();
       preview();
     };
-    groupSel.onchange = () => { addDraft.group = groupSel.value; preview(); };
-    ['a1Name', 'a1No', 'a1Ser', 'a1Pre'].forEach(k => { const el = $('#' + k); if (el) el.addEventListener('input', preview); });
+    groupSel.onchange = () => { addDraft.group = groupSel.value; fillNames(); preview(); };
+    nameSel.onchange = () => {
+      addDraft.name = nameSel.value;
+      /* A name picked before the group: file it where that name already lives. */
+      if (!groupSel.value && nameSel.value && nameSel.value !== '__new') {
+        const list = kindNow() === 'stock' ? S.catalog.stock : S.catalog.units;
+        const counts = {};
+        list.filter(x => String(x.name || '').trim() === nameSel.value).forEach(x => { counts[x.group] = (counts[x.group] || 0) + 1; });
+        const g = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+        if (g && [...groupSel.options].some(o => o.value === g || o.textContent === g)) {
+          groupSel.value = g; groupSel.dataset.picked = '1'; addDraft.group = g; fillNames();
+        }
+      }
+      if (showNew()) $('#a1Name').focus();
+      preview();
+    };
+    showNew();
+    ['a1Name', 'a1No', 'a1Ser', 'a1Id'].forEach(k => { const el = $('#' + k); if (el) el.addEventListener('input', preview); });
     preview();
     const done = $('#a1Done'); if (done) done.onclick = () => { addedNow = []; AM.render(); };
 
     const go = $('#a1Go');
     go.onclick = async () => {
       if (go.disabled) return;   // a second tap while the first is saving made AFM-05
-      const unit = kindSel.value === 'unit';
-      const name = $('#a1Name').value.trim();
+      const unit = kindNow() === 'unit';
+      const name = nameNow();
       const group = groupSel.value;
       if (!group) { AM.toast('Pick a group first. It decides where it is filed and what its tag is.', 'warn'); groupSel.focus(); return; }
-      if (!name) { AM.toast('It needs a name.', 'warn'); return; }
+      if (!name) {
+        AM.toast(nameSel.value === '__new' ? 'Type the new name.' : 'Pick a name, or Add a new name.', 'warn');
+        (nameSel.value === '__new' ? $('#a1Name') : nameSel).focus(); return;
+      }
       const unitNo = $('#a1No').value.trim(), serial = $('#a1Ser').value.trim(), model = $('#a1Model').value.trim();
       if (unit) {
         const dup = alreadyOnList(group, name, unitNo, serial);
         if (dup) { AM.toast(dup + ' It was not added again.', 'bad'); return; }
       }
-      const id = nextTag(group, unit ? 'unit' : 'stock', { name, prefix: $('#a1Pre').value.trim() });
+      const t = tagNow(), id = t.id;
+      if (!/^[A-Z0-9]+(-[A-Z0-9]+)*$/.test(id)) { AM.toast('A tag is letters and numbers with a hyphen, like AMV-9118.', 'warn'); $('#a1Id').focus(); return; }
+      if (takenIds().has(id)) { AM.toast(`${id} is already taken, or was used once and removed. Pick another tag.`, 'bad'); $('#a1Id').focus(); return; }
       go.disabled = true; go.textContent = 'Saving…';
       try {
         if (unit) {
@@ -1708,15 +1817,18 @@
           S.catalog.stock.push({ id, kind: 'stock', group, name, cls: 'consumed', uom: 'EA',
             increments: [], onHand: null, min: null, addedBy: S.me || '', addedAt: AM.nowISO() });
         }
-        addDraft = { kind: unit ? 'unit' : 'stock', group };
+        /* The name stays picked for the next one. A new name is on the list now,
+           so it is picked off the list rather than typed again. */
+        addDraft = { kind: unit ? 'unit' : 'stock', group, name };
         addedNow.push(id);
         await AM.saveCatalog({ quiet: true });
         AM.toast(`${name}${unitNo ? ' ' + unitNo : ''} is on the list as ${id}.`);
       } finally {
         go.disabled = false; go.textContent = 'Add it';
       }
-      // Ready for the next one of the same: only the unit number and serial clear.
-      ['a1No', 'a1Ser'].forEach(k => AM.clearTyped($('#' + k)));
+      // Ready for the next one of the same: the unit number, serial and tag clear.
+      ['a1No', 'a1Ser', 'a1Id', 'a1Name'].forEach(k => AM.clearTyped($('#' + k)));
+      const ns = $('#a1NameSel'); if (ns) delete ns.dataset.picked;
       AM.render();
       const no = $('#a1No'); if (no) no.focus();
     };
@@ -1724,7 +1836,7 @@
     const hint = $('#apHint');
     $('#apKind').onchange = () => {
       hint.textContent = $('#apKind').value === 'unit'
-        ? 'Machines: group, name, unit number, serial, make and model. One row each, in that order, headers or not. A tag is worked out for anything without one.'
+        ? 'Machines: group, name, unit number, serial, make and model. One row each, in that order, headers or not. Each machine is tagged from its unit number, like AMV-9118.'
         : 'Materials: group, name, unit of measure, minimum, price. One row each, in that order, headers or not.';
     };
 
@@ -1750,8 +1862,10 @@
           const serial = (r[3] || '').trim();
           if (serial && seenSerial.has(serial.toUpperCase())) { problems.push(`${name}: serial ${serial} is already on a machine, so it was left out.`); return; }
           if (serial) seenSerial.add(serial.toUpperCase());
-          const id = nextTagAvoiding(group, 'unit', seenId, name);
-          out.push({ id, kind: 'unit', group, name, unitNo: (r[2] || '').trim(), serial,
+          const unitNo = (r[2] || '').trim();
+          const id = suggestTag(group, 'unit', { name, unitNo, taken: seenId }).id;
+          seenId.add(id);
+          out.push({ id, kind: 'unit', group, name, unitNo, serial,
             model: (r[4] || '').trim(), status: 'Active',
             dop: /negative air|vacuum|scrubber/i.test(group + ' ' + name), home: 'SHOP',
             addedBy: S.me || '', addedAt: AM.nowISO() });
@@ -2887,7 +3001,7 @@
         </div>`;
       })()}
 
-      <div class="panel">
+      <div class="panel" id="whoCanUse">
         <h2>Who can use it</h2>
         <p class="muted">Add a person, issue them a PIN, and every movement carries their name.</p>
         ${AM.why('There are no permission levels inside the app. If somebody has it, they have all of it. The control is at the point of handing it over, and every movement carries a name so a mistake can be traced back and put right rather than argued about. This list is also temporary: people belong to HR, and once HR is connected this reads from there instead, so a name is added once and every system knows. Nothing here is the master record.')}
@@ -3053,6 +3167,11 @@
   };
 
   AM.after['#/setup'] = function () {
+    /* Sent here from the command centre's Shop PINs button: straight to the people. */
+    if (/[?&]at=pins\b/.test(location.hash) && !AM.state.scrolledToPins) {
+      AM.state.scrolledToPins = true;
+      const w = document.getElementById('whoCanUse'); if (w) setTimeout(() => w.scrollIntoView({ block: 'start' }), 50);
+    }
     $$('.utog').forEach(b => b.onclick = async () => {
       const u = S.catalog.users.find(x => x.name === b.dataset.n);
       u.active = u.active === false;
