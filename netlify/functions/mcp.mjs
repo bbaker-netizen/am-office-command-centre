@@ -178,11 +178,13 @@ async function asPerson(handler, tok, path, body) {
   if (!r.ok) { const e = new Error(b.message || b.error || ("The command centre answered " + r.status + ".")); e.status = r.status; throw e; }
   return b;
 }
-async function allJobs(tok) {
+/* The person's branch, as on their own screen (_accounts.mjs branchOf). */
+const inBranch = (j, branch) => { if (!branch) return true; const cal = /calgary/i.test(String(fieldsOf(j)["Estimating branch"] || "")); return branch === "calgary" ? cal : !cal; };
+async function allJobs(tok, me) {
   const first = await asPerson(commandHandler, tok, "/api/command?part=jobs");
   const nodes = [...(first.nodes || [])]; let next = first.nextPage, guard = 0;
   while (next && guard++ < 8) { const more = await asPerson(commandHandler, tok, "/api/command?part=jobs&page=" + encodeURIComponent(next)); nodes.push(...(more.nodes || [])); next = more.nextPage; }
-  return { nodes: nodes.filter(j => !j.closedOn), orders: first.orders || [] };
+  return { nodes: nodes.filter(j => !j.closedOn && inBranch(j, me && me.branch)), orders: first.orders || [] };
 }
 async function claimsFor(tok) { try { return (await asPerson(commandHandler, tok, "/api/command?part=claims")).claims || {}; } catch (e) { return {}; } }
 function findJob(nodes, q) {
@@ -195,18 +197,18 @@ async function runTool(name, args, tok, me) {
   const A = args || {};
   if (name === "who_am_i") return { name: me.name, email: me.email, title: me.title, sees: me.areas, level: me.level, assistant: me.assistant };
   if (name === "find_jobs") {
-    const { nodes } = await allJobs(tok); const claims = await claimsFor(tok);
+    const { nodes } = await allJobs(tok, me); const claims = await claimsFor(tok);
     const words = String(A.query || "").toLowerCase().split(/\s+/).filter(Boolean);
     const hits = nodes.filter(j => { const hay = [j.number, j.name, j.location && j.location.address, j.location && j.location.account && j.location.account.name].join(" ").toLowerCase(); return words.every(w => hay.includes(w)); });
     return { count: hits.length, jobs: hits.slice(0, Math.min(50, Number(A.limit) || 15)).map(j => brief(j, claims)) };
   }
   if (name === "get_job") {
-    const { nodes, orders } = await allJobs(tok); const claims = await claimsFor(tok);
+    const { nodes, orders } = await allJobs(tok, me); const claims = await claimsFor(tok);
     const j = findJob(nodes, A.job); if (!j) throw new Error("No open job " + A.job + ". Use find_jobs to look it up.");
     return { ...brief(j, claims), fields: fieldsOf(j), opened: j.createdAt, quotes: orders.filter(o => o.job && o.job.id === j.id).map(o => ({ name: o.name, status: o.status, beforeGst: o.price, issued: o.issueDate })), link: "https://app.jobtread.com/jobs/" + j.id };
   }
   if (name === "estimating_board") {
-    const { nodes, orders } = await allJobs(tok); const claims = await claimsFor(tok);
+    const { nodes, orders } = await allJobs(tok, me); const claims = await claimsFor(tok);
     const st = j => fieldsOf(j).Status || "";
     const bids = nodes.filter(j => ["lead", "est"].includes(stageOf(st(j))) && fieldsOf(j)["Bid Due Date and Time"]).map(j => ({ j, d: daysTo(fieldsOf(j)["Bid Due Date and Time"]) })).filter(x => x.d !== null && x.d >= 0 && x.d <= 14).sort((a, b) => a.d - b.d);
     const visits = nodes.filter(j => fieldsOf(j)["Site Visit Date and Time"]).map(j => ({ j, d: daysTo(fieldsOf(j)["Site Visit Date and Time"]) })).filter(x => x.d !== null && x.d >= 0 && x.d <= 7).sort((a, b) => a.d - b.d);
@@ -215,7 +217,7 @@ async function runTool(name, args, tok, me) {
     return { bidsDue: bids.map(x => ({ ...brief(x.j, claims), inDays: x.d })), leadsNobodyHasTaken: nodes.filter(j => stageOf(st(j)) === "lead" && !claims[j.id]).map(j => brief(j, claims)), quotesWithNoAnswer: quotes.slice(0, 30), siteVisitsThisWeek: visits.map(x => ({ ...brief(x.j, claims), inDays: x.d })) };
   }
   if (name === "take_estimate" || name === "let_go_of_estimate") {
-    const { nodes } = await allJobs(tok);
+    const { nodes } = await allJobs(tok, me);
     const j = findJob(nodes, A.job); if (!j) throw new Error("No open job " + A.job + ". Use find_jobs to look it up.");
     const b = await asPerson(commandHandler, tok, "/api/command", { claim: { jobId: j.id, take: name === "take_estimate", force: !!A.take_over } });
     return { job: j.number + " " + j.name, takenBy: b.claim ? b.claim.by : "nobody", takenOverFrom: b.from || "" };

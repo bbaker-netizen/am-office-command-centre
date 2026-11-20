@@ -38,7 +38,7 @@ import { readFails, addFail, clearFails, lockedFor, ipKey, ipBlocked, ipFail, ch
 import {
   AREAS, LEVELS, PRESETS, IDLE_CHOICES, ACCOUNTS_LOG, normEmail, okEmail, hashPassword, checkPassword, needsRehash,
   passwordProblem, tempPassword, readAccounts, changeAccounts, logAccount, publicAccount, activeAdmins,
-  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS, isMaster, TOUR_KEY, toursOf, signedInBeforeTours, MAIN_TOUR, TOURS_KEPT_FROM
+  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS, isMaster, TOUR_KEY, toursOf, signedInBeforeTours, MAIN_TOUR, TOURS_KEPT_FROM, BRANCHES
 } from "./_accounts.mjs";
 
 function json(body, status = 200) {
@@ -324,6 +324,9 @@ export default async (req) => {
         if (byEmail(doc.accounts, email)) return null;
         const now = new Date().toISOString();
         const a = { id: newId(), email, name, title, areas, level, active: true, claude: !!body.claude, pw: pwRec, pwv: now, mustChange: true, createdAt: now, createdBy: me.name, lastSignIn: "" };
+        /* The assistant and branch picked when adding them, if any; otherwise from their title. */
+        if (ASSISTANTS.includes(body.assistant) && body.assistant !== "none") a.assistant = body.assistant;
+        if (BRANCHES.includes(body.branch)) a.branch = body.branch;
         doc.accounts[a.id] = a; return a;
       });
       if (!made) return bad("Somebody already has an account with that email.", 409, "taken");
@@ -357,6 +360,7 @@ export default async (req) => {
         if (body.active !== undefined) next.active = !!body.active;
         if (body.claude !== undefined) next.claude = !!body.claude;
         if (body.assistant !== undefined) { if (!ASSISTANTS.includes(body.assistant)) return { err: bad("Choose the assistant for their position.") }; next.assistant = body.assistant; }
+        if (body.branch !== undefined) { if (body.branch !== "" && !BRANCHES.includes(body.branch)) return { err: bad("Choose Edmonton, Calgary or both.") }; if (body.branch) next.branch = body.branch; else delete next.branch; }
         if (body.landing !== undefined) { if (!LANDINGS.includes(body.landing)) return { err: bad("Choose where they open: My day or Overview.") }; next.landing = body.landing; }
         /* Nobody locks themselves out, and the app never ends up with nobody
            who can let people in. */
@@ -457,6 +461,7 @@ function changeWords(a, b) {
   if (!!a.claude !== !!b.claude) out.push(b.claude ? "can ask Claude" : "cannot ask Claude");
   if (a.assistant !== b.assistant) out.push("assistant: " + b.assistant);
   if (a.landing !== b.landing) out.push("opens on " + (b.landing === "brief" ? "My day" : "Overview"));
+  if (a.branch !== b.branch) out.push("branch: " + (b.branch ? b.branch[0].toUpperCase() + b.branch.slice(1) : "Edmonton and Calgary"));
   return out.length ? "Changed " + out.join("; ") : "No change";
 }
 

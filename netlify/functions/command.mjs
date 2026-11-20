@@ -600,6 +600,8 @@ export default async (req) => {
     if (!canEdit(u) || !sees(u, "office", "field")) return json({ error: "role", message: "Your account can look but not change jobs. Ask an admin if you need to." }, 403);
     try {
       const body = await req.clone().json().catch(() => ({}));
+      /* Estimators do not dispatch crews (Craig, 2026-11-20). */
+      if (body && body.crew && u.assistant === "estimator") return json({ error: "role", message: "Crews are scheduled by dispatch, not estimating." }, 403);
       if (body && body.crew) return await saveCrew(s, req, body);
       if (body && body.upload) return await uploadToJob(s, req, body.upload);
       return await updateJob(s, req);
@@ -616,7 +618,7 @@ export default async (req) => {
   try {
     if (part === "me") {
       if (u.viewAs) await logAccount(s, { action: "view-as", by: u.viewAs.byName, target: u.name });
-      return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, claude: !!u.claude, today: localDay(), assistant: u.assistant, landing: u.landing, projectLive: !!u.projectLive, tours: u.tours || {},
+      return json({ id: u.id, name: u.name, email: u.email, title: u.title, areas: u.areas, level: u.level, edit: u.edit, admin: u.admin, role: u.role, idleHours: u.idleHours, claude: !!u.claude, today: localDay(), assistant: u.assistant, landing: u.landing, projectLive: !!u.projectLive, tours: u.tours || {}, branch: u.branch || "",
         master: !!u.master, viewAs: u.viewAs ? { by: u.viewAs.byName, shownLevel: u.shownLevel, mail: !!u.viewAs.mail } : null });
     }
     if (part === "jobs" && url.searchParams.get("page")) return json(await readJobs(s, url.searchParams.get("page")));

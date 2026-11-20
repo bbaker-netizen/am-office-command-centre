@@ -189,6 +189,8 @@ tr[data-ac-edit]:hover td{background:var(--panel-2)}
 .cct-count{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3)}
 .cct-x{background:var(--panel);border:1px solid var(--rule);color:var(--ink);cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}
 .cct-x:hover{border-color:var(--cyan)}
+a.joblink{color:inherit;text-decoration:underline;text-decoration-color:var(--cyan);text-underline-offset:2px;font-weight:600}
+a.joblink:hover{color:var(--cyan-deep)}
 .claimbox{border:1px solid var(--rule);border-left:4px solid var(--rule);border-radius:3px;padding:10px 14px;margin-bottom:14px;background:var(--panel-2)}
 .claimbox.mine{border-left-color:#3f8f5a}.claimbox.other{border-left-color:#e0a445;background:var(--cyan-wash)}
 .claimbox p{margin:0 0 8px}.claimbox .actions{margin:4px 0 6px}
@@ -1067,6 +1069,15 @@ const S = { mcp:null, jobs:null, jobTotal:null, jobsShort:false, jobsErr:null, s
 let unsubs = [];
 let current = null;
 
+/* A person who works for one branch sees that branch's jobs only (Craig,
+   2026-11-20). The JobTread field "Estimating branch"; no branch set counts
+   as Edmonton, as on Payroll and Expenses. Applied once, where the jobs come
+   in, so every page agrees. */
+function scopeJobs(rows){
+  const b = ME && ME.branch; if(!b) return rows;
+  const cal = j => /calgary/i.test(String(j["Estimating branch"] || ""));
+  return rows.filter(j => b === "calgary" ? cal(j) : !cal(j));
+}
 function flat(job){
   const o = {};
   const n = (job.customFieldValues && job.customFieldValues.nodes) || [];
@@ -1134,7 +1145,7 @@ function grabDrafts(token, acc, pages){
 function loadAll(){
   unsubs.forEach(u => { try{ u(); }catch(e){} }); unsubs = [];
   grabJobs(null, { rows:[], total:null, stamp:null }).then(acc => {
-    S.jobs = acc.rows.map(flat); S.jobTotal = acc.total; S.stamp = acc.stamp; S.jobsErr = null;
+    S.jobs = scopeJobs(acc.rows.map(flat)); S.jobTotal = acc.total; S.stamp = acc.stamp; S.jobsErr = null;
     S.jobsShort = acc.total !== null && acc.rows.length < acc.total;
     render();
   }).catch(e => { S.jobsErr = e; render(); });
@@ -1172,11 +1183,19 @@ function alertsFor(tab){
   try{ return (VIEWS[tab] && VIEWS[tab].alerts) ? VIEWS[tab].alerts().map(a => Object.assign({ tab }, a)) : []; }
   catch(e){ return []; }
 }
+/* Job numbers in a warning open that job in JobTread (Craig, 2026-11-20:
+   "26-20026, 26-20097" said which jobs but went nowhere). Only numbers of
+   jobs the page knows are linked. Takes text already made safe by E(). */
+function linkNums(html){
+  if(!S.jobs || !html) return html;
+  return String(html).replace(/\b(\d{2}-\d{5})\b/g, n => { const j = S.jobs.find(x => x._number === n);
+    return j ? '<a class="joblink" href="' + jtUrl(j._id) + '" target="_blank" rel="noopener" title="Open ' + n + ' ' + E(j._name || "") + ' in JobTread">' + n + '</a>' : n; });
+}
 function verdictHtml(list, calm, calmMeta){
   const a = list.slice().sort((x, y) => LV[x.lvl] - LV[y.lvl]);
   if(!a.length) return '<div class="verdict clear"><p>' + ico("clear") + '<span>' + E(calm) + '</span></p>' + (calmMeta ? '<div class="meta">' + E(calmMeta) + '</div>' : '') + '</div>';
   const top = a[0];
-  return '<div class="verdict ' + top.lvl + '"><p>' + ico(top.lvl === "stop" ? "stop" : top.lvl === "caution" ? "caution" : "info") + '<span>' + E(top.text) + '</span></p><div class="meta">' + E(top.meta || "") +
+  return '<div class="verdict ' + top.lvl + '"><p>' + ico(top.lvl === "stop" ? "stop" : top.lvl === "caution" ? "caution" : "info") + '<span>' + linkNums(E(top.text)) + '</span></p><div class="meta">' + linkNums(E(top.meta || "")) +
     (a.length > 1 ? (top.meta ? " " : "") + plural(a.length - 1, "more thing") + " below." : "") + '</div></div>';
 }
 function head(title, lede){ return '<div class="tabhead" data-tour="page"><h1>' + E(title) + '</h1><p>' + E(lede) + '</p></div>'; }
@@ -1757,7 +1776,7 @@ function appLoad(fresh){
   waits.push(api("jobs", fresh).then(async d => {
     let rows = d.nodes || [], next = d.nextPage, guard = 0;
     const show = () => {
-      S.jobs = rows.map(flat); S.jobTotal = d.total; S.stamp = d.storedAt;
+      S.jobs = scopeJobs(rows.map(flat)); S.jobTotal = d.total; S.stamp = d.storedAt;
       S.jobsShort = d.total != null && rows.length < d.total; S.jobsMore = !!next;
       S.orders = d.orders || []; S.jobsErr = S.ordersErr = null; render();
     };
@@ -1836,7 +1855,8 @@ async function startApp(){
   if(me.viewAs){ CAN_EDIT = false; viewAsBanner(me); }
   const asLive = !!me.assistant && me.assistant !== "none";
   const tabs = asLive ? ["brief", "notes", "overview"] : ["notes", "overview"];
-  if(has("office")) tabs.push("estimating", "dispatch", "tm");
+  /* Estimators do not dispatch crews (Craig, 2026-11-20). */
+  if(has("office")) tabs.push(...["estimating", "dispatch", "tm"].filter(t => !(t === "dispatch" && me.assistant === "estimator")));
   if(has("money")) tabs.push("money", "cashflow");
   if(has("payroll")) tabs.push("payroll", "expenses");
   if(has("money")) tabs.push("buying");
@@ -1849,7 +1869,7 @@ async function startApp(){
   if(me.admin) tabs.push("people", "connections", "scorecards");
   /* The project assistant preview is gone: everyone has their own assistant now (2026-11-20). */
   const first = String(me.name || "").split(" ")[0];
-  CFG = { title: (first ? first + "'s" : "Your") + " command centre", who: [me.title, respLabel(me.areas), LEVEL_INFO[me.level] ? LEVEL_INFO[me.level].label : ""].filter(Boolean).join(" · "), tabs, qb: has("money"), gmail:false };
+  CFG = { title: (first ? first + "'s" : "Your") + " command centre", who: [me.title, respLabel(me.areas), me.branch ? (me.branch === "calgary" ? "Calgary jobs" : "Edmonton jobs") : "", LEVEL_INFO[me.level] ? LEVEL_INFO[me.level].label : ""].filter(Boolean).join(" · "), tabs, qb: has("money"), gmail:false };
   S.meName = first;
   document.title = CFG.title;
   $("roleTitle").textContent = CFG.title; $("roleWho").textContent = CFG.who; sizeTop();
@@ -1931,7 +1951,7 @@ document.addEventListener("click", ev => {
     msg.textContent = "Saved: " + (r.changed || []).join("; ") + ".";
     const id = form.dataset.id;
     LAST_SAVED = { id, at: Date.now(), text: (r.changed || []).join("; ") + "." };
-    api("jobs", true).then(d => { S.jobs = (d.nodes || []).map(flat); S.stamp = d.storedAt; S.orders = d.orders || S.orders; render(); if(drawerState && drawerState.kind === "job" && drawerState.id === id) openJob(id); });
+    api("jobs", true).then(d => { S.jobs = scopeJobs((d.nodes || []).map(flat)); S.stamp = d.storedAt; S.orders = d.orders || S.orders; render(); if(drawerState && drawerState.kind === "job" && drawerState.id === id) openJob(id); });
   }).catch(e => { msg.textContent = errCopy(e); b.disabled = false; });
 });
 
@@ -2033,7 +2053,7 @@ VIEWS.overview = {
     if(!all.length) html += S.jobs ? '<div class="state ok">Nothing waiting on anybody.</div>' : wait("the systems");
     else html += '<ul class="alerts">' + all.slice(0, 14).map(a =>
       '<li><span class="tag ' + (a.lvl === "stop" ? "stop" : a.lvl === "caution" ? "caution" : "mute") + '">' + (a.lvl === "stop" ? "Now" : a.lvl === "caution" ? "Soon" : "Note") + '</span>' +
-      '<div><div class="t">' + E(a.text) + '</div>' + (a.meta ? '<div class="m">' + E(a.meta) + '</div>' : '') + '</div>' +
+      '<div><div class="t">' + linkNums(E(a.text)) + '</div>' + (a.meta ? '<div class="m">' + linkNums(E(a.meta)) + '</div>' : '') + '</div>' +
       '<button class="go" data-go="' + a.tab + '">' + E(TABS[a.tab].label) + '</button></li>').join("") + '</ul>' +
       (all.length > 14 ? '<div class="more">' + (all.length - 14) + ' more on the tabs.</div>' : '');
     html += '</div>';
@@ -2477,7 +2497,7 @@ function asPages(info){
   if(!all.length) return h + (S.jobs ? '<div class="md-empty"><b>Nothing flagged on your pages.</b></div>' : wait("your pages")) + '</div>';
   return h + '<ul class="alerts">' + all.slice(0, 10).map(a =>
     '<li><span class="tag ' + (a.lvl === "stop" ? "stop" : a.lvl === "caution" ? "caution" : "mute") + '">' + (a.lvl === "stop" ? "Now" : a.lvl === "caution" ? "Soon" : "Note") + '</span>' +
-    '<div><div class="t">' + E(a.text) + '</div>' + (a.meta ? '<div class="m">' + E(a.meta) + '</div>' : '') + '</div>' +
+    '<div><div class="t">' + linkNums(E(a.text)) + '</div>' + (a.meta ? '<div class="m">' + linkNums(E(a.meta)) + '</div>' : '') + '</div>' +
     '<button class="go" data-go="' + a.tab + '">' + E(TABS[a.tab].label) + '</button></li>').join("") + '</ul>' +
     (all.length > 10 ? '<div class="more">' + (all.length - 10) + ' more on those pages.</div>' : '') + '</div>';
 }
@@ -4193,7 +4213,7 @@ document.addEventListener("click", ev => {
     pmSave(true).then(() => {
       done.push("Saved");
       return note ? pmCall("", { action:"note", jobId }).then(() => { done.push("summary posted to JobTread"); PM.rec.notePostedAt = new Date().toISOString(); }).catch(e => done.push("the JobTread note did not post (" + errCopy(e) + ")")) : null;
-    }).then(() => close ? apiPost({ jobId, changes:{ Status:"Closed Won" } }).then(() => { done.push("job moved to Closed Won"); return api("jobs", true).then(d => { S.jobs = (d.nodes || []).map(flat); S.stamp = d.storedAt; }); }).catch(e => done.push("the status did not change (" + errCopy(e) + ")")) : null)
+    }).then(() => close ? apiPost({ jobId, changes:{ Status:"Closed Won" } }).then(() => { done.push("job moved to Closed Won"); return api("jobs", true).then(d => { S.jobs = scopeJobs((d.nodes || []).map(flat)); S.stamp = d.storedAt; }); }).catch(e => done.push("the status did not change (" + errCopy(e) + ")")) : null)
       .then(() => { PM.msg = done.join(", ") + "."; pmRedraw(); })
       .catch(() => { t.disabled = false; });
   }
@@ -4351,6 +4371,7 @@ function acForm(a){
     '<fieldset class="ac-set"><legend>Can do</legend>' + ["view", "edit", "admin"].map(k => '<label class="ac-check"><input type="radio" name="level" value="' + k + '"' + (a.level === k ? " checked" : "") + (me && k !== "admin" ? " disabled" : "") + '><span><b>' + E(LEVEL_INFO[k].label) + '</b> ' + E(LEVEL_INFO[k].what) + '</span></label>').join("") +
     (me ? '<p class="sub">You cannot take admin away from yourself. Another admin can.</p>' : '') + '</fieldset>' +
     '<fieldset class="ac-set"><legend>Personal assistant</legend><label class="fld"><span>Assistant</span><select name="assistant">' + (isNew ? [["", "Picked from their job title"]] : []).concat(ASSIST_ROLES).map(o => '<option value="' + o[0] + '"' + ((isNew ? "" : (a.assistant || "")) === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
+      '<label class="fld"><span>Branch</span><select name="branch">' + (isNew ? [["", "From their job title"]] : []).concat([["all","Edmonton and Calgary"],["edmonton","Edmonton"],["calgary","Calgary"]]).map(o => '<option value="' + o[0] + '"' + ((isNew ? "" : (a.branch || "all")) === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
       '<label class="fld"><span>Opens on</span><select name="landing"><option value="brief"' + (a.landing === "brief" ? " selected" : "") + '>My day</option><option value="overview"' + (a.landing !== "brief" ? " selected" : "") + '>Overview</option></select></label><p class="sub">Everyone has an assistant, set up for their position. It starts from their job title; pick another here if it does not fit.</p></fieldset>' +
     '<fieldset class="ac-set"><legend>Claude</legend><label class="ac-check"><input type="checkbox" name="claude"' + (a.claude ? " checked" : "") + '><span><b>Can ask Claude</b> Opens the Ask Claude panel on every page, which answers from what that person can already see. For people with a Claude account, it also hands the question over to their own Claude, and lets them connect their own Claude to the command centre (My account, Your own Claude).</span></label></fieldset>' +
     '<div class="actions">' + (isNew ? '<button type="button" class="btn" data-ac-save="invite">Add and send an invite</button><button type="button" class="btn ghost" data-ac-save="temp">Add with a temporary password</button>' : '<button type="button" class="btn" data-ac-save>Save the changes</button>') + '</div>' +
@@ -4374,7 +4395,7 @@ function acOpen(id){
 function acRead(){
   const f = $("acForm"); const v = n => (f.querySelector('[name="' + n + '"]') || {}).value || "";
   const lv = f.querySelector('[name="level"]:checked');
-  return { name: v("name").trim(), email: v("email").trim(), title: v("title").trim(), areas: [...f.querySelectorAll('[name="area"]:checked')].map(x => x.value), level: lv ? lv.value : "", claude: !!(f.querySelector('[name="claude"]') || {}).checked, assistant: v("assistant") || "none", landing: v("landing") || "overview" };
+  return { name: v("name").trim(), email: v("email").trim(), title: v("title").trim(), areas: [...f.querySelectorAll('[name="area"]:checked')].map(x => x.value), level: lv ? lv.value : "", claude: !!(f.querySelector('[name="claude"]') || {}).checked, assistant: v("assistant") || "none", landing: v("landing") || "overview", branch: v("branch") };
 }
 function acTemp(a, temp, why){
   const first = a.name.split(" ")[0];

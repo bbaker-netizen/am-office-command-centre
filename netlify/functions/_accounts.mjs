@@ -64,6 +64,20 @@ export function isMaster(a) {
   return !!a && a.active !== false && a.level === "admin" && list.includes(String(a.email || "").trim().toLowerCase());
 }
 export const LANDINGS = ["brief", "overview"];
+/* Which branch a person works for (Craig, 2026-11-20: an Edmonton estimator
+   was seeing Calgary jobs). Jobs carry it in the JobTread field "Estimating
+   branch"; a job with none set counts as Edmonton, as everywhere else. "all"
+   sees both. Not set: Calgary if the job title says so, Edmonton for an
+   estimator, otherwise both. */
+export const BRANCHES = ["all", "edmonton", "calgary"];
+export function branchOf(a) {
+  if (!a) return "";
+  if (a.branch === "all") return "";
+  if (a.branch === "edmonton" || a.branch === "calgary") return a.branch;
+  if (/calgary/i.test(String(a.title || ""))) return "calgary";
+  if (assistantOf(a) === "estimator") return "edmonton";
+  return "";
+}
 const EXEC_START = ["craig@amabatement.com", "amir@amabatement.com"];
 export function assistantOf(a) {
   if (!a) return "none";
@@ -206,7 +220,7 @@ export function publicAccount(a) {
     id: a.id, email: a.email, name: a.name, title: a.title || "", areas: a.areas || [], level: a.level,
     responsibility: presetOf(a.areas), responsibilityLabel: presetLabel(a.areas),
     active: a.active !== false, mustChange: !!a.mustChange, createdAt: a.createdAt || "", createdBy: a.createdBy || "",
-    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || "", claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), master: isMaster(a),
+    lastSignIn: a.lastSignIn || "", passwordSetAt: a.pwv || "", claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), master: isMaster(a), branch: branchOf(a),
     /* The invite's dates only. The link itself is never stored, only a scramble of it. */
     invite: a.invite ? { sentAt: a.invite.at || "", expires: a.invite.exp || "", by: a.invite.by || "", emailed: !!a.invite.emailed } : null
   };
@@ -264,7 +278,7 @@ export function userOf(a, settings = {}) {
     edit: a.level === "edit" || a.level === "admin", admin: a.level === "admin",
     office: areas.includes("office"), mustChange: !!a.mustChange, idleHours: settings.idleHours,
     claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), projectLive: !!settings.projectAssistantLive, master: isMaster(a),
-    tours: toursOf(a)
+    tours: toursOf(a), branch: branchOf(a)
   };
   u.role = areas.includes("office") && areas.includes("field") ? "owner" : areas.includes("office") ? "office" : areas.includes("field") ? "field" : "none";
   return u;
