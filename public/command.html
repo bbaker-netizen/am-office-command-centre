@@ -3587,14 +3587,14 @@ VIEWS.equipment = {
       const low = ((S.inv.shelf || {}).low || []).length;
       if(low) a.push({ lvl:"caution", text: plural(low, "shelf item is", "shelf items are") + " at or below the minimum.", meta:"Order before the next job needs it." });
     }
-    return a;
+    return a.concat(eqsAlerts());
   },
   render(){
     let h = head("Equipment and shop", PLATFORM === "app" ? "Machines, shelf stock and gear on jobs, read straight from the shop screens, matched to JobTread." : "Machines, shelf stock and kits. The inventory app owns this list; this tab shows what JobTread knows about it.");
     const nr = jobsReady(); if(nr) return h + nr;
     h += verdictHtml(this.alerts(), "Every job starting this week is set up in the inventory app.", "");
     h += '<div class="grid">';
-    if(PLATFORM === "app") h += invCards();
+    if(PLATFORM === "app") h += eqsCard() + invCards();
     const won = live().filter(j => POST.includes(st(j)));
     const linked = won.filter(j => F(j["Inventory Job ID"]));
     const notYet = won.filter(j => !F(j["Inventory Job ID"]) && ["won","sched","site"].includes(stageOf(st(j))))
@@ -5445,6 +5445,92 @@ function loadCN(){
   if(ME.claude) fetch("/api/claude", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(c => { CN.claude = c; render(); }).catch(() => {});
   if(ME.admin) fetch("/api/inbox?shared=estimating", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(e => { CN.est = e; render(); }).catch(() => {});
 }
+/* ---------- The equipment Google Sheet as the master list (Craig, 2026-11-20) ----------
+   Server: equipment-sheet.mjs and _equipsheet.mjs. New rows on the sheet are
+   added to the shop every 15 minutes in working hours if they pass the
+   checks (tag, name, group, unit number, serial, and next in sequence);
+   the rest wait here with the reason. */
+const EQS = { d:null, err:null, loading:false, busy:"", msg:"", url:"" };
+function eqsLoad(){
+  if(EQS.loading || PLATFORM !== "app") return; EQS.loading = true;
+  fetch("/api/equipment-sheet", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw b; EQS.d = b; EQS.err = null; })
+    .catch(e => { EQS.err = e; }).finally(() => { EQS.loading = false; render(); });
+}
+function eqsDo(body, btnLabel){
+  EQS.busy = body.action + (body.tag || ""); EQS.msg = ""; render();
+  return fetch("/api/equipment-sheet", { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) })
+    .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw b; return b; })
+    .then(b => { const res = b.result || {};
+      EQS.msg = body.action === "useSheet" ? "The sheet's values are on " + plural((b.updated || []).length, "machine") + "."
+        : res.applied ? (res.added && res.added.length ? "Added " + res.added.join(", ") + "." : "Checked. Nothing new to add.") : res.wouldAdd ? "Read the sheet: " + plural(res.rows, "row") + "." : "Done.";
+      if(body.action === "disconnect") EQS.msg = "Disconnected. The shop keeps every machine it has."; })
+    .catch(e => { EQS.msg = e.message || "That did not work."; })
+    .finally(() => { EQS.busy = ""; EQS.d = null; eqsLoad(); });
+}
+function eqsAlerts(){
+  const d = EQS.d; if(!d){ if(PLATFORM === "app" && !EQS.err) eqsLoad(); return []; }
+  if(!d.connected) return [];
+  const L = d.last || {}, a = [];
+  if(L.error) a.push({ lvl:"stop", text:"The equipment sheet could not be checked.", meta: L.error });
+  if((L.held || []).length) a.push({ lvl:"caution", text: plural(L.held.length, "new row on the equipment sheet is", "new rows on the equipment sheet are") + " waiting, not added.", meta: L.held.slice(0, 3).map(h => h.tag + ": " + h.why[0]).join("; ") });
+  if(L.changedCount) a.push({ lvl:"info", text:"The equipment sheet and the shop disagree on " + plural(L.changedCount, "machine") + ".", meta:"Serials, models or status. Confirm them on Equipment." });
+  if(!d.auto) a.push({ lvl:"info", text:"The equipment sheet is connected but not checking on its own yet.", meta:"An admin presses Start on Equipment or Connections." });
+  return a;
+}
+const eqsBtn = (action, label, extra, ghost) => '<button type="button" class="btn' + (ghost ? " ghost" : "") + ' sm" data-eqs="' + action + '"' + (extra || "") + (EQS.busy === action ? " disabled" : "") + '>' + (EQS.busy === action ? "Working…" : label) + '</button>';
+function eqsCard(){
+  const d = EQS.d;
+  let h = '<div class="card wide" data-nofold data-tour="eqs"><h2>Equipment sheet</h2>';
+  if(EQS.err) return h + failBox(EQS.err, "The equipment sheet") + '</div>';
+  if(!d){ eqsLoad(); return h + wait("the equipment sheet") + '</div>'; }
+  if(!d.connected) return h + '<p class="lede">The Google Sheet with every machine can be the master list: new rows are added to the shop every 15 minutes, in sequence. ' + (d.admin ? 'Connect it under Admin, Connections.' : 'An admin connects it under Admin, Connections.') + '</p></div>';
+  const L = d.last || {}, held = L.held || [], ch = L.changed || [], only = L.appOnly || [];
+  h += '<p class="lede"><a href="' + E(d.link) + '" target="_blank" rel="noopener">The equipment sheet</a> is the master list of machines. ' +
+    (d.auto ? 'New rows are added to the shop every 15 minutes, 7:00 to 5:30 on weekdays, if they pass the checks.' : 'It is connected but not checking on its own yet.') +
+    ' Last checked ' + E(L.at ? whenSeen(L.at) : "never") + (d.connectedByName ? ', read with ' + E(d.connectedByName) + '\'s Google Drive' : '') + '.</p>';
+  if(L.error) h += '<div class="state err" style="margin-bottom:10px">' + E(L.error) + '</div>';
+  if(!d.auto && L.wouldAdd) h += '<div class="state wait" style="margin-bottom:10px">Ready to start: ' + (L.wouldAdd.length ? plural(L.wouldAdd.length, "new machine") + ' to add (' + E(L.wouldAdd.slice(0, 12).join(", ")) + (L.wouldAdd.length > 12 ? ", …" : "") + ')' : 'nothing new to add') + '.</div>';
+  const acts = [];
+  if(d.admin && !d.auto) acts.push(eqsBtn("start", "Start: add these and check every 15 minutes"));
+  if(CAN_EDIT) acts.push(eqsBtn("check", "Check now", "", true));
+  if(acts.length) h += '<div class="actions">' + acts.join("") + '</div>';
+  if(EQS.msg) h += '<p class="sub" role="status">' + E(EQS.msg) + '</p>';
+  const added = (d.addedLog || []).slice(0, 12);
+  if(added.length) h += '<h3>Added from the sheet</h3><p class="sub">' + added.map(x => '<b>' + E(x.tag) + '</b> ' + E(whenSeen(x.at))).join(" · ") + '</p>';
+  if(held.length) h += '<h3>Waiting, not added <span class="tag caution">' + held.length + '</span></h3><p class="sub">Fix the row on the sheet and it is picked up at the next check' + (d.admin ? ', or add it anyway where that is allowed' : '') + '.</p>' +
+    tbl('<th>Row</th><th>Tag</th><th>Machine</th><th>Why it is waiting</th><th></th>', held.map(x => '<tr><td class="num">' + x.line + '</td><td><b>' + E(x.tag || "(none)") + '</b></td><td>' + E(x.name || "") + '<span class="sm">' + E(x.group || "") + '</span></td><td>' + E(x.why.join("; ")) + '</td><td>' +
+      (d.admin && x.canApprove ? eqsBtn("approve", "Add anyway", ' data-tag="' + E(x.tag) + '"', true) : '') + '</td></tr>'), "", 20);
+  if(L.changedCount) h += '<h3>The sheet and the shop disagree <span class="tag mute">' + L.changedCount + '</span></h3><p class="sub">Never changed on their own. ' + (d.admin ? 'Check a few, then use the sheet\'s values.' : 'An admin confirms these.') + '</p>' +
+    (d.admin ? '<div class="actions">' + eqsBtn("useSheet", "Use the sheet\'s values for all " + L.changedCount) + '</div>' : '') +
+    tbl('<th>Tag</th><th>What differs</th><th></th>', ch.map(c => '<tr><td><b>' + E(c.tag) + '</b><span class="sm">row ' + c.line + '</span></td><td>' + c.diffs.map(x => E(x.field) + ': sheet <b>' + E(x.sheet || "(blank)") + '</b>, shop <b>' + E(x.app || "(blank)") + '</b>').join("<br>") + '</td><td>' +
+      (d.admin ? eqsBtn("useSheet", "Use the sheet", ' data-tag="' + E(c.tag) + '"', true) : '') + '</td></tr>'), "", 15);
+  if(L.appOnlyCount) h += '<h3>In the shop, not on the sheet <span class="tag mute">' + L.appOnlyCount + '</span></h3><p class="sub">Added in the shop app. Put them on the sheet so it stays the full list.</p><p class="sub">' + only.slice(0, 40).map(x => '<b>' + E(x.tag) + '</b> ' + E(x.name || "")).join(" · ") + (L.appOnlyCount > 40 ? " · …" : "") + '</p>';
+  return h + '</div>';
+}
+function eqsConnectCard(){
+  const d = EQS.d; if(!d){ eqsLoad(); return ""; }
+  let h = '<div class="card" data-cn-form><h2><span class="lamp' + (d.connected && d.auto && !(d.last && d.last.error) ? " on" : "") + '"></span>Equipment sheet</h2>';
+  if(d.connected){
+    h += '<p class="lede"><a href="' + E(d.link) + '" target="_blank" rel="noopener">The equipment sheet</a> is connected' + (d.connectedByName ? ' by ' + E(d.connectedByName) + ', read with their Google Drive' : '') + '. ' + (d.auto ? 'Checked every 15 minutes in working hours.' : 'Not checking on its own yet: press Start on the Equipment page.') + ' The results are on Equipment.</p>' +
+      '<div class="actions"><button class="btn ghost" data-go="equipment">Open Equipment</button>' + (d.auto ? eqsBtn("stop", "Stop checking", "", true) : '') + eqsBtn("disconnect", "Disconnect", "", true) + '</div>';
+  } else {
+    h += '<p class="lede">Make the Google Sheet with every machine the master list. New rows are added to the shop every 15 minutes, 7:00 to 5:30 on weekdays, only if they are next in sequence and their tag, unit number and serial check out. It is read with your Google Drive, read only.</p>' +
+      (d.myDrive ? '' : '<div class="state wait" style="margin-bottom:10px">Connect Google Drive under My account first.</div>') +
+      '<label class="fld"><b>The sheet\'s link</b><input id="eqsUrl" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off" value="' + E(EQS.url) + '"></label>' +
+      '<div class="actions">' + eqsBtn("connect", "Read it and show what it would add") + '</div><p class="sm">Nothing is added until you press Start.</p>';
+  }
+  if(EQS.msg) h += '<p class="sub" role="status">' + E(EQS.msg) + '</p>';
+  return h + '</div>';
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-eqs]"); if(!t || VIEW_AS || t.disabled) return;
+  const a = t.dataset.eqs, body = { action: a };
+  if(t.dataset.tag) body[a === "useSheet" ? "tags" : "tag"] = a === "useSheet" ? [t.dataset.tag] : t.dataset.tag;
+  if(a === "connect"){ const i = $("eqsUrl"); EQS.url = i ? i.value.trim() : ""; body.url = EQS.url; }
+  if((a === "disconnect" || a === "stop" || (a === "useSheet" && !t.dataset.tag)) && t.dataset.sure !== "1"){ t.dataset.sure = "1"; t.textContent = a === "useSheet" ? "Yes, use the sheet for all of them" : a === "stop" ? "Yes, stop checking" : "Yes, disconnect"; return; }
+  eqsDo(body);
+});
+
 /* The shared estimating inbox every estimator's assistant reads (2026-11-20). */
 function estInboxCard(){
   const e = CN.est; if(!e) return "";
@@ -5492,6 +5578,7 @@ VIEWS.connections = {
     if(d.jobtread.working) h += setupCard();
     h += driveAdminCard();
     h += estInboxCard();
+    h += eqsConnectCard();
     if(CN.mail) h += '<div class="card"><h2><span class="lamp' + (CN.mail.connected ? " on" : "") + '"></span>Robots\' mailbox</h2><p class="lede">' + (CN.mail.connected ? "Connected to " + E(CN.mail.email || CN.mail.mailbox || "") + "." : "Not connected. The assistants' emails send from it.") + '</p>' + (CN.mail.connected ? '' : '<button class="btn" data-mail-connect>Connect the mailbox</button>') + '</div>';
     if(ME.claude) h += '<div class="card"><h2><span class="lamp' + (CN.claude && CN.claude.ready ? " on" : "") + '"></span>Ask Claude</h2><p class="lede">' + (CN.claude && CN.claude.ready ? "Ready. People with Can ask Claude ticked see the Claude button in the corner of every page." : "Needs ANTHROPIC_API_KEY in Netlify, from A&amp;M's own account at console.anthropic.com. Until then the button still offers Continue in my own Claude.") + '</p></div>';
     h += '</div>';
@@ -6651,7 +6738,12 @@ const CCTOUR = (function(){
     if(!step.gate){ gateOk = true; return; }
     gateOk = false;
     const pass = () => { if(!gateOk){ gateOk = true; paint(); } };
-    const h = e => { if(e.target && e.target.closest && e.target.closest(step.gate.click)) setTimeout(pass, 250); };
+    /* Doing what the step asked moves the tour on by itself (2026-11-20).
+       Before, pressing a step on the flow strip opened the job list under
+       the tour's dark shade and only lit up Next, so people pressed and
+       saw nothing happen. The next step is the one that shows what opened. */
+    const did = () => { if(gateOk || !liveTour || steps[i] !== step) return; gateOk = true; clearGate(); show(i + 1, 1); };
+    const h = e => { if(e.target && e.target.closest && e.target.closest(step.gate.click)) setTimeout(did, 350); };
     document.addEventListener("click", h, true);
     gateOff = () => document.removeEventListener("click", h, true);
     releaseTimer = setTimeout(pass, RELEASE_MS);   /* a nudge, never a lock */
@@ -6670,7 +6762,7 @@ const CCTOUR = (function(){
       '<div class="cct-foot"><button class="cct-mute" id="cctMute">' + (muted ? "Play the voice" : "Stop the voice") + '</button>' +
       '<div class="cct-nav">' + (i > 0 ? '<button class="cct-back" id="cctBack">Back</button>' : '') +
       '<button class="cct-next" id="cctNext"' + (gateOk ? '' : ' disabled') + '>' + (last ? "Finish" : "Next") + '</button></div></div>' +
-      (gateOk ? '' : '<div class="cct-wait">Have a go at it, then Next opens.</div>');
+      (gateOk ? '' : '<div class="cct-wait">Go ahead and press it. The tour moves on by itself.</div>');
     q("#cctSkip").onclick = finish;
     q("#cctMute").onclick = () => setMuted(!muted);
     const b = q("#cctBack"); if(b) b.onclick = () => show(i - 1, -1);

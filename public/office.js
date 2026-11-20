@@ -1672,6 +1672,10 @@
         <a class="back-link" href="#/setup">Back to settings</a>
         <h2>Add gear or materials</h2>
         <p class="muted">One thing is a form. A list is a paste out of Excel. Nothing is added until you have read the table it builds.</p>
+        ${S.catalog.settings && S.catalog.settings.equipmentSheet && S.catalog.settings.equipmentSheet.link ? `<div class="panel note">
+          <h2>The equipment sheet is the master list</h2>
+          <p class="small">Add new machines on <a href="${esc(S.catalog.settings.equipmentSheet.link)}" target="_blank" rel="noopener">the equipment sheet</a>, in sequence. They appear here within 15 minutes in working hours. A machine added here instead must also go on the sheet, or the office sees it listed as missing from the sheet.</p>
+        </div>` : ''}
       </div>
 
       <div class="panel">
