@@ -14,16 +14,18 @@ let n = 0; const ok = m => { n++; console.log("ok", m); };
 
 const dennis = { id: "d1", name: "Dennis Vries", email: "dennis@example.test", title: "Estimator", areas: ["office", "assistants"], level: "edit", pwv: "1", assistant: "estimator" };
 const amir = { id: "a1", name: "Amir Faiz", email: "amir@example.test", areas: ["office", "field", "assistants"], level: "admin", pwv: "1", assistant: "exec" };
-await s.setJSON(ACCOUNTS, { accounts: { d1: dennis, a1: amir }, settings: { idleHours: 8 } });
+const brenda = { id: "b1", name: "Brenda Williams", email: "brenda@example.test", title: "Accounting and Payroll Clerk", areas: ["office", "money", "payroll", "assistants"], level: "edit", pwv: "1" };
+await s.setJSON(ACCOUNTS, { accounts: { d1: dennis, a1: amir, b1: brenda }, settings: { idleHours: 8 } });
 const later = Date.now() + 3600000;
 await s.setJSON("inbox-d1", { inboxes: [{ email: "dennis@example.test", refresh_token: "r", access_token: "owntok", expires_at: later }] });
+await s.setJSON("inbox-b1", { inboxes: [{ email: "brenda@example.test", refresh_token: "r", access_token: "brendatok", expires_at: later }] });
 await s.setJSON("inbox-a1", { inboxes: [{ email: "amir@example.test", refresh_token: "r", access_token: "amirtok", expires_at: later }] });
 await s.setJSON("inbox-shared-estimating", { inboxes: [{ email: "estimating@example.test", refresh_token: "r", access_token: "sharedtok", expires_at: later }] });
 await s.setJSON("cc-cache-claims", { at: Date.now(), data: { claims: { J1: { jobId: "J1", jobNumber: "26-00140", by: "Amir Faiz", byIds: ["m-amir"], at: "2026-11-20 13:30" } } } });
 process.env.ANTHROPIC_API_KEY = "test";
 
 let sortPrompt = "";
-const mailFor = { owntok: ["m1"], sharedtok: ["m2", "m3"], amirtok: ["m1"] };
+const mailFor = { owntok: ["m1"], sharedtok: ["m2", "m3"], amirtok: ["m1"], brendatok: ["m1"] };
 const subj = { m1: "Site walk Tuesday", m2: "Invitation to tender: Westmount School", m3: "Addendum 2 for 26-00140" };
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url), j = b => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
@@ -87,5 +89,16 @@ assert.doesNotMatch(sortPrompt, /This person is an estimator/);
 assert.match(sortPrompt, /not_yours: estimating mail/);
 assert.doesNotMatch(sortPrompt, /estimating@example\.test/);
 ok("an executive's sort is unchanged and never reads the estimating inbox");
+
+/* Every other position is told who they are too (2026-11-20). */
+r = await call("b1");
+assert.equal(r.status, 200); assert.equal(r.body.role, "accounting"); assert.ok(r.body.roleInfo.pages.includes("payroll"));
+r = await call("b1", { action: "triage" });
+assert.equal(r.status, 200);
+assert.match(sortPrompt, /Brenda Williams is Accounting and Payroll Clerk, the accounting and payroll clerk/);
+assert.match(sortPrompt, /What needs them most: bills and supplier statements, payments in and out/);
+assert.match(sortPrompt, /not_yours: estimating mail, site and scheduling mail, or mail where/);
+assert.doesNotMatch(sortPrompt, /This person is an estimator/);
+ok("Brenda's assistant is on without anyone setting it, and her sort knows she is accounting and payroll");
 
 console.log(`\n${n} estimator mail checks passed`);

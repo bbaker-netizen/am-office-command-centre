@@ -30,6 +30,7 @@
    Changing or resetting a password, or switching an account off, ends every
    token that person holds, on every device, at their next click. */
 
+import { ROLE_KEYS, roleFromTitle, roleFromAreas } from "./_roles.mjs";
 import { authStore, signToken, readToken } from "./_auth.mjs";
 import { withLock } from "./_lock.mjs";
 
@@ -48,7 +49,10 @@ export const IDLE_CHOICES = [1, 4, 8, 12];
    "project" for project managers and field leads (built, held back until
    Craig and Amir switch it on for staff), "none". Craig and Amir start as
    executive assistants and open on their briefing. */
-export const ASSISTANTS = ["exec", "estimator", "project", "none"];
+/* From 2026-11-20 every person has one, for their position (Craig: "Each
+   person needs an assistant regardless"). See _roles.mjs. "none" is still
+   accepted from older saves, but means "pick it from the job title". */
+export const ASSISTANTS = [...ROLE_KEYS, "none"];
 /* The master admin (Bruce, 2026-11-15): one level above admin. Named only in
    Netlify (MASTER_ADMINS, comma-separated email addresses), so nobody can
    make themselves master from inside the app. Only a master admin can:
@@ -62,8 +66,10 @@ export function isMaster(a) {
 export const LANDINGS = ["brief", "overview"];
 const EXEC_START = ["craig@amabatement.com", "amir@amabatement.com"];
 export function assistantOf(a) {
-  if (a && ASSISTANTS.includes(a.assistant)) return a.assistant;
-  return a && EXEC_START.includes(String(a.email || "").toLowerCase()) ? "exec" : "none";
+  if (!a) return "none";
+  if (ROLE_KEYS.includes(a.assistant)) return a.assistant;
+  if (EXEC_START.includes(String(a.email || "").toLowerCase())) return "exec";
+  return roleFromTitle(a.title) || roleFromAreas(a.areas);
 }
 /* Walkthroughs a person has seen or put away, kept on their account so the
    tour does not open again on another computer, in another browser, or after

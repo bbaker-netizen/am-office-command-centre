@@ -37,6 +37,7 @@ import { accountGate, sees, canEdit, readAccounts, userOf } from "./_accounts.mj
 import { withLock } from "./_lock.mjs";
 import { cleanBid } from "./_assist.mjs";
 import { applyClaims } from "./_claims.mjs";
+import { ROLES, ROLE_KEYS, roleInfo } from "./_roles.mjs";
 import { cleanEntry, addItem, rank, buildCheckin, chaseStep, chaseStatus, chaseDraft, matchPayments, callContext, parseSaying, localNow, KINDS, newId, mailToList, mailDone, listDoneForMail, nextWorkingDay, learnNotMine, setVip, rulesText, afterThread, queueOf } from "./_assist.mjs";
 import { claude, jsonFrom, hasKey, fastModel, draftModel, OUTSIDE_RULE, STYLE } from "./_claudecall.mjs";
 import { readInboxes, tokenFor, SHARED_ESTIMATING, recentMail, makeDraft, heardFrom, addressOf, getMessage, threadInfo, sentSamples, updateDraft, sendDraft, sendNow, hasCalendar, calEvents, calRespond } from "./_gmail.mjs";
@@ -120,11 +121,8 @@ export async function recentPayments(sinceDate) {
 }
 
 /* ----------------------------------------------------- mail sorting */
-const ROLE_WORDS = u => u.assistant === "exec"
-  ? `${u.name} is ${u.title || "a leader"} at A&M Abatement Services (hazardous materials abatement, demolition and restoration, Edmonton and Calgary). Owners: Craig and Amir.`
-  : u.assistant === "estimator"
-  ? `${u.name} is ${u.title || "an estimator"} at A&M Abatement Services (hazardous materials abatement, demolition and restoration, Edmonton and Calgary). Their work: bid invites and tenders, closing dates, site visits and walkthroughs, quotes and estimates, following up quotes that have no answer, addenda and RFIs. Mail to the shared estimating inbox is for the estimators.`
-  : `${u.name} is ${u.title || "a project manager"} at A&M Abatement Services.`;
+/* Who the person is and what their work is, by position (_roles.mjs). */
+const ROLE_WORDS = u => { const r = ROLES[u.assistant] || ROLES.admin; return `${u.name} is ${u.title ? u.title + ", " : ""}${r.words} What needs them most: ${r.focus}.`; };
 /* For an estimator: what to pick out of bid mail, and who has taken which job. */
 const BID_RULE = (u, taken) => u.assistant !== "estimator" ? "" : `
 This person is an estimator. Add "bid" to each object: null, or {"kind":"invite"|"addendum"|"rfi"|"site_visit"|"quote_reply","job":"the A&M job number if the email names one (like 26-00123), or empty","project":"project or site name, under 8 words","closes":"YYYY-MM-DD the bid closes or the site visit is, or empty"}. invite: a new tender or invitation to bid. addendum and rfi: changes or questions on a bid already open. site_visit: a walkthrough or site visit being set up. quote_reply: a client answering a quote A&M sent. All of these are needs_you, unless someone else has taken that job (below). A bid invite gets draft false: they read the documents first.
@@ -171,7 +169,7 @@ export async function triage(s, u, { max = 10, autoDraft = 0 } = {}) {
       model: fastModel(), max_tokens: Math.min(8000, 600 + msgs.length * 220),
       system: `You sort a person's email for their personal assistant. ${ROLE_WORDS(u)} Their own addresses: ${[u.email].concat(inboxes.map(x => x.email)).filter((x, i, a) => x && a.indexOf(x) === i).join(", ")}. ${OUTSIDE_RULE}
 Return only a JSON array, one object per email, in the same order: {"id":"...","bucket":"needs_you"|"payment"|"fyi"|"not_yours"|"junk","why":"under 12 words","who":"sender's name","action":"what ${u.name.split(" ")[0]} has to do, starting with a verb, under 12 words, naming the job, person or amount (for example: Send Bryan's $800 LOA for Cana Lloydminster), or empty","payment":null or {"direction":"in"|"out","name":"who paid or was paid","amount":number},"draft":true|false,"handTo":"email address of the one colleague below who should deal with it instead, or empty"}.
-needs_you: a person asking ${u.name.split(" ")[0]} for a decision, an approval, an answer, money, a document or a call. This includes staff and partners at A&M writing to ${u.name.split(" ")[0]} directly (their address is in To), a customer or supplier chasing an invoice or a payment, a bank or insurer asking for something, and a JobTread message posted to ${u.name.split(" ")[0]} that asks for something. If ${u.name.split(" ")[0]} is the one who has to act, it is needs_you even when others are copied. payment: an e-transfer, deposit, bank notice or payment portal notice showing money in or out. not_yours: ${u.assistant === "estimator" ? "" : "estimating mail (bid invitations, tenders, addenda, plan downloads), or "}mail where ${u.name.split(" ")[0]} is only copied (in Cc) and someone else is clearly handling it. Never use not_yours for mail sent To ${u.name.split(" ")[0]} that asks them for something. fyi: worth knowing, nothing to do. junk: marketing, newsletters, automatic notices with nothing to do.
+needs_you: a person asking ${u.name.split(" ")[0]} for a decision, an approval, an answer, money, a document or a call. This includes staff and partners at A&M writing to ${u.name.split(" ")[0]} directly (their address is in To), a customer or supplier chasing an invoice or a payment, a bank or insurer asking for something, and a JobTread message posted to ${u.name.split(" ")[0]} that asks for something. If ${u.name.split(" ")[0]} is the one who has to act, it is needs_you even when others are copied. payment: an e-transfer, deposit, bank notice or payment portal notice showing money in or out. not_yours: ${(ROLES[u.assistant] || {}).notMine ? (ROLES[u.assistant].notMine + ", or ") : ""}mail where ${u.name.split(" ")[0]} is only copied (in Cc) and someone else is clearly handling it. Never use not_yours for mail sent To ${u.name.split(" ")[0]} that asks them for something. fyi: worth knowing, nothing to do. junk: marketing, newsletters, automatic notices with nothing to do.
 draft is true only when a short written reply would help.
 The Conversation line under each email says what has happened since. If ${u.name.split(" ")[0]} has already replied, it is fyi. If someone else at A&M has already replied and is dealing with it, it is not_yours unless ${u.name.split(" ")[0]} is still asked for something only they can give.
 handTo: only when the email is plainly another person's job and they are in this list. Colleagues: ${staff.map(x => `${x.name}${x.title ? " (" + x.title + ")" : ""} <${x.email}>`).join("; ") || "none listed"}.${BID_RULE(u, taken)}
@@ -307,7 +305,7 @@ export async function runFor(s, u, slot, { heavy = true } = {}) {
   if (slot === "sort") return { slot, at: now.toISOString(), notes };
   if (slot === "morning") { try { notes.push(...await runChases(s, u, L.date)); } catch (e) { notes.push("The chases did not run: " + e.message); } }
   let pays = [];
-  if (u.assistant === "exec" && sees(u, "money")) { try { pays = await recentPayments(new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)); } catch (e) {} }
+  if ((u.assistant === "exec" || u.assistant === "accounting") && sees(u, "money")) { try { pays = await recentPayments(new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)); } catch (e) {} }
   const c = await change(s, u.id, d => {
     for (const m of matchPayments(d.items, pays)) { const it = d.items.find(x => x.id === m.id); if (it && !it.done) { it.done = true; it.doneAt = now.toISOString(); it.doneWhy = m.reason; } }
     mailToList(d, L.date, now.toISOString());
@@ -357,8 +355,9 @@ export default async (req) => {
   const denied = await accountGate(req, s);
   if (denied) return denied;
   const u = req.amUser;
-  const live = u.assistant === "exec" || u.assistant === "estimator" || (u.assistant === "project" && (u.projectLive || u.admin));
-  if (!live && !u.viewAs) return json({ error: "off", message: u.assistant === "project" ? "Your project assistant is ready but not switched on for staff yet. Craig and Amir switch it on." : "You do not have a personal assistant yet. An admin sets one up on People and access." }, 403);
+  /* Everyone has one, for their position (2026-11-20). */
+  const live = ROLE_KEYS.includes(u.assistant);
+  if (!live && !u.viewAs) return json({ error: "off", message: "Your assistant is not set up. An admin picks it on People and access." }, 403);
   const url = new URL(req.url), today = localNow().date;
 
   try {
@@ -379,7 +378,7 @@ export default async (req) => {
          It stays look only either way. */
       const hideMail = !!u.viewAs && !u.viewAs.mail;
       return json({
-        role: u.assistant, live, name: u.name, today, settings: d.settings,
+        role: u.assistant, roleInfo: roleInfo(u.assistant), live, name: u.name, today, settings: d.settings,
         open: rank(d.items, today), held: d.items.filter(x => x.held && !x.done), doneToday: d.items.filter(x => x.done && String(x.doneAt || "").slice(0, 10) === today),
         doneRecent: d.items.filter(x => x.done && x.doneWhy).slice(0, 10),
         checkins: d.checkins.slice(0, 6),
@@ -568,7 +567,7 @@ function countBuckets(items) { const c = {}; for (const x of items || []) if (!x
 /* Everyone who has a live assistant, for the scheduled check-ins. */
 export async function assistantPeople(s) {
   const { accounts, settings } = await readAccounts(s);
-  return Object.values(accounts).filter(a => a.active !== false).map(a => userOf(a, settings)).filter(u => u.assistant === "exec" || u.assistant === "estimator" || (u.assistant === "project" && u.projectLive));
+  return Object.values(accounts).filter(a => a.active !== false).map(a => userOf(a, settings)).filter(u => ROLE_KEYS.includes(u.assistant));
 }
 
 export const config = { path: "/api/assistant" };
