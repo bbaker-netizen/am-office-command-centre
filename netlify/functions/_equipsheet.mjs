@@ -87,6 +87,9 @@ export function plan(rows, catalog, approved = []) {
   const deleted = new Set(Object.keys(((catalog && catalog.deleted) || {}).units || {}).map(x => x.toUpperCase()));
   const byTag = new Map(units.map(u => [String(u.id).toUpperCase(), u]));
   const serials = new Map(units.filter(u => !noSerial(u.serial)).map(u => [alnum(u.serial), u.id]));
+  /* A machine the app has with no serial will take the sheet's serial at
+     this check, so that serial counts as taken for any new row too. */
+  for (const r of rows) { const u = byTag.get(String(r.tag || "").toUpperCase()); if (u && noSerial(u.serial) && !noSerial(r.serial) && !serials.has(alnum(r.serial))) serials.set(alnum(r.serial), u.id); }
   const ok = new Set((approved || []).map(x => String(x).toUpperCase()));
   const max = {};
   for (const id of [...byTag.keys(), ...deleted]) { const pn = prefixNum(id); if (pn) max[pn.p] = Math.max(max[pn.p] || 0, pn.n); }
@@ -193,6 +196,25 @@ export async function applyChanges(s, changed, tags, by, now = new Date().toISOS
   throw new Error("The shop's list kept changing. Try again in a moment.");
 }
 
+const FILLABLE = ["Serial", "Make and model", "Unit number", "Name", "Group"];
+export function splitFills(changed, cat) {
+  const used = new Map((cat.units || []).filter(u => !noSerial(u.serial)).map(u => [alnum(u.serial), String(u.id).toUpperCase()]));
+  const fills = [], rest = [];
+  for (const c of changed || []) {
+    const f = [], r = [];
+    for (const d of c.diffs) {
+      const blankApp = d.field === "Serial" ? noSerial(d.app) : !String(d.app || "").trim();
+      const hasSheet = d.field === "Serial" ? !noSerial(d.sheet) : !!String(d.sheet || "").trim();
+      const clash = d.field === "Serial" && used.has(alnum(d.sheet)) && used.get(alnum(d.sheet)) !== String(c.tag).toUpperCase();
+      if (FILLABLE.includes(d.field) && blankApp && hasSheet && !clash) { f.push(d); if (d.field === "Serial") used.set(alnum(d.sheet), String(c.tag).toUpperCase()); }
+      else r.push(d);
+    }
+    if (f.length) fills.push({ ...c, diffs: f });
+    if (r.length) rest.push({ ...c, diffs: r });
+  }
+  return { fills, rest };
+}
+
 /* One check. apply false shows what it would do without changing anything. */
 export async function runCheck(s, { token, apply, by = "Equipment sheet" }) {
   const cfg = (await s.get(KEY, { type: "json" })) || {};
@@ -203,8 +225,19 @@ export async function runCheck(s, { token, apply, by = "Equipment sheet" }) {
   const p = plan(rows, cat, cfg.approved || []);
   let added = [];
   if (apply && p.add.length) added = (await addToCatalog(s, p.add, by)).added;
+  /* Blanks are filled on their own (Craig, 2026-11-20: "it still says 50
+     without serial numbers"). Where the app has nothing (no serial, no make
+     and model, no unit number) and the sheet has it, the sheet's value goes
+     straight in on every check. Only real disagreements, where both have a
+     value and they differ, wait for a person. A serial already on another
+     machine is never copied. */
+  const { fills, rest } = splitFills(p.changed, cat);
+  let filled = [];
+  if (apply && fills.length) filled = (await applyChanges(s, fills, null, by)).updated;
+  const changed = apply ? rest : p.changed;
   const result = { at: new Date().toISOString(), applied: !!apply, rows: rows.length, added, wouldAdd: apply ? [] : p.add.map(u => u.id),
-    held: p.held, changed: p.changed.slice(0, 100), changedCount: p.changed.length, appOnly: p.appOnly.slice(0, 200), appOnlyCount: p.appOnly.length, deletedOnSheet: p.deletedOnSheet };
-  Object.defineProperty(result, "changedAll", { value: p.changed, enumerable: false });
+    filled, wouldFill: apply ? [] : fills.map(f => f.tag), fillCount: fills.length,
+    held: p.held, changed: changed.slice(0, 100), changedCount: changed.length, appOnly: p.appOnly.slice(0, 200), appOnlyCount: p.appOnly.length, deletedOnSheet: p.deletedOnSheet };
+  Object.defineProperty(result, "changedAll", { value: changed, enumerable: false });
   return result;
 }

@@ -5689,7 +5689,7 @@ function eqsDo(body, btnLabel){
     .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw b; return b; })
     .then(b => { const res = b.result || {};
       EQS.msg = body.action === "useSheet" ? "The sheet's values are on " + plural((b.updated || []).length, "machine") + "."
-        : res.applied ? (res.added && res.added.length ? "Added " + res.added.join(", ") + "." : "Checked. Nothing new to add.") : res.wouldAdd ? "Read the sheet: " + plural(res.rows, "row") + "." : "Done.";
+        : res.applied ? ((res.added && res.added.length ? "Added " + res.added.join(", ") + ". " : "Nothing new to add. ") + (res.filled && res.filled.length ? "Filled blanks (serials and the like) on " + plural(res.filled.length, "machine") + "." : "")) : res.wouldAdd ? "Read the sheet: " + plural(res.rows, "row") + "." : "Done.";
       if(body.action === "disconnect") EQS.msg = "Disconnected. The shop keeps every machine it has."; })
     .catch(e => { EQS.msg = e.message || "That did not work."; })
     .finally(() => { EQS.busy = ""; EQS.d = null; eqsLoad(); });
@@ -5716,7 +5716,8 @@ function eqsCard(){
     (d.auto ? 'New rows are added to the shop every 15 minutes, 7:00 to 5:30 on weekdays, if they pass the checks.' : 'It is connected but not checking on its own yet.') +
     ' Last checked ' + E(L.at ? whenSeen(L.at) : "never") + (d.connectedByName ? ', read with ' + E(d.connectedByName) + '\'s Google Drive' : '') + '.</p>';
   if(L.error) h += '<div class="state err" style="margin-bottom:10px">' + E(L.error) + '</div>';
-  if(!d.auto && L.wouldAdd) h += '<div class="state wait" style="margin-bottom:10px">Ready to start: ' + (L.wouldAdd.length ? plural(L.wouldAdd.length, "new machine") + ' to add (' + E(L.wouldAdd.slice(0, 12).join(", ")) + (L.wouldAdd.length > 12 ? ", …" : "") + ')' : 'nothing new to add') + '.</div>';
+  if(!d.auto && L.wouldAdd) h += '<div class="state wait" style="margin-bottom:10px">Ready to start: ' + (L.wouldAdd.length ? plural(L.wouldAdd.length, "new machine") + ' to add (' + E(L.wouldAdd.slice(0, 12).join(", ")) + (L.wouldAdd.length > 12 ? ", …" : "") + ')' : 'nothing new to add') + (L.fillCount ? ', and blanks to fill from the sheet on ' + plural(L.fillCount, "machine") + ' (serials, make and model, unit numbers)' : '') + '. Press Start and both happen.</div>';
+  if(d.auto && L.filled && L.filled.length) h += '<div class="state" style="margin-bottom:10px">Last check filled blanks from the sheet on ' + plural(L.filled.length, "machine") + ': ' + E(L.filled.slice(0, 12).join(", ")) + (L.filled.length > 12 ? ", …" : "") + '.</div>';
   const acts = [];
   if(d.admin && !d.auto) acts.push(eqsBtn("start", "Start: add these and check every 15 minutes"));
   if(CAN_EDIT) acts.push(eqsBtn("check", "Check now", "", true));
