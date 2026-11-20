@@ -38,8 +38,7 @@ import { readFails, addFail, clearFails, lockedFor, ipKey, ipBlocked, ipFail, ch
 import {
   AREAS, LEVELS, PRESETS, IDLE_CHOICES, ACCOUNTS_LOG, normEmail, okEmail, hashPassword, checkPassword, needsRehash,
   passwordProblem, tempPassword, readAccounts, changeAccounts, logAccount, publicAccount, activeAdmins,
-  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS, isMaster, TOUR_KEY, toursOf, signedInBeforeTours, MAIN_TOUR, TOURS_KEPT_FROM, BRANCHES
-} from "./_accounts.mjs";
+  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS, isMaster, TOUR_KEY, toursOf, signedInBeforeTours, MAIN_TOUR, TOURS_KEPT_FROM, BRANCHES, cleanLayout, layoutsOf, LAYOUT_PAGES } from "./_accounts.mjs";
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -280,6 +279,21 @@ export default async (req) => {
         return x;
       });
       return json({ ok: true, tours: toursOf(saved) });
+    }
+    /* My day arranged the person's own way: order, hidden cards, sizes.
+       Anyone signed in may arrange their own page; Reset clears it. */
+    if (action === "layout") {
+      const page = String(body.page || "");
+      if (!LAYOUT_PAGES.includes(page)) return bad("Which page?");
+      const lay = body.layout === null ? null : cleanLayout(body.layout);
+      if (body.layout !== null && !lay) return bad("That arrangement does not look right.");
+      const saved = await changeAccounts(s, doc => {
+        const x = doc.accounts[me.id];
+        const l = x.layouts && typeof x.layouts === "object" ? x.layouts : {};
+        if (lay) l[page] = lay; else delete l[page];
+        x.layouts = l; return x;
+      });
+      return json({ ok: true, layouts: layoutsOf(saved) });
     }
     if (action === "tourReset") {
       await changeAccounts(s, doc => { const x = doc.accounts[me.id]; delete x.tours; return x; });

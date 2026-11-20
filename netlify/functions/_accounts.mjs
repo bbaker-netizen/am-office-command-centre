@@ -270,6 +270,27 @@ export async function accountGate(req, s = authStore(), opts = {}) {
   return null;
 }
 
+/* Each person's own arrangement of a page (My day), kept on their account
+   so it follows them to every device (Craig, 2026-11-20). Cards are named by
+   short keys; a size puts a card across the page (full), in the main column
+   (wide) or in the side column (narrow). */
+export const LAYOUT_PAGES = ["myday"];
+export const LAYOUT_SIZES = ["full", "wide", "narrow"];
+const LAYOUT_KEY = /^[a-z0-9][a-z0-9-]{0,47}$/;
+export function cleanLayout(v) {
+  if (!v || typeof v !== "object") return null;
+  const keys = x => (Array.isArray(x) ? x : []).map(k => String(k || "")).filter(k => LAYOUT_KEY.test(k));
+  const order = [...new Set(keys(v.order))].slice(0, 60), hidden = [...new Set(keys(v.hidden))].slice(0, 60);
+  const size = {};
+  if (v.size && typeof v.size === "object") for (const [k, z] of Object.entries(v.size).slice(0, 60)) if (LAYOUT_KEY.test(k) && LAYOUT_SIZES.includes(z)) size[k] = z;
+  return { order, hidden, size };
+}
+export function layoutsOf(a) {
+  const out = {}, l = a && a.layouts && typeof a.layouts === "object" ? a.layouts : {};
+  for (const p of LAYOUT_PAGES) { const c = cleanLayout(l[p]); if (c) out[p] = c; }
+  return out;
+}
+
 /* The person a token stands for, as every function sees them. */
 export function userOf(a, settings = {}) {
   const areas = (a.areas || []).filter(x => AREAS.includes(x));
@@ -278,7 +299,7 @@ export function userOf(a, settings = {}) {
     edit: a.level === "edit" || a.level === "admin", admin: a.level === "admin",
     office: areas.includes("office"), mustChange: !!a.mustChange, idleHours: settings.idleHours,
     claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), projectLive: !!settings.projectAssistantLive, master: isMaster(a),
-    tours: toursOf(a), branch: branchOf(a)
+    tours: toursOf(a), branch: branchOf(a), layouts: layoutsOf(a)
   };
   u.role = areas.includes("office") && areas.includes("field") ? "owner" : areas.includes("office") ? "office" : areas.includes("field") ? "field" : "none";
   return u;
