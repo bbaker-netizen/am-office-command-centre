@@ -977,6 +977,13 @@ const isSubbed = j => SUBBED_PMS.includes(pm(j));
 const isSpecial = j => /^99-/.test(j._number || "") || /^test\b/i.test(j._name || "") || /\(overhead\)/i.test(j._name || "") || /^office work$/i.test(j._name || "");
 const live = () => (S.jobs || []).filter(j => isOpen(j) && !isSpecial(j));
 const jtUrl = id => "https://app.jobtread.com/jobs/" + encodeURIComponent(id);
+/* A quote (or any JobTread document) opens on its own page (Craig,
+   2026-11-20: "anything that is referred to should have a link"). */
+const jtDocUrl = (jobId, docId) => jtUrl(jobId) + "/documents/" + encodeURIComponent(docId);
+function quoteLink(o, label){
+  const t = label || (E(o.name || "Quote") + " · " + M(o.price));
+  return o && o.id && o.job && o.job.id ? '<a class="joblink" href="' + jtDocUrl(o.job.id, o.id) + '" target="_blank" rel="noopener" title="Open this quote in JobTread">' + t + '</a>' : t;
+}
 function jobCell(j){
   return '<span class="nm">' + E(j._number) + ' ' + E(j._name) + '</span><span class="sm">' + E(j._cust || j._addr || "") + '</span>';
 }
@@ -1351,7 +1358,7 @@ function openJob(id){
   facts += '<dt>Opened in JobTread</dt><dd>' + E(showDate(j._created)) + '</dd>';
   const quotes = (S.orders || []).filter(o => o.job && o.job.id === id);
   const qhtml = quotes.length ? '<div class="scroll"><table><thead><tr><th>Quote</th><th>State</th><th class="r">Before GST</th></tr></thead><tbody>' +
-    quotes.map(o => '<tr><td>' + E(o.name || "Quote") + '<span class="sm">' + E(showDate(o.issueDate) || "Not issued") + '</span></td><td><span class="tag ' +
+    quotes.map(o => '<tr><td>' + quoteLink(o, E(o.name || "Quote")) + '<span class="sm">' + E(showDate(o.issueDate) || "Not issued") + '</span></td><td><span class="tag ' +
       (o.status === "approved" ? "clear" : o.status === "denied" ? "stop" : o.status === "pending" ? "" : "mute") + '">' + E(o.status) + '</span></td><td class="r num">' + M(o.price) + '</td></tr>').join("") +
     '</tbody></table></div>' : '<div class="state">No quote built in JobTread for this job.</div>';
   const gaps = gapsOf(j);
@@ -1393,6 +1400,7 @@ function searchJobs(q){
 
 /* ---------- wiring ---------- */
 document.addEventListener("click", ev => {
+  if(ev.target.closest && ev.target.closest("a[href]")) return;
   const t = ev.target.closest("[data-sec],[data-tab],[data-job],[data-list],[data-go],[data-pm],[data-back],[data-hit],[data-expand],[data-collapse]");
   if(!t) return;
   if(t.dataset.expand){ const y = window.scrollY; EXPANDED[t.dataset.expand] = 1; render(); window.scrollTo(0, y); return; }
@@ -2172,7 +2180,7 @@ VIEWS.estimating = {
         (noDoc.length ? ' Another ' + plural(noDoc.length, "job") + ' <button class="go" data-list="nodoc">See them</button> say a quote went out, but no quote was built in JobTread, so they cannot be timed or valued.' : '') + '</p>' +
         tbl('<th>Job</th><th>Bid type</th><th class="r">Value</th><th class="r">Waiting</th>', q.list.map(x => {
           const cls = x.age > 30 ? "stop" : x.age > 14 ? "caution" : "mute";
-          return '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + takenTag(x.j) + '</td><td>' + E(F(x.j["Bid Type"]) || "") + '<span class="sm">' + E(st(x.j)) + '</span></td><td class="r num">' + M(x.o.price) + '</td><td class="r"><span class="tag ' + cls + '">' + (x.age === null ? "No date" : x.age + " days") + '</span><span class="sm">' + E(showDate(x.o.issueDate) || "") + '</span></td></tr>';
+          return '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + takenTag(x.j) + '</td><td>' + E(F(x.j["Bid Type"]) || "") + '<span class="sm">' + E(st(x.j)) + '</span></td><td class="r num">' + quoteLink(x.o, M(x.o.price)) + '</td><td class="r"><span class="tag ' + cls + '">' + (x.age === null ? "No date" : x.age + " days") + '</span><span class="sm">' + E(showDate(x.o.issueDate) || "") + '</span></td></tr>';
         }), "No quotes waiting on an answer.", 15);
     }
     h += '</div>';
@@ -2341,7 +2349,7 @@ function asItem(it){
     it.cfItemId ? '<span class="md-chip cy">In the cash flow</span>' : ""
   ].filter(Boolean).join("");
   return '<li class="asit' + (it.pinned ? " pin" : "") + '"><button type="button" class="tick" data-as-tick="' + E(it.id) + '" aria-label="Done: ' + E(it.text) + '">' + ico("check") + '</button>' +
-    '<div class="tx"><b>' + E(it.text) + '</b>' + (chips ? '<div class="md-chips">' + chips + '</div>' : '') + '</div>' +
+    '<div class="tx"><b>' + linkNums(E(it.text)) + '</b>' + (chips ? '<div class="md-chips">' + chips + '</div>' : '') + '</div>' +
     '<div class="ac">' + (it.mailThread ? '<a class="linkish" href="' + E(asMailLink(it.inbox, it.mailThread)) + '" target="_blank" rel="noopener" title="' + E(it.subject || "") + '">Open email</a>' : '') + '<button type="button" class="linkish" data-as-pin="' + E(it.id) + '">' + (it.pinned ? "Unpin" : "Move to top") + '</button><button type="button" class="linkish" data-as-remove="' + E(it.id) + '">Remove</button></div></li>';
 }
 /* "2026-11-21" as "Sat, Nov 21"; today and tomorrow by name. */
@@ -2381,8 +2389,8 @@ function asQueue(){
   h += q.map(x => {
     const dr = x.draft && x.draft.draftId && !x.draft.sent ? x.draft : null, id = E(x.id);
     const blank = dr && /\[[^\]\n]{1,200}\]/.test(dr.body || "");
-    let b = '<li class="asq"><div class="aqwho">' + E(x.who || x.address) + (x.vip ? '<span class="tag clear">Always matters</span>' : '') + '</div><div class="subj">' + E(x.subject || "(no subject)") + ' <span class="sm">' + E(x.inbox) + '</span></div>' +
-      '<div class="ask">' + E(x.action || x.why || "Needs your answer") + (x.action && x.why ? '<small>' + E(x.why) + '</small>' : '') + ((x.othersReplied || []).length ? '<small>Already replied: ' + E(x.othersReplied.join(", ")) + '</small>' : '') + '</div>';
+    let b = '<li class="asq"><div class="aqwho">' + E(x.who || x.address) + (x.vip ? '<span class="tag clear">Always matters</span>' : '') + '</div><div class="subj">' + linkNums(E(x.subject || "(no subject)")) + ' <span class="sm">' + E(x.inbox) + '</span></div>' +
+      '<div class="ask">' + linkNums(E(x.action || x.why || "Needs your answer")) + (x.action && x.why ? '<small>' + linkNums(E(x.why)) + '</small>' : '') + ((x.othersReplied || []).length ? '<small>Already replied: ' + E(x.othersReplied.join(", ")) + '</small>' : '') + '</div>';
     if(AQ.edit === x.id && dr) b += '<div data-as-form><textarea data-aq-text="' + id + '" aria-label="Your reply">' + E(dr.body || "") + '</textarea>' +
       '<div class="asq-btns"><button type="button" class="btn" data-aq="sendEdited" data-id="' + id + '">Send to ' + E(dr.to || x.address) + '</button><button type="button" class="btn ghost" data-aq="cancel">Cancel</button><span class="sm">Fill in any [square bracket] before you send.</span></div></div>';
     else if(dr) b += '<details class="asq-draft" open><summary>Reply drafted for you' + (blank ? ' · has a blank to fill in' : '') + '</summary><pre>' + E(dr.body || "") + '</pre></details>';
@@ -2401,7 +2409,13 @@ function asQueue(){
   }).join("");
   return h + '</ul></div>';
 }
-/* Today's meetings, and invites still waiting for an answer. */
+/* Today's meetings, and invites still waiting for an answer. Each title opens
+   the event in Google Calendar, and a Meet link shows when there is one. */
+function calLink(e){
+  const t = E(e.title);
+  return (e.link ? '<a class="joblink" href="' + E(e.link) + '" target="_blank" rel="noopener" title="Open in Google Calendar">' + t + '</a>' : t) +
+    (e.meet ? ' <a class="linkish" href="' + E(e.meet) + '" target="_blank" rel="noopener">Join</a>' : '');
+}
 function asCalendar(){
   const d = AS.data, c = d.calendar || {};
   if(c.hidden || !(d.inboxes || []).length) return "";
@@ -2410,9 +2424,9 @@ function asCalendar(){
   const tm = e => e.allDay ? "All day" : new Date(e.start).toLocaleTimeString("en-CA", { hour:"numeric", minute:"2-digit" });
   const dayOf = e => new Date(e.allDay ? e.start + "T12:00:00" : e.start).toLocaleDateString("en-CA", { weekday:"short", month:"short", day:"numeric" });
   const inv = c.invites || [], td = c.today || [];
-  if(inv.length) h += '<div class="md-sec">Waiting for your answer <b>' + inv.length + '</b></div><ul class="ascal">' + inv.map(e => '<li><span class="t">' + E(dayOf(e)) + '<br>' + E(tm(e)) + '</span><div><b>' + E(e.title) + '</b><small>' + E([e.organizer ? "From " + e.organizer : "", e.where].filter(Boolean).join(" · ")) + '</small>' +
+  if(inv.length) h += '<div class="md-sec">Waiting for your answer <b>' + inv.length + '</b></div><ul class="ascal">' + inv.map(e => '<li><span class="t">' + E(dayOf(e)) + '<br>' + E(tm(e)) + '</span><div><b>' + calLink(e) + '</b><small>' + E([e.organizer ? "From " + e.organizer : "", e.where].filter(Boolean).join(" · ")) + '</small>' +
     '<div class="ac"><button type="button" class="btn sm" data-aq="rsvp" data-answer="accept" data-inbox="' + E(e.inbox) + '" data-id="' + E(e.id) + '">Accept</button><button type="button" class="btn ghost sm" data-aq="rsvp" data-answer="maybe" data-inbox="' + E(e.inbox) + '" data-id="' + E(e.id) + '">Maybe</button><button type="button" class="btn ghost sm" data-aq="rsvp" data-answer="decline" data-inbox="' + E(e.inbox) + '" data-id="' + E(e.id) + '">Decline</button></div></div></li>').join("") + '</ul>';
-  h += '<div class="md-sec">Today <b>' + td.length + '</b></div>' + (td.length ? '<ul class="ascal">' + td.map(e => '<li><span class="t">' + E(tm(e)) + '</span><div><b>' + E(e.title) + '</b>' + (e.clash ? ' <span class="tag stop">Overlaps</span>' : '') + (e.status === "needsAction" ? ' <span class="tag caution">Not answered</span>' : e.status === "tentative" ? ' <span class="tag mute">Maybe</span>' : '') +
+  h += '<div class="md-sec">Today <b>' + td.length + '</b></div>' + (td.length ? '<ul class="ascal">' + td.map(e => '<li><span class="t">' + E(tm(e)) + '</span><div><b>' + calLink(e) + '</b>' + (e.clash ? ' <span class="tag stop">Overlaps</span>' : '') + (e.status === "needsAction" ? ' <span class="tag caution">Not answered</span>' : e.status === "tentative" ? ' <span class="tag mute">Maybe</span>' : '') +
     '<small>' + E([e.where, e.people > 1 ? e.people + " people" : ""].filter(Boolean).join(" · ")) + '</small></div></li>').join("") + '</ul>' : '<p class="sub">No meetings today.</p>');
   if((c.errors || []).length) h += '<p class="sub">' + E(c.errors[0]) + '</p>';
   return h + '</div>';
@@ -2429,7 +2443,7 @@ function asInbox(){
   const t = d.triage || {}, items = t.items || [];
   const group = (b, title, open) => { const g = items.filter(x => x.bucket === b); if(!g.length) return "";
     return '<details class="asmail"' + (open ? " open" : "") + '><summary><b>' + E(title) + '</b> <span class="tag ' + (b === "needs_you" ? "stop" : b === "payment" ? "clear" : "mute") + '">' + g.length + '</span></summary><ul>' + g.map(x =>
-      '<li><div><b>' + E(x.who || x.address) + '</b> <span class="sm">' + E(x.inbox) + '</span>' + bidTag(x) + '<div>' + E(x.subject) + '</div><span class="sm">' + E([x.why, x.action, x.payment ? (x.payment.direction === "in" ? "Money in: " : "Money out: ") + x.payment.name + " " + M(x.payment.amount) : ""].filter(Boolean).join(" · ")) + '</span></div>' +
+      '<li><div><b>' + E(x.who || x.address) + '</b> <span class="sm">' + E(x.inbox) + '</span>' + bidTag(x) + '<div>' + linkNums(E(x.subject)) + '</div><span class="sm">' + linkNums(E([x.why, x.action, x.payment ? (x.payment.direction === "in" ? "Money in: " : "Money out: ") + x.payment.name + " " + M(x.payment.amount) : ""].filter(Boolean).join(" · "))) + '</span></div>' +
       '<div class="ac">' + (x.draft ? '<a class="btn ghost sm" href="' + E(x.draft.link || "https://mail.google.com/mail/u/0/#drafts") + '" target="_blank" rel="noopener">Draft is in Gmail</a>' : b === "needs_you" ? '<button type="button" class="btn ghost sm" data-as-draft="' + E(x.id) + '">Draft a reply</button>' : '') +
       '<a class="linkish" href="' + E(asMailLink(x.inbox, x.threadId || x.id)) + '" target="_blank" rel="noopener">Open</a> <button type="button" class="linkish" data-as-handled="' + E(x.id) + '">Done</button></div></li>').join("") + '</ul></details>'; };
   const learned = (d.rules && d.rules.notMine) || [], vips = (d.rules && d.rules.vip) || [];
@@ -2452,14 +2466,14 @@ const BID_LBL = { invite:"Bid invite", addendum:"Addendum", rfi:"RFI", site_visi
 function bidTag(x){
   if(!x) return "";
   let h = "";
-  if(x.bid && BID_LBL[x.bid.kind]) h += ' <span class="tag">' + E(BID_LBL[x.bid.kind]) + (x.bid.closes ? ', ' + E(x.bid.closes) : '') + (x.bid.job ? ' · ' + E(x.bid.job) : '') + '</span>';
-  if(x.takenBy) h += ' <span class="tag ' + (x.takenBy === "you" ? "clear" : "caution") + '">' + (x.takenBy === "you" ? "Yours" : E(x.takenBy) + " has it") + '</span>';
+  if(x.bid && BID_LBL[x.bid.kind]) h += ' <span class="tag">' + E(BID_LBL[x.bid.kind]) + (x.bid.closes ? ', ' + E(x.bid.closes) : '') + (x.bid.job ? ' · ' + linkNums(E(x.bid.job)) : '') + '</span>';
+  if(x.takenBy) h += ' <span class="tag ' + (x.takenBy === "you" ? "clear" : "caution") + '">' + (x.takenBy === "you" ? "You are on it" : E(x.takenBy) + " is on it") + '</span>';
   return h;
 }
-function estRow(j, right, extra){
+function estRow(j, right, extra, html){
   const c = claimOf(j);
   const btn = !CL.data || c || VIEW_AS ? "" : '<button type="button" class="btn ghost sm" data-claim-take="' + E(j._id) + '"' + (CL.busy === j._id ? " disabled" : "") + '>I\'m on it</button>';
-  return '<li><div class="estjob" data-job="' + E(j._id) + '" tabindex="0" style="cursor:pointer">' + jobCell(j) + takenTag(j) + (extra ? '<span class="sm">' + extra + '</span>' : '') + '</div><div class="ac">' + (right || "") + btn + '</div></li>';
+  return '<li><div class="estjob" data-job="' + E(j._id) + '" tabindex="0" style="cursor:pointer">' + jobCell(j) + takenTag(j) + (extra ? '<span class="sm">' + (html ? extra : E(extra)) + '</span>' : '') + '</div><div class="ac">' + (right || "") + btn + '</div></li>';
 }
 function asEstimator(){
   if(!S.jobs) return '<div class="card wide">' + wait("the jobs") + '</div>';
@@ -2488,7 +2502,7 @@ function asEstimator(){
   if(q && q.list.length){
     const mineFirst = q.list.slice().sort((a, b) => (claimMine(claimOf(b.j)) - claimMine(claimOf(a.j))) || ((b.age || 0) - (a.age || 0)));
     h += '<div class="card wide o-quotes" data-nofold><h2>Quotes with no answer <span class="md-count">' + q.list.length + '</span></h2><p class="lede">Sent from JobTread, not yet approved or turned down. Yours first. Follow up starts a chase: a short note drafted each day for three days, then a call on your list.</p><ul class="plain md-rows">' +
-      mineFirst.slice(0, 15).map(x => estRow(x.j, '<span class="tag ' + (x.age > 30 ? "stop" : x.age > 14 ? "caution" : "mute") + '">' + (x.age === null ? "No date" : x.age + " days") + '</span>' + (VIEW_AS ? "" : '<button type="button" class="btn ghost sm" data-as-chasefor="' + E(x.j._id) + '">Follow up</button>'), M(x.o.price) + " before GST")).join("") + '</ul></div>';
+      mineFirst.slice(0, 15).map(x => estRow(x.j, '<span class="tag ' + (x.age > 30 ? "stop" : x.age > 14 ? "caution" : "mute") + '">' + (x.age === null ? "No date" : x.age + " days") + '</span>' + (VIEW_AS ? "" : '<button type="button" class="btn ghost sm" data-as-chasefor="' + E(x.j._id) + '">Follow up</button>'), quoteLink(x.o, "Open quote: " + E(x.o.name || "Quote") + " · " + M(x.o.price) + " before GST"), true)).join("") + '</ul></div>';
   }
   return h;
 }
