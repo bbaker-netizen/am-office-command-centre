@@ -1759,12 +1759,16 @@ function renderStatus() {
   const pending = S.outbox.length;
   const bits = [];
   bits.push(`<button class="who" id="whoBtn" data-tour="who">${esc(S.me || 'Who are you?')}</button>`);
+  /* Signing out used to be hidden behind tapping your own name. Now it is a
+     button of its own beside it (2026-11-20). */
+  if (S.me && anyPins()) bits.push(`<button class="who out" id="outBtn" title="Sign out on this phone">Sign out</button>`);
   if (pending) bits.push(`<span class="pill warn" title="Waiting to reach the office">${pending} waiting</span>`);
   bits.push(S.online
     ? `<span class="pill ${S.syncing ? 'busy' : 'good'}">${S.syncing ? 'Syncing' : 'Online'}</span>`
     : `<span class="pill off">No signal, still working</span>`);
   $('#statusbar').innerHTML = bits.join('');
   const w = $('#whoBtn'); if (w) w.onclick = () => (anyPins() ? whoModal() : pickMe());
+  const o = $('#outBtn'); if (o) o.onclick = () => whoModal();
 }
 
 // A screen is named by the part before the question mark. Anything after it is
@@ -1927,7 +1931,7 @@ const lockMinutes = () => (S.catalog.settings && S.catalog.settings.lockMinutes)
 async function signIn(u) {
   S.me = u.name;
   S.meId = u.id || null;
-  await kvSet('session', { name: u.name, id: u.id || null, at: nowISO(), lastSeen: nowISO() });
+  await kvSet('session', { name: u.name, id: u.id || null, at: nowISO(), lastSeen: nowISO(), via: u.via || null });
   await kvSet('me', u.name);
   S.locked = false;
 }
@@ -1968,7 +1972,10 @@ async function checkLock() {
   /* Access taken away in the office has to reach the phone in somebody's
      pocket. It does, the next time that phone syncs the list. */
   const still = activeUsers().find(u => (s.id && u.id === s.id) || u.name === s.name)
-    || ((S.catalogFromSeed && S.token) ? { name: s.name, id: s.id } : null);
+    || ((S.catalogFromSeed && S.token) ? { name: s.name, id: s.id } : null)
+    /* A command centre admin is not on the shop's people list. The server
+       checks their pass on every sync; here the token is enough. */
+    || ((s.via === 'account' && S.token) ? { name: s.name, id: s.id } : null);
   if (!still) { S.locked = true; return; }
   S.me = still.name; S.meId = still.id || null;
   const idle = (Date.now() - new Date(s.lastSeen || s.at).getTime()) / 60000;
@@ -2048,6 +2055,17 @@ async function renderLock() {
     (S.outbox.length ? `<span class="pill warn">${S.outbox.length} waiting</span>` : '');
 
   const view = $('#view');
+  /* An admin who came in from the command centre has no PIN to type. Send
+     them back there for a fresh pass, and let somebody else use a PIN. */
+  if (await kvGet('viaAccount')) {
+    view.innerHTML = `<div class="lock"><div class="panel">
+      <h2>Open the shop from the command centre</h2>
+      <p class="muted">You came in as an admin from the command centre, without a PIN. That has ended, so go back and press Shop again.</p>
+      <div class="row"><a class="btn big" href="/command.html">Back to the command centre</a>
+      <button class="btn-ghost" id="lockPin">Somebody else, sign in with a PIN</button></div></div></div>`;
+    $('#lockPin').onclick = async () => { await kvSet('viaAccount', false); renderLock(); };
+    return;
+  }
   const bio = await kvGet('bio');
   const hasBio = !!(bio && bio.credId) && await bioAvailable();
   let picked = null;
@@ -2183,6 +2201,7 @@ async function renderLock() {
           await kvSet('isOffice', S.isOffice);
           S.role = (b.user && b.user.role) || 'crew';
           await kvSet('role', S.role);
+          await kvSet('viaAccount', false);
           ok = true;
         } else if (r.status === 429) {
           entry = ''; dots();
@@ -2338,6 +2357,25 @@ AM.boot = async function boot() {
     const rAt = (S.catalog && S.catalog.settings && S.catalog.settings.dataResetAt) || '';
     if (rAt) S.events = S.events.filter(e => String(e.at) >= String(rAt));
     S.events.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  } catch (e) { console.error(e); }
+
+  /* An admin sent over from the command centre with a shop pass: signed in
+     as themselves, with office rights, no PIN (2026-11-20). The pass is
+     handed over in this tab only and thrown away as soon as it is read. */
+  try {
+    const raw = sessionStorage.getItem('am.shopPass');
+    if (raw) {
+      sessionStorage.removeItem('am.shopPass');
+      const p = JSON.parse(raw);
+      if (p && p.token && p.user && p.user.name) {
+        S.token = p.token; await kvSet('token', p.token);
+        S.isOffice = true; await kvSet('isOffice', true);
+        S.role = p.user.role || 'owner'; await kvSet('role', S.role);
+        S.needAuth = false;
+        await kvSet('viaAccount', true);
+        await signIn({ name: p.user.name, id: p.user.id, via: 'account' });
+      }
+    }
   } catch (e) { console.error(e); }
 
   // First run: take the master list off the server, or off the file that ships

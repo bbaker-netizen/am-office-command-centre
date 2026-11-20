@@ -32,13 +32,13 @@
    whole company and admin. The moment any account exists, setup refuses for
    good. There is no code or secret to leave lying around. */
 
-import { authStore, roleOf } from "./_auth.mjs";
+import { authStore, roleOf, signToken, SHOP_PASS, SHOP_PASS_HOURS } from "./_auth.mjs";
 import { sendEmail } from "./mail.mjs";
 import { readFails, addFail, clearFails, lockedFor, ipKey, ipBlocked, ipFail, checkShopPin } from "./_pin.mjs";
 import {
   AREAS, LEVELS, PRESETS, IDLE_CHOICES, ACCOUNTS_LOG, normEmail, okEmail, hashPassword, checkPassword, needsRehash,
   passwordProblem, tempPassword, readAccounts, changeAccounts, logAccount, publicAccount, activeAdmins,
-  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS, isMaster
+  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS, isMaster, TOUR_KEY, toursOf
 } from "./_accounts.mjs";
 
 function json(body, status = 200) {
@@ -262,8 +262,39 @@ export default async (req) => {
       return json({ ok: true, token: await accountToken(s, saved), account: publicAccount(saved) });
     }
 
+    /* ------------------------------------------------------- walkthrough */
+    /* Seen or put away: remembered on the person's own account. Anyone signed
+       in may mark their own; nobody can mark someone else's. */
+    if (action === "tourSeen") {
+      const raw = Array.isArray(body.keys) ? body.keys : [body.key];
+      const keys = raw.map(k => String(k || "")).filter(k => TOUR_KEY.test(k)).slice(0, 6);
+      if (!keys.length) return bad("Which walkthrough?");
+      const saved = await changeAccounts(s, doc => {
+        const x = doc.accounts[me.id];
+        const t = x.tours && typeof x.tours === "object" ? x.tours : {};
+        const at = new Date().toISOString();
+        keys.forEach(k => { if (!t[k]) t[k] = at; });
+        x.tours = t;
+        return x;
+      });
+      return json({ ok: true, tours: toursOf(saved) });
+    }
+    if (action === "tourReset") {
+      await changeAccounts(s, doc => { const x = doc.accounts[me.id]; delete x.tours; return x; });
+      return json({ ok: true, tours: {} });
+    }
+
     /* ------------------------------------------------------------ admins */
-    if (!isAdmin(me)) return bad("Only an admin can manage people and access.", 403, "role");
+    if (!isAdmin(me)) return bad(action === "shopPass" ? "Only an admin can open the shop without a PIN. Ask an admin for a shop PIN." : "Only an admin can manage people and access.", 403, "role");
+
+    /* The shop, for an admin, without a PIN. See SHOP_PASS in _auth.mjs. */
+    if (action === "shopPass") {
+      const { accounts } = await readAccounts(s);
+      const a = accounts[me.id];
+      const token = await signToken(s, { k: SHOP_PASS, a: a.id, v: a.pwv || "", t: Date.now() });
+      await logAccount(s, { by: me.name, action: "shopPass", who: me.name, detail: "Opened the shop from the command centre" });
+      return json({ token, hours: SHOP_PASS_HOURS, user: { id: "acct:" + a.id, name: a.name, office: true, role: "owner" } });
+    }
     /* The master admin's account answers only to the master admin. */
     if (["update", "invite", "cancelInvite", "reset", "remove"].includes(action)) {
       const { accounts: all } = await readAccounts(s);

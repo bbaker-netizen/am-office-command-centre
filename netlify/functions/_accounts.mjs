@@ -65,6 +65,16 @@ export function assistantOf(a) {
   if (a && ASSISTANTS.includes(a.assistant)) return a.assistant;
   return a && EXEC_START.includes(String(a.email || "").toLowerCase()) ? "exec" : "none";
 }
+/* Walkthroughs a person has seen or put away, kept on their account so the
+   tour does not open again on another computer, in another browser, or after
+   a browser forgets what it was told. Key: which walkthrough. Value: when. */
+export const TOUR_KEY = /^[a-z0-9][a-z0-9.\-]{0,59}$/;
+export function toursOf(a) {
+  const t = a && a.tours, out = {};
+  if (!t || typeof t !== "object") return out;
+  for (const k of Object.keys(t)) if (TOUR_KEY.test(k) && typeof t[k] === "string") out[k] = t[k];
+  return out;
+}
 export function landingOf(a) {
   if (a && LANDINGS.includes(a.landing)) return a.landing;
   return assistantOf(a) === "exec" ? "brief" : "overview";
@@ -235,7 +245,8 @@ export function userOf(a, settings = {}) {
     kind: "account", id: a.id, name: a.name, email: a.email, title: a.title || "", areas, level: a.level,
     edit: a.level === "edit" || a.level === "admin", admin: a.level === "admin",
     office: areas.includes("office"), mustChange: !!a.mustChange, idleHours: settings.idleHours,
-    claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), projectLive: !!settings.projectAssistantLive, master: isMaster(a)
+    claude: !!a.claude, assistant: assistantOf(a), landing: landingOf(a), projectLive: !!settings.projectAssistantLive, master: isMaster(a),
+    tours: toursOf(a)
   };
   u.role = areas.includes("office") && areas.includes("field") ? "owner" : areas.includes("office") ? "office" : areas.includes("field") ? "field" : "none";
   return u;
