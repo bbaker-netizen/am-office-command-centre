@@ -2526,3 +2526,17 @@ AM.boot = async function boot() {
      connection, and the failure is silent, whole chapters simply missing. */
   if (window.TOUR && !S.locked) TOUR.ready();
 };
+
+/* Pressed: hold a visible colour for at least a fifth of a second (2026-11-20). */
+(function(){
+  const SEL = "button,.btn,.btn-ghost,.btn-alt,[role=button]";
+  document.addEventListener("pointerdown", ev => {
+    const el = ev.target.closest && ev.target.closest(SEL);
+    if(!el || el.disabled) return;
+    el.classList.add("am-pressed");
+    const t0 = Date.now();
+    const off = () => { document.removeEventListener("pointerup", off, true); document.removeEventListener("pointercancel", off, true);
+      setTimeout(() => el.classList.remove("am-pressed"), Math.max(0, 220 - (Date.now() - t0))); };
+    document.addEventListener("pointerup", off, true); document.addEventListener("pointercancel", off, true);
+  }, true);
+})();

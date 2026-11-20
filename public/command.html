@@ -372,6 +372,13 @@ button:focus-visible,.btn:focus-visible,a:focus-visible,[tabindex]:focus-visible
 .btn,.refresh,.kpi,.sec,.tab{position:relative;overflow:hidden}
 .ripple{position:absolute;border-radius:50%;pointer-events:none;background:var(--cyan);opacity:.28;transform:scale(0);animation:am-ripple .55s ease-out forwards}
 @keyframes am-ripple{to{transform:scale(1);opacity:0}}
+/* Pressed (2026-11-20): a press shows as a colour change held for a moment,
+   not only as motion. Windows "Animation effects" off (common on laptops)
+   switches motion off, and the old sink and ripple then showed nothing. */
+.am-pressed{box-shadow:0 0 0 3px rgba(50,157,187,.45)!important}
+.btn.am-pressed,.refresh.am-pressed{background:var(--cyan-deep)!important;border-color:var(--cyan-deep)!important;color:#fff!important}
+button.am-pressed:not(.btn):not(.refresh),.chip.am-pressed,.tab.am-pressed,.sec.am-pressed,.kpi.am-pressed,[data-list].am-pressed,[data-job].am-pressed,[data-go].am-pressed{background:var(--cyan-wash)!important}
+@media (prefers-reduced-motion:reduce){.is-busy::after{animation-duration:.9s!important;animation-iteration-count:infinite!important}}
 .is-busy{pointer-events:none;opacity:.85}
 .is-busy::after{content:"";display:inline-block;width:12px;height:12px;margin-left:8px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:am-spin .7s linear infinite}
 @keyframes am-spin{to{transform:rotate(360deg)}}
@@ -5186,6 +5193,19 @@ document.addEventListener("pointerdown", ev => {
     const end = () => { if(done) return; done = true; uxBusy(-1, !!p); if(btn) btn.classList.remove("is-busy"); };
     return inner(input, init).then(r => { end(); return r; }, e => { end(); throw e; });
   };
+})();
+/* Pressed: hold a visible colour for at least a fifth of a second (2026-11-20). */
+(function(){
+  const SEL = "button,.btn,.kpi,.refresh,.sec,.tab,.chip,[data-list],[data-job],[data-go]";
+  document.addEventListener("pointerdown", ev => {
+    const el = ev.target.closest && ev.target.closest(SEL);
+    if(!el || el.disabled) return;
+    el.classList.add("am-pressed");
+    const t0 = Date.now();
+    const off = () => { document.removeEventListener("pointerup", off, true); document.removeEventListener("pointercancel", off, true);
+      setTimeout(() => el.classList.remove("am-pressed"), Math.max(0, 220 - (Date.now() - t0))); };
+    document.addEventListener("pointerup", off, true); document.addEventListener("pointercancel", off, true);
+  }, true);
 })();
 /* numbers count up to their value, only when they change */
 function uxCount(el, key){
