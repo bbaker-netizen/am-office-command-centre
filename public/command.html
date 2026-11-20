@@ -455,6 +455,25 @@ button.md-stat{cursor:pointer}button.md-stat:hover{border-color:var(--cyan)}
 .md-cols{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:20px;align-items:start}
 .md-cols.one{grid-template-columns:minmax(0,1fr)}
 .md-main,.md-side{display:flex;flex-direction:column;gap:18px;min-width:0}
+/* My day arranged by each person (2026-11-20) */
+.md-heroact{display:flex;flex-wrap:wrap;gap:8px}
+.md-full{display:flex;flex-direction:column;gap:18px;margin-bottom:18px}.md-full:empty{display:none}
+.md.arranging .md-cols .md-main,.md.arranging .md-cols .md-side,.md.arranging .md-full{min-height:90px;border:2px dashed var(--rule);border-radius:14px;padding:8px}
+.md.arranging .md-full:empty{display:flex}
+.md.arranging .md-full:empty::before,.md.arranging .md-side:empty::before,.md.arranging .md-main:empty::before{content:attr(data-drop);color:var(--ink-3);font-size:13px;margin:auto}
+.md.arranging .card{position:relative;outline:2px solid transparent;cursor:grab;max-height:260px;overflow:hidden}
+.md.arranging .card>*:not(.mda-bar){pointer-events:none;opacity:.55}
+.md.arranging .card.mda-over{outline-color:var(--cyan)}
+.md.arranging .card.mda-moving{opacity:.4}
+.mda-bar{grid-column:1/-1;flex:1 1 100%;width:auto;position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-6px -6px 10px;padding:8px 10px;border-radius:10px;background:var(--ink);color:var(--panel);font-size:13px}
+.mda-bar b{flex:1 1 140px;font-weight:700}
+.mda-bar button,.mda-bar select{font:inherit;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.35);background:transparent;color:inherit;border-radius:6px;padding:4px 9px;cursor:pointer}
+.mda-bar select option{color:#1a1917}
+.mda-bar button:hover,.mda-bar select:hover{background:var(--cyan-deep);border-color:var(--cyan-deep)}
+.mda-tray{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 16px;padding:12px 14px;border-radius:12px;background:var(--cyan-wash);font-size:13px}
+.mda-tray b{margin-right:4px}
+.me-steps{margin:8px 0 8px 20px;padding:0;font-size:14px;line-height:1.6}
+@media (max-width:980px){.md.arranging .md-main,.md.arranging .md-side{display:flex}}
 .md-count{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:700;background:var(--cyan-wash);color:var(--cyan-deep);font-variant-numeric:tabular-nums}
 .md-count.stop{background:var(--stop-wash);color:var(--stop)}
 /* talk */
@@ -638,6 +657,7 @@ ul.plain{list-style:none;margin:4px 0 10px;padding:0}ul.plain li{padding:4px 0;b
 #cBub.dragging{cursor:grabbing;transform:scale(1.08);transition:none}
 #cBub .lbl{position:absolute;right:66px;white-space:nowrap;background:var(--ink);color:var(--panel);font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;opacity:0;transform:translateX(6px);transition:all .2s;pointer-events:none}
 #cBub:hover .lbl{opacity:1;transform:none}
+#cBub.onleft .lbl{right:auto;left:66px;transform:translateX(-6px)}#cBub.onleft:hover .lbl{transform:none}
 @keyframes am-bub-in{from{transform:scale(0) rotate(-90deg)}to{transform:none}}
 @keyframes am-ring{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}
 #cPanel{position:fixed;right:16px;bottom:16px;top:76px;width:min(420px,calc(100vw - 32px));z-index:72;background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:0 30px 70px -24px rgba(0,0,0,.55);display:flex;flex-direction:column;animation:am-panel .32s cubic-bezier(.2,.8,.2,1)}
@@ -2658,7 +2678,7 @@ function asProject(name){
 VIEWS.brief = {
   /* Wait while someone is typing (a chase, or words not yet added); an empty
      talk box does not hold the page, so the list refreshes after each add. */
-  hold(){ if(NB.force) return false; const a = document.activeElement; return !!(a && a.closest && (a.closest("[data-as-form]") || ((a.closest(".asbar") || a.id === "mdStick") && a.value))); },
+  hold(){ if(NB.force) return false; if(MDA.drag) return true; const a = document.activeElement; return !!(a && a.closest && (a.closest("[data-as-form]") || ((a.closest(".asbar") || a.id === "mdStick") && a.value))); },
   alerts(){ const d = AS.data; if(!d) return []; const a = [];
     const over = (d.open || []).filter(x => x.due && x.due < iso(today()));
     if(over.length) a.push({ lvl:"caution", text: plural(over.length, "thing on your list is", "things on your list are") + " past due.", meta: over.slice(0, 3).map(x => x.text).join("; ") });
@@ -2670,7 +2690,8 @@ VIEWS.brief = {
     const hello = (hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening") + (first ? ", " + first : "");
     const dateLine = new Date().toLocaleDateString("en-CA", { weekday:"long", month:"long", day:"numeric" });
     const top = s => '<div class="md-hero"><div><div class="md-eyebrow">' + E(dateLine) + '</div><h1>' + E(hello) + '</h1><p class="md-summary">' + s + '</p></div>' +
-      '<button class="btn ghost" data-walk="myday">' + ico("tour") + 'Walk me through it</button></div>';
+      '<div class="md-heroact">' + (VIEW_AS ? '' : '<button class="btn' + (MDA.on ? '' : ' ghost') + '" data-md-arrange>' + (MDA.on ? 'Done arranging' : 'Arrange my day') + '</button>') +
+      '<button class="btn ghost" data-walk="myday">' + ico("tour") + 'Walk me through it</button></div></div>';
     if(AS.err) return '<div class="md">' + top("Your day could not be read just now.") + failBox(AS.err, "My day") + '</div>';
     if(!AS.data){ if(!AS.loading) asLoad(); return '<div class="md">' + top("Getting your day ready…") + wait("your day") + '</div>'; }
     const d = AS.data, c = (d.checkins || [])[0], open = d.open || [];
@@ -2726,6 +2747,134 @@ VIEWS.brief = {
     return h + '</div>';
   }
 };
+/* ---------- My day, arranged your way (Craig, 2026-11-20) ----------
+   Arrange my day: drag a card (or use the arrows) to move it, choose how wide
+   it is (Full width across the page, Wide in the main column, Narrow in the
+   side column), or hide it. Hidden cards wait in a tray to come back. The
+   arrangement is kept on the person's account, so it follows them to every
+   device, and Reset puts the page back as it came. */
+const MDA = { on:false, drag:null, saveT:0, msg:"" };
+const MDA_SIZES = [["full","Full width"],["wide","Wide"],["narrow","Narrow"]];
+function mdaLayout(){ return (ME.layouts && ME.layouts.myday) || null; }
+function mdaKey(el){
+  const o = [...el.classList].find(c => /^o-[a-z0-9-]+$/.test(c));
+  if(o) return o.slice(2);
+  const h = el.querySelector("h2"); const t = h ? (h.childNodes[0] && h.childNodes[0].textContent || h.textContent) : "";
+  return (String(t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40)) || "card";
+}
+function mdaName(el){ const h = el.querySelector("h2"); return h ? (h.childNodes[0] && h.childNodes[0].textContent || h.textContent).trim() : el.classList.contains("o-talk") ? "Talk and type" : "Card"; }
+function mdaCards(){
+  const md = document.querySelector("#main .md"); if(!md) return null;
+  const cols = md.querySelector(".md-cols"); if(!cols) return null;
+  let full = md.querySelector(".md-full"); if(!full){ full = document.createElement("div"); full.className = "md-full"; cols.parentNode.insertBefore(full, cols); }
+  let mainC = cols.querySelector(".md-main"), side = cols.querySelector(".md-side");
+  if(!side){ side = document.createElement("div"); side.className = "md-side"; cols.appendChild(side); }
+  full.dataset.drop = "Drop here for full width"; mainC.dataset.drop = "Drop here for wide"; side.dataset.drop = "Drop here for narrow";
+  const seen = {}, list = [];
+  [[mainC, "wide"], [side, "narrow"]].forEach(([box, size]) => [...box.children].filter(c => c.classList.contains("card")).forEach(el => {
+    let k = mdaKey(el); seen[k] = (seen[k] || 0) + 1; if(seen[k] > 1) k += "-" + seen[k];
+    el.dataset.mda = k; list.push({ el, key:k, size, name: mdaName(el) });
+  }));
+  return { md, cols, full, mainC, side, list };
+}
+function mdArrange(){
+  const c = mdaCards(); if(!c) return;
+  const lay = mdaLayout() || { order:[], hidden:[], size:{} };
+  const pos = k => { const i = lay.order.indexOf(k); return i < 0 ? 1000 + c.list.findIndex(x => x.key === k) : i; };
+  const hidden = [];
+  c.list.slice().sort((a, b) => pos(a.key) - pos(b.key)).forEach((x, i) => {
+    if(lay.hidden.includes(x.key)){ hidden.push(x); x.el.remove(); return; }
+    const size = lay.size[x.key] || x.size;
+    x.el.style.order = i;
+    (size === "full" ? c.full : size === "narrow" ? c.side : c.mainC).appendChild(x.el);
+  });
+  c.cols.classList.toggle("one", !c.side.children.length && !MDA.on);
+  c.md.classList.toggle("arranging", MDA.on);
+  c.md.querySelectorAll(".mda-tray").forEach(t => t.remove());
+  if(!MDA.on) return;
+  const tray = document.createElement("div"); tray.className = "mda-tray";
+  tray.innerHTML = '<b>Arranging your day.</b><span>Drag a card, or use the arrows. Choose its width, or hide it.' + (MDA.msg ? ' ' + E(MDA.msg) : '') + '</span>' +
+    (hidden.length ? '<span><b>Hidden:</b> ' + hidden.map(x => '<button type="button" class="btn ghost sm" data-mda-show="' + E(x.key) + '">' + E(x.name) + ' +</button>').join(" ") + '</span>' : '') +
+    '<button type="button" class="linkish" data-mda-reset>Put it back as it came</button>';
+  c.full.parentNode.insertBefore(tray, c.full);
+  [...c.md.querySelectorAll("[data-mda]")].forEach(el => {
+    const k = el.dataset.mda, size = el.parentNode === c.full ? "full" : el.parentNode === c.side ? "narrow" : "wide";
+    el.draggable = true;
+    const bar = document.createElement("div"); bar.className = "mda-bar";
+    bar.innerHTML = '<b>' + E(mdaName(el)) + '</b><button type="button" data-mda-up="' + E(k) + '" aria-label="Move up">↑</button><button type="button" data-mda-down="' + E(k) + '" aria-label="Move down">↓</button>' +
+      '<select data-mda-size="' + E(k) + '" aria-label="Width">' + MDA_SIZES.map(([v, l]) => '<option value="' + v + '"' + (v === size ? " selected" : "") + '>' + l + '</option>').join("") + '</select>' +
+      '<button type="button" data-mda-hide="' + E(k) + '">Hide</button>';
+    el.prepend(bar);
+  });
+}
+/* Read the page as it stands, change it, save it. */
+function mdaNow(){
+  const c = mdaCards(); const lay = mdaLayout() || { order:[], hidden:[], size:{} };
+  const order = [], size = {};
+  if(c) [[c.full, "full"], [c.mainC, "wide"], [c.side, "narrow"]].forEach(([box, z]) => [...box.querySelectorAll(":scope > [data-mda]")].forEach(el => { order.push(el.dataset.mda); size[el.dataset.mda] = z; }));
+  return { order: order.concat(lay.hidden.filter(k => !order.includes(k))), hidden: lay.hidden.slice(), size };
+}
+function mdaSave(lay){
+  ME.layouts = ME.layouts || {};
+  if(lay) ME.layouts.myday = lay; else delete ME.layouts.myday;
+  render();
+  if(VIEW_AS) return;
+  clearTimeout(MDA.saveT);
+  MDA.saveT = setTimeout(() => acctCall("", { action:"layout", page:"myday", layout: lay || null })
+    .then(r => { if(r.layouts) ME.layouts = r.layouts; MDA.msg = "Saved."; render(); setTimeout(() => { MDA.msg = ""; }, 2500); })
+    .catch(e => { MDA.msg = "Not saved: " + errCopy(e); render(); }), 500);
+}
+function mdaMove(k, step){
+  const lay = mdaNow(), vis = lay.order.filter(x => !lay.hidden.includes(x)), i = vis.indexOf(k), j = i + step;
+  if(i < 0 || j < 0 || j >= vis.length) return;
+  /* Moving past the end of a column carries the card into the next one. */
+  const other = vis[j]; vis[i] = other; vis[j] = k;
+  if(lay.size[other] !== lay.size[k]) lay.size[k] = lay.size[other];
+  lay.order = vis.concat(lay.hidden); mdaSave(lay);
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-md-arrange],[data-mda-up],[data-mda-down],[data-mda-hide],[data-mda-show],[data-mda-reset]"); if(!t) return;
+  ev.preventDefault();
+  if(t.hasAttribute("data-md-arrange")){ MDA.on = !MDA.on; MDA.msg = ""; render(); return; }
+  if(t.dataset.mdaUp) return mdaMove(t.dataset.mdaUp, -1);
+  if(t.dataset.mdaDown) return mdaMove(t.dataset.mdaDown, 1);
+  if(t.dataset.mdaHide){ const lay = mdaNow(); if(!lay.hidden.includes(t.dataset.mdaHide)) lay.hidden.push(t.dataset.mdaHide); return mdaSave(lay); }
+  if(t.dataset.mdaShow){ const lay = mdaNow(); lay.hidden = lay.hidden.filter(k => k !== t.dataset.mdaShow); return mdaSave(lay); }
+  if(t.hasAttribute("data-mda-reset")){ if(confirm("Put My day back the way it came? Hidden cards come back too.")) mdaSave(null); }
+}, true);
+document.addEventListener("change", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-mda-size]"); if(!t) return;
+  const lay = mdaNow(), k = t.dataset.mdaSize; lay.size[k] = t.value;
+  lay.order = lay.order.filter(x => x !== k).concat([k]); mdaSave(lay);
+});
+/* Drag and drop: drop on a card to go just before it at its width, or on an
+   empty column to go to the end of it. */
+document.addEventListener("dragstart", ev => {
+  const el = MDA.on && ev.target.closest && ev.target.closest("[data-mda]"); if(!el) return;
+  MDA.drag = el.dataset.mda; el.classList.add("mda-moving");
+  try{ ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", MDA.drag); }catch(e){}
+});
+document.addEventListener("dragover", ev => {
+  if(!MDA.drag) return;
+  const over = ev.target.closest && (ev.target.closest("[data-mda]") || ev.target.closest(".md-full,.md-main,.md-side")); if(!over) return;
+  ev.preventDefault();
+  document.querySelectorAll(".mda-over").forEach(x => x.classList.remove("mda-over"));
+  if(over.dataset.mda) over.classList.add("mda-over");
+});
+document.addEventListener("drop", ev => {
+  if(!MDA.drag) return;
+  const k = MDA.drag, card = ev.target.closest && ev.target.closest("[data-mda]"), box = ev.target.closest && ev.target.closest(".md-full,.md-main,.md-side");
+  if(!card && !box) return;
+  ev.preventDefault(); MDA.drag = null;
+  const lay = mdaNow(); let order = lay.order.filter(x => x !== k);
+  if(card && card.dataset.mda !== k){ order.splice(order.indexOf(card.dataset.mda), 0, k); lay.size[k] = lay.size[card.dataset.mda]; }
+  else if(box){ const z = box.classList.contains("md-full") ? "full" : box.classList.contains("md-side") ? "narrow" : "wide";
+    const last = [...box.querySelectorAll(":scope > [data-mda]")].map(x => x.dataset.mda).filter(x => x !== k).pop();
+    order.splice(last ? order.indexOf(last) + 1 : order.length, 0, k); lay.size[k] = z; }
+  else order = lay.order;
+  lay.order = order; mdaSave(lay);
+});
+document.addEventListener("dragend", () => { MDA.drag = null; document.querySelectorAll(".mda-over,.mda-moving").forEach(x => x.classList.remove("mda-over", "mda-moving")); });
 /* ---------- Sticky notes board ----------
    Each person's own board (server: netlify/functions/notes.mjs). Type or talk
    to add a note, drag it anywhere, tap the words to change them, pick a
@@ -4563,14 +4712,14 @@ function meOpen(){
     '<p class="sub">To see more or less, ask an admin' + (ME.admin ? ' (you are one: Admin, People and access)' : '') + '.</p>' +
     '<div class="actions"><button type="button" class="btn" onclick="toDoor(true)">Sign out on this device</button></div>' +
     driveBlock() +
-    (ME.claude && !VIEW_AS ? '<h3>Your own Claude</h3><div id="meClaude"><p class="sub">Checking…</p></div>' : '') +
+    (!VIEW_AS ? '<h3>Connect your own Claude</h3><div id="meClaude"><p class="sub">Checking…</p></div>' : '') +
     '<h3>Change my password</h3><form id="meForm" class="ac-form" onsubmit="return false">' +
     '<input type="email" autocomplete="username" value="' + E(ME.email) + '" hidden>' +
     '<label class="fld"><span>Current password</span><input type="password" name="cur" autocomplete="current-password"></label>' +
     '<label class="fld"><span>New password</span><input type="password" name="n1" autocomplete="new-password"></label>' +
     '<label class="fld"><span>Type it again</span><input type="password" name="n2" autocomplete="new-password"></label>' +
     '<div class="actions"><button type="button" class="btn" data-me-save>Change my password</button></div><p class="sub" id="meMsg" role="status">At least 10 characters. Changing it signs you out on every other device.</p></form>');
-  if(ME.claude && !VIEW_AS) setTimeout(() => meClaudeFill(), 0);
+  if(!VIEW_AS) setTimeout(() => meClaudeFill(), 0);
 }
 /* Your own Claude, connected to the command centre (2026-11-20). The address
    to add in Claude, and the connections made, each with Disconnect. */
@@ -4579,8 +4728,19 @@ function meClaudeFill(after){
   const call = body => fetch("/api/claude-connections", body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json());
   (after ? call(after) : call()).then(d => {
     const list = d.connections || [];
-    box.innerHTML = '<p class="sub">Add the command centre to your own Claude as a custom connector, then sign in with this email and password when Claude asks. Your Claude then sees and does only what you can here: jobs, the estimating board, who has which estimate, your My day and your hit list. It cannot send email, pay anyone or change job fields.</p>' +
-      '<dl class="facts"><dt>Connector address</dt><dd><code>' + E(d.address || "") + '</code> <button type="button" class="linkish" data-me-copyaddr="' + E(d.address || "") + '">Copy</button></dd></dl>' +
+    /* Not switched on for this person yet: say how, and let an admin switch
+       it on for themselves in one press (Craig, 2026-11-20: "I don't see any
+       way to connect the user's claude to their account"). */
+    if(!d.allowed && !ME.claude){
+      box.innerHTML = '<p class="sub">Connecting your own Claude lets it read your jobs, estimating board, My day and hit list, and add to your list for you. It is not switched on for your account yet.</p>' +
+        (ME.admin ? '<div class="actions"><button type="button" class="btn" data-me-claudeon>Switch it on for me</button></div><p class="sub">For anyone else: Admin, People and access, open the person, tick Can ask Claude.</p>'
+                  : '<p class="sub">Ask an admin to tick <b>Can ask Claude</b> for you on People and access. This section then shows the steps.</p>');
+      return;
+    }
+    box.innerHTML = '<p class="sub">Your Claude then sees and does only what you can here: jobs, the estimating board, who has which estimate, your My day and your hit list. It cannot send email, pay anyone or change job fields.</p>' +
+      '<dl class="facts"><dt>Connector address</dt><dd><code>' + E(d.address || "") + '</code> <button type="button" class="btn ghost sm" data-me-copyaddr="' + E(d.address || "") + '">Copy</button></dd></dl>' +
+      '<ol class="me-steps"><li>Press <b>Copy</b> above.</li><li>Open <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">Claude, Settings, Connectors</a>.</li><li>Press <b>Add custom connector</b>. Name it <b>A&amp;M Command Centre</b> and paste the address.</li><li>Press <b>Connect</b>. Sign in with your command centre email and password, then press <b>Allow</b>.</li></ol>' +
+      '<p class="sub">On a company Claude plan, the owner may need to add the connector once for everybody first. After that, each person only presses Connect.</p>' +
       (list.length ? '<ul class="plain">' + list.map(c => '<li><b>' + E(c.name || "Claude") + '</b> <span class="sm">connected ' + E(whenSeen(c.since)) + ', last used ' + E(whenSeen(c.lastUsed)) + '</span> <button type="button" class="linkish" data-me-claudeoff="' + E(c.id) + '">Disconnect</button></li>').join("") + '</ul>'
         : '<p class="sub">Not connected yet.</p>');
   }).catch(() => { box.innerHTML = '<p class="sub">Could not check your Claude connections just now.</p>'; });
@@ -4589,6 +4749,12 @@ document.addEventListener("click", ev => {
   const t = ev.target.closest && ev.target.closest("[data-me-copyaddr],[data-me-claudeoff]"); if(!t) return;
   if(t.dataset.meCopyaddr){ try{ navigator.clipboard.writeText(t.dataset.meCopyaddr); t.textContent = "Copied"; }catch(e){} return; }
   if(t.dataset.meClaudeoff){ meClaudeFill({ id: t.dataset.meClaudeoff }); }
+});
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-me-claudeon]"); if(!t) return;
+  t.disabled = true;
+  acctCall("", { action:"update", id: ME.id, claude: true }).then(() => { ME.claude = true; meClaudeFill(); toast("Claude is switched on for your account.", "ok"); })
+    .catch(e => { t.disabled = false; toast(errCopy(e), "bad"); });
 });
 function meSave(btn){
   const f = $("meForm"), v = n => f.querySelector('[name="' + n + '"]').value, m = $("meMsg");
@@ -5266,6 +5432,7 @@ function afterRender(){
   if(UX.enterNext && !onlyWaiting){ UX.enterNext = false; main.classList.add("enter"); clearTimeout(UX.enterTimer); UX.enterTimer = setTimeout(() => main.classList.remove("enter"), 700); }
   else if(!UX.enterNext){ clearTimeout(UX.enterTimer); main.classList.remove("enter"); }
   if(current === "overview") uxKpis();
+  if(current === "brief") mdArrange();
   uxPeek();
   uxFold();
   const q = new URLSearchParams(location.search);
@@ -5386,7 +5553,10 @@ var CLAUDE = (function(){
     dragBubble();
     document.addEventListener("keydown", ev => { if((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "j"){ ev.preventDefault(); toggle(); } if(ev.key === "Escape" && panel && !panel.hidden) close(); });
   }
-  function clampBub(){ const r = bub.getBoundingClientRect(), x = Math.min(Math.max(8, r.left), innerWidth - r.width - 8), y = Math.min(Math.max(70, r.top), innerHeight - r.height - 8); bub.style.left = x + "px"; bub.style.top = y + "px"; }
+  /* The visible page, without the scroll bar: innerWidth counts the scroll bar,
+     which is what left half the button hidden under it (Craig, 2026-11-20). */
+  const viewW = () => document.documentElement.clientWidth || innerWidth, viewH = () => document.documentElement.clientHeight || innerHeight;
+  function clampBub(){ const r = bub.getBoundingClientRect(), W = viewW(), H = viewH(), x = Math.min(Math.max(8, r.left), W - r.width - 8), y = Math.min(Math.max(70, r.top), H - r.height - 8); bub.style.left = x + "px"; bub.style.top = y + "px"; bub.classList.toggle("onleft", x + r.width / 2 < W / 2); }
   function dragBubble(){
     let s = null;
     bub.addEventListener("pointerdown", ev => { const r = bub.getBoundingClientRect(); s = { x: ev.clientX, y: ev.clientY, ox: ev.clientX - r.left, oy: ev.clientY - r.top, moved:false }; bub.setPointerCapture(ev.pointerId); });
@@ -5400,13 +5570,15 @@ var CLAUDE = (function(){
       if(!s) return; const moved = s.moved; s = null; bub.classList.remove("dragging");
       if(!moved) return toggle();
       /* Snap to the nearest side, the way a phone's floating buttons do. */
-      const r = bub.getBoundingClientRect(), left = r.left + r.width / 2 < innerWidth / 2;
-      const y = Math.min(Math.max(70, r.top), innerHeight - r.height - 8);
-      bub.style.transition = "left .3s cubic-bezier(.2,.9,.3,1.2), top .3s"; bub.style.left = (left ? 14 : innerWidth - r.width - 14) + "px"; bub.style.top = y + "px";
+      const r = bub.getBoundingClientRect(), W = viewW(), left = r.left + r.width / 2 < W / 2;
+      const y = Math.min(Math.max(70, r.top), viewH() - r.height - 8);
+      bub.style.transition = "left .3s cubic-bezier(.2,.9,.3,1.2), top .3s"; bub.style.left = (left ? 14 : W - r.width - 14) + "px"; bub.style.top = y + "px"; bub.classList.toggle("onleft", left);
       setTimeout(() => { bub.style.transition = ""; }, 320);
       store(POS, JSON.stringify({ x: parseFloat(bub.style.left), y: parseFloat(bub.style.top) }));
     });
     addEventListener("resize", () => { if(bub.style.left) clampBub(); });
+    /* Pages that grow a scroll bar after loading narrow the view: keep it in. */
+    if(window.ResizeObserver) new ResizeObserver(() => { if(bub.style.left) clampBub(); }).observe(document.documentElement);
   }
   function build(){
     panel = document.createElement("section"); panel.id = "cPanel"; panel.hidden = true; panel.setAttribute("aria-label", "Ask Claude");
