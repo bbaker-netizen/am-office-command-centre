@@ -988,8 +988,8 @@ const claimMine = c => !!c && String(c.by || "").toLowerCase().split(",").map(x 
 function takenTag(j){
   if(!claimable(j) || !CL.data) return "";
   const c = claimOf(j);
-  if(!c) return ' <span class="tag mute" title="Nobody has taken this yet">Not taken</span>';
-  return ' <span class="tag ' + (claimMine(c) ? "clear" : "caution") + '" title="Taken ' + E(c.at) + '">' + (claimMine(c) ? "Yours" : E(c.by)) + '</span>';
+  if(!c) return ' <span class="tag mute" title="No estimator is on this yet">Nobody on it</span>';
+  return ' <span class="tag ' + (claimMine(c) ? "clear" : "caution") + '" title="Taken ' + E(c.at) + '">' + (claimMine(c) ? "You are on it" : E(c.by) + " is on it") + '</span>';
 }
 function claimPanel(j){
   if(PLATFORM !== "app" || !claimable(j)) return "";
@@ -997,11 +997,11 @@ function claimPanel(j){
   if(!CL.data){ clLoad(false); return '<div class="state" style="margin-bottom:14px">Checking who has this…</div>'; }
   const c = claimOf(j), busy = CL.busy === j._id ? " disabled" : "", ro = !!VIEW_AS, id = E(j._id);
   let h = '<div class="claimbox' + (c && !claimMine(c) ? " other" : c ? " mine" : "") + '">';
-  if(!c) h += '<p><b>Nobody has taken this yet.</b> Take it, so nobody else starts the same estimate.</p>' + (ro ? '' : '<div class="actions"><button class="btn" data-claim-take="' + id + '"' + busy + '>Take it</button></div>');
-  else if(claimMine(c)) h += '<p><b>You have this one</b>, since ' + E(c.at) + '. Everyone else sees it as yours.</p>' + (ro ? '' : '<div class="actions"><button class="btn ghost" data-claim-drop="' + id + '"' + busy + '>Let it go</button></div>');
-  else h += '<p><b>' + E(c.by) + ' has this one</b>, since ' + E(c.at) + '. Talk to them before you start on it.</p>' + (ro ? '' : '<div class="actions"><button class="btn ghost" data-claim-over="' + id + '"' + busy + '>Take it over</button>' + (ME.admin ? '<button class="btn ghost" data-claim-drop="' + id + '"' + busy + '>Free it up</button>' : '') + '</div>');
+  if(!c) h += '<p><b>No estimator is on this yet.</b> Press I\'m on it if you are pricing it. Your name then shows on the job for everyone, so nobody prices it twice.</p>' + (ro ? '' : '<div class="actions"><button class="btn" data-claim-take="' + id + '"' + busy + '>I\'m on it</button></div>');
+  else if(claimMine(c)) h += '<p><b>You are on this one</b>, since ' + E(c.at) + '. The other estimators see your name on it.</p>' + (ro ? '' : '<div class="actions"><button class="btn ghost" data-claim-drop="' + id + '"' + busy + '>I\'m not doing it</button></div>');
+  else h += '<p><b>' + E(c.by) + ' is on this one</b>, since ' + E(c.at) + '. Talk to them before you start on it.</p>' + (ro ? '' : '<div class="actions"><button class="btn ghost" data-claim-over="' + id + '"' + busy + '>Switch it to me</button>' + (ME.admin ? '<button class="btn ghost" data-claim-drop="' + id + '"' + busy + '>Clear the name</button>' : '') + '</div>');
   if(CL.msg && CL.busy === "" && CL.msgJob === j._id) h += '<p class="sub" role="status">' + E(CL.msg) + '</p>';
-  return h + '<p class="sub">Kept in JobTread as an Estimate task, assigned to whoever has it.</p></div>';
+  return h + '<p class="sub">Saved in JobTread as an Estimate task, assigned to that person.</p></div>';
 }
 function claimDo(jobId, take, force, btn){
   CL.busy = jobId; CL.msg = ""; CL.msgJob = jobId; if(btn) btn.disabled = true;
@@ -2451,7 +2451,7 @@ function bidTag(x){
 }
 function estRow(j, right, extra){
   const c = claimOf(j);
-  const btn = !CL.data || c || VIEW_AS ? "" : '<button type="button" class="btn ghost sm" data-claim-take="' + E(j._id) + '"' + (CL.busy === j._id ? " disabled" : "") + '>Take it</button>';
+  const btn = !CL.data || c || VIEW_AS ? "" : '<button type="button" class="btn ghost sm" data-claim-take="' + E(j._id) + '"' + (CL.busy === j._id ? " disabled" : "") + '>I\'m on it</button>';
   return '<li><div class="estjob" data-job="' + E(j._id) + '" tabindex="0" style="cursor:pointer">' + jobCell(j) + takenTag(j) + (extra ? '<span class="sm">' + extra + '</span>' : '') + '</div><div class="ac">' + (right || "") + btn + '</div></li>';
 }
 function asEstimator(){
@@ -2460,21 +2460,21 @@ function asEstimator(){
   let h = "";
   /* Mine: everything I have taken that is still before the quote is answered. */
   const mine = live().filter(j => claimable(j) && claimMine(claimOf(j)));
-  h += '<div class="card wide o-est" data-nofold data-tour="as-est"><h2>Taken by you' + (mine.length ? ' <span class="md-count">' + mine.length + '</span>' : '') + '</h2>' +
-    '<p class="lede">Leads and estimates you have taken. Everyone else sees them as yours. Open one to let it go.</p>' +
-    (CL.err ? failBox(CL.err, "Who has what") : !CL.data ? wait("who has what") :
+  h += '<div class="card wide o-est" data-nofold data-tour="as-est"><h2>Estimates I am working on' + (mine.length ? ' <span class="md-count">' + mine.length + '</span>' : '') + '</h2>' +
+    '<p class="lede">Bids and leads you said you are pricing. The other estimators see your name on them, so nobody prices the same job twice. Press I\'m on it on any job below to add it here.</p>' +
+    (CL.err ? failBox(CL.err, "Who is on which estimate") : !CL.data ? wait("who is on which estimate") :
       mine.length ? '<ul class="plain md-rows">' + mine.map(j => {
         const due = F(j["Bid Due Date and Time"]), sv = F(j["Site Visit Date and Time"]);
         return estRow(j, stTag(j), [due ? "Due " + showWhen(due) : "", sv ? "Site visit " + showWhen(sv) : ""].filter(Boolean).join(" · "));
-      }).join("") + '</ul>' : '<div class="md-empty"><b>Nothing taken yet.</b>Take a lead below, or from the Estimating page, so nobody else starts it.</div>') + '</div>';
+      }).join("") + '</ul>' : '<div class="md-empty"><b>Nothing here yet.</b>Press I\'m on it on a bid or lead below when you start pricing it.</div>') + '</div>';
   /* Bids closing in the next two weeks, not sent yet. */
   const due = bidsDue().filter(x => stageOf(st(x.j)) !== "out" && x.d >= 0);
   h += '<div class="card wide o-bids" data-nofold><h2>Bids closing' + (due.length ? ' <span class="md-count' + (due.some(x => x.d <= 2) ? " stop" : "") + '">' + due.length + '</span>' : '') + '</h2>' +
-    '<p class="lede">Next two weeks, quote not out yet. Take the ones you are doing.</p>' +
+    '<p class="lede">Next two weeks, quote not out yet. Press I\'m on it on the ones you are pricing.</p>' +
     (due.length ? '<ul class="plain md-rows">' + due.map(x => estRow(x.j, '<span class="tag ' + (x.d <= 2 ? "stop" : x.d <= 5 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span>', F(x.j["Bid Type"]) || "")).join("") + '</ul>' : '<div class="md-empty"><b>No bids closing in the next two weeks.</b></div>') + '</div>';
   /* New leads nobody has picked up. */
   const leads = live().filter(j => stageOf(st(j)) === "lead" && !claimOf(j)).sort((a, b) => String(a._created).localeCompare(String(b._created)));
-  if(CL.data && leads.length) h += '<div class="card wide o-leads" data-nofold><h2>Leads nobody has taken <span class="md-count">' + leads.length + '</span></h2><p class="lede">Oldest first.</p><ul class="plain md-rows">' +
+  if(CL.data && leads.length) h += '<div class="card wide o-leads" data-nofold><h2>Leads nobody is on yet <span class="md-count">' + leads.length + '</span></h2><p class="lede">Oldest first.</p><ul class="plain md-rows">' +
     leads.map(j => estRow(j, '<span class="tag ' + (daysSince(j._created) > 3 ? "caution" : "mute") + '">' + daysSince(j._created) + ' days</span>')).join("") + '</ul></div>';
   /* Quotes with no answer: follow up on the cadence. */
   const q = quotesOut();
