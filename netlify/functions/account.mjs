@@ -356,7 +356,7 @@ export default async (req) => {
         if (body.level !== undefined) { if (!LEVELS.includes(body.level)) return { err: bad("Choose what they can do.") }; next.level = body.level; }
         if (body.active !== undefined) next.active = !!body.active;
         if (body.claude !== undefined) next.claude = !!body.claude;
-        if (body.assistant !== undefined) { if (!ASSISTANTS.includes(body.assistant)) return { err: bad("Choose an assistant: executive, project or none.") }; next.assistant = body.assistant; }
+        if (body.assistant !== undefined) { if (!ASSISTANTS.includes(body.assistant)) return { err: bad("Choose the assistant for their position.") }; next.assistant = body.assistant; }
         if (body.landing !== undefined) { if (!LANDINGS.includes(body.landing)) return { err: bad("Choose where they open: My day or Overview.") }; next.landing = body.landing; }
         /* Nobody locks themselves out, and the app never ends up with nobody
            who can let people in. */

@@ -163,9 +163,10 @@ globalThis.fetch = async (url, opts = {}) => {
 const tok = async a => signToken(s, { k: "acct", a, v: "1", t: Date.now(), m: 0 });
 const call = async (who, body, hdr = {}) => { const r = await handler(new Request("https://site/api/assistant", { method: body ? "POST" : "GET", headers: { authorization: "Bearer " + await tok(who), "content-type": "application/json", ...hdr }, body: body ? JSON.stringify(body) : undefined })); return { status: r.status, body: await r.json() }; };
 
-assert.equal((await call("d1")).status, 403);
-const pmr = await call("p1"); assert.equal(pmr.status, 403); assert.match(pmr.body.message, /not switched on for staff yet/);
-ok("the estimator has no assistant; the project manager's assistant is built but off for staff");
+/* From 2026-11-20 everyone has an assistant for their position (Craig). */
+let er = await call("d1"); assert.equal(er.status, 200); assert.equal(er.body.role, "admin"); assert.equal(er.body.roleInfo.short, "Administrator");
+const pmr = await call("p1"); assert.equal(pmr.status, 200); assert.equal(pmr.body.role, "project"); assert.ok(pmr.body.roleInfo.pages.includes("closeout"));
+ok("everyone has an assistant: an account with no title gets the administrator's; the project manager's is on");
 
 let r = await call("c1");
 assert.equal(r.status, 200); assert.equal(r.body.role, "exec");

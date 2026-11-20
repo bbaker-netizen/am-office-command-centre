@@ -3019,18 +3019,24 @@
           const all = S.catalog.users || [];
           const here = all.filter(u => u.active !== false);
           const gone = all.filter(u => u.active === false);
+          /* One tidy line per person: name, a PIN tag, what they have done,
+             and one small Actions list (Craig, 2026-11-20: three big buttons
+             on every line looked untidy). The old buttons stay, hidden, so
+             each action still runs exactly the same code. */
           const row = u => {
-            const used = did.has(u.name);
-            return `<div class="user-row">
-              <div><strong>${esc(u.name)}</strong>
-                <div class="muted small">${AM.hasPin(u)
-                  ? 'PIN issued' + (u.pinSetAt ? ' ' + esc(fmtWhen(u.pinSetAt)) : '') + (u.pinSetBy ? ' by ' + esc(u.pinSetBy) : '')
-                  : 'no PIN yet, cannot sign in'}${used ? ' · has movements against this name' : ' · has never done anything in the app'}</div></div>
-              <div class="row tight">
-                <button class="btn-ghost upin" data-n="${esc(u.name)}">${AM.hasPin(u) ? 'Reset the PIN' : 'Issue a PIN'}</button>
-                <button class="btn-ghost utog" data-n="${esc(u.name)}">${u.active === false ? 'Turn back on' : 'Take access away'}</button>
-                ${used ? '' : `<button class="btn-ghost udel" data-n="${esc(u.name)}">Remove</button>`}
-              </div>
+            const used = did.has(u.name), pin = AM.hasPin(u), off = u.active === false;
+            const when = pin ? (u.pinSetAt ? esc(fmtWhen(u.pinSetAt)) : '') + (u.pinSetBy ? ' by ' + esc(u.pinSetBy) : '') : '';
+            return `<div class="user-row${off ? ' off' : ''}">
+              <div class="ur-main"><strong>${esc(u.name)}</strong>
+                <span class="ur-tag ${pin ? 'ok' : 'no'}">${pin ? 'PIN set' : 'No PIN'}</span>
+                <span class="muted small">${pin && when ? 'issued ' + when : pin ? '' : 'cannot sign in yet'}${used ? '' : ' · never used the app'}</span></div>
+              <select class="uact" data-n="${esc(u.name)}" aria-label="Actions for ${esc(u.name)}">
+                <option value="">Actions</option>
+                <option value="pin">${pin ? 'Reset the PIN' : 'Issue a PIN'}</option>
+                <option value="tog">${off ? 'Turn access back on' : 'Take access away'}</option>
+                ${used ? '' : '<option value="del">Remove from the list</option>'}
+              </select>
+              <span hidden><button class="upin" data-n="${esc(u.name)}"></button><button class="utog" data-n="${esc(u.name)}"></button>${used ? '' : `<button class="udel" data-n="${esc(u.name)}"></button>`}</span>
             </div>`;
           };
           return `<div class="user-list">${here.map(row).join('') || '<p class="muted">Nobody on the list yet.</p>'}</div>
@@ -3172,6 +3178,25 @@
       AM.state.scrolledToPins = true;
       const w = document.getElementById('whoCanUse'); if (w) setTimeout(() => w.scrollIntoView({ block: 'start' }), 50);
     }
+    /* The Actions list on each person's line runs the same handlers as the
+       old buttons. Taking access away asks first: a slip on a drop-down is
+       easier than on a button. */
+    $$('.uact').forEach(sel => sel.onchange = () => {
+      const v = sel.value, name = sel.dataset.n, line = sel.closest('.user-row');
+      sel.value = ''; delete sel.dataset.picked;
+      if (!v || !line) return;
+      const btn = $('.u' + v, line);
+      if (!btn) return;
+      const u = (S.catalog.users || []).find(x => x.name === name);
+      if (v === 'tog' && u && u.active !== false) {
+        AM.modal(`<h3>Take access away from ${esc(name)}?</h3>
+          <p class="muted small">${esc(name)} cannot sign in on any phone until you turn it back on. Everything already done under this name stays.</p>
+          <div class="row"><button class="btn big" id="utYes">Take access away</button><button class="btn-ghost" onclick="AM.closeModal()">Keep it</button></div>`,
+          el => { $('#utYes', el).onclick = () => { AM.closeModal(); btn.click(); }; });
+        return;
+      }
+      btn.click();
+    });
     $$('.utog').forEach(b => b.onclick = async () => {
       const u = S.catalog.users.find(x => x.name === b.dataset.n);
       u.active = u.active === false;

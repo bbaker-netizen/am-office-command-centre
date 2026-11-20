@@ -1834,7 +1834,7 @@ async function startApp(){
   CAN_EDIT = !!me.edit;
   if(VIEW_AS && !me.viewAs){ try{ sessionStorage.removeItem("am.viewAs"); }catch(e){} VIEW_AS = null; }
   if(me.viewAs){ CAN_EDIT = false; viewAsBanner(me); }
-  const asLive = me.assistant === "exec" || me.assistant === "estimator" || (me.assistant === "project" && (me.projectLive || me.admin));
+  const asLive = !!me.assistant && me.assistant !== "none";
   const tabs = asLive ? ["brief", "notes", "overview"] : ["notes", "overview"];
   if(has("office")) tabs.push("estimating", "dispatch", "tm");
   if(has("money")) tabs.push("money", "cashflow");
@@ -1847,7 +1847,7 @@ async function startApp(){
   if(has("field")) tabs.push("equipment");
   if(has("assistants")) tabs.push("drafts");
   if(me.admin) tabs.push("people", "connections", "scorecards");
-  if(me.admin && !me.projectLive) tabs.push("pmpreview");
+  /* The project assistant preview is gone: everyone has their own assistant now (2026-11-20). */
   const first = String(me.name || "").split(" ")[0];
   CFG = { title: (first ? first + "'s" : "Your") + " command centre", who: [me.title, respLabel(me.areas), LEVEL_INFO[me.level] ? LEVEL_INFO[me.level].label : ""].filter(Boolean).join(" · "), tabs, qb: has("money"), gmail:false };
   S.meName = first;
@@ -2393,7 +2393,7 @@ function asCalendar(){
 function asInbox(){
   const d = AS.data, own = (AS.inbox && AS.inbox.inboxes) || (d.inboxes || []).filter(x => !x.shared);
   const ib = own.concat((d.inboxes || []).filter(x => x.shared && !own.some(o => o.email === x.email)));
-  const est = d.role === "estimator";
+  const est = ["estimator", "sales", "ops"].includes(d.role);
   const needN = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
   let h = '<div class="card wide o-inbox" data-nofold data-tour="as-inbox"><h2>Your inbox' + (needN ? ' <span class="md-count stop">' + needN + ' need you</span>' : '') + '</h2>';
   if(d.triage && d.triage.hidden) return h + '<p class="lede">Their mail stays private. Only the master admin can see another person\'s mail.</p></div>';
@@ -2464,6 +2464,22 @@ function asEstimator(){
       mineFirst.slice(0, 15).map(x => estRow(x.j, '<span class="tag ' + (x.age > 30 ? "stop" : x.age > 14 ? "caution" : "mute") + '">' + (x.age === null ? "No date" : x.age + " days") + '</span>' + (VIEW_AS ? "" : '<button type="button" class="btn ghost sm" data-as-chasefor="' + E(x.j._id) + '">Follow up</button>'), M(x.o.price) + " before GST")).join("") + '</ul></div>';
   }
   return h;
+}
+/* What needs this person on the pages their position works in: the same
+   lines the Overview shows, kept to those pages. */
+function asPages(info){
+  if(!info || !info.pages) return "";
+  const tabs = info.pages.filter(t => CFG.tabs.includes(t) && t !== "overview");
+  if(!tabs.length) return "";
+  const all = tabs.flatMap(alertsFor).sort((a, b) => LV[a.lvl] - LV[b.lvl]);
+  let h = '<div class="card wide o-pages" data-nofold data-tour="as-pages"><h2>On your pages' + (all.length ? ' <span class="md-count' + (all.some(a => a.lvl === "stop") ? " stop" : "") + '">' + all.length + '</span>' : '') + '</h2>' +
+    '<p class="lede">What needs a ' + E((info.short || "").toLowerCase() || "person in your seat") + ' on ' + tabs.map(t => TABS[t].label).join(", ") + '. Worst first; each line clears itself once the cause is fixed.</p>';
+  if(!all.length) return h + (S.jobs ? '<div class="md-empty"><b>Nothing flagged on your pages.</b></div>' : wait("your pages")) + '</div>';
+  return h + '<ul class="alerts">' + all.slice(0, 10).map(a =>
+    '<li><span class="tag ' + (a.lvl === "stop" ? "stop" : a.lvl === "caution" ? "caution" : "mute") + '">' + (a.lvl === "stop" ? "Now" : a.lvl === "caution" ? "Soon" : "Note") + '</span>' +
+    '<div><div class="t">' + E(a.text) + '</div>' + (a.meta ? '<div class="m">' + E(a.meta) + '</div>' : '') + '</div>' +
+    '<button class="go" data-go="' + a.tab + '">' + E(TABS[a.tab].label) + '</button></li>').join("") + '</ul>' +
+    (all.length > 10 ? '<div class="more">' + (all.length - 10) + ' more on those pages.</div>' : '') + '</div>';
 }
 function asSiteVisits(){
   if(!S.jobs) return "";
@@ -2646,8 +2662,8 @@ VIEWS.brief = {
       ((d.doneToday || []).length ? '<details style="margin-top:10px"><summary class="sm">Done today (' + d.doneToday.length + ')</summary><ul class="plain">' + d.doneToday.map(x => '<li>' + E(x.text) + (x.doneWhy ? ' <span class="sm">' + E(x.doneWhy) + '</span>' : '') + ' <button class="linkish" data-as-untick="' + E(x.id) + '">Undo</button></li>').join("") + '</ul></details>' : '') +
       '<div class="md-bar" data-tour="as-checkins"><span>Check in now:</span><button class="md-pill" data-as-checkin="morning">Morning</button><button class="md-pill" data-as-checkin="noon">Noon</button><button class="md-pill" data-as-checkin="end">End of day</button>' +
       '<label><input type="checkbox" data-as-emailme' + (d.settings.emailCheckins === false ? "" : " checked") + '> Email me each check-in</label></div></div>';
-    /* An estimator's bids and quotes come straight after the hit list. */
-    if(d.role === "estimator") main += asEstimator();
+    /* An estimator's (and sales') bids, leads and quotes come straight after the hit list. */
+    if(d.role === "estimator" || d.role === "sales" || d.role === "ops") main += asEstimator();
     main += mdNotes();
     main += asInbox();
     let side = "";
@@ -2655,9 +2671,15 @@ VIEWS.brief = {
       side += asCalendar();
       if(CFG.qb) side += asMoney();
       if(ME.areas.includes("field") || ME.areas.includes("office")) main += asJobs();
-    } else if(d.role === "estimator"){
-      side += asCalendar() + asSiteVisits();
-    } else main += asProject(ME.name);
+    } else {
+      /* Every other position: its calendar, the problems on the pages it
+         works in, and the cards made for it. */
+      side += asCalendar();
+      if(d.role === "estimator" || d.role === "sales" || d.role === "site" || d.role === "dispatch" || d.role === "safety") side += asSiteVisits();
+      if(d.role === "accounting" && CFG.qb) side += asMoney();
+      if(d.role === "project") main += asProject(ME.name);
+      main += asPages(d.roleInfo);
+    }
     main += asChases();
     h += '<div class="md-cols' + (side ? "" : " one") + '"><div class="md-main">' + main + '</div>' + (side ? '<div class="md-side">' + side + '</div>' : '') + '</div>';
     return h + '</div>';
@@ -4218,6 +4240,11 @@ const LEVEL_INFO = {
   edit:  { label:"Make changes", what:"Also saves job details to JobTread, runs post mortems and sends the assistants' emails." },
   admin: { label:"Admin",        what:"Also adds people, sets their access, gives new passwords and connects the robots' mailbox." }
 };
+/* One assistant per position (2026-11-20). Keys and labels match netlify/functions/_roles.mjs. */
+const ASSIST_ROLES = [["exec","Executive (owners and general manager)"],["ops","Operations Director (estimating, scheduling, admin, finance, safety)"],["estimator","Estimator (bids, quotes, site visits)"],
+  ["project","Project Manager (jobs, closeout, change orders)"],["dispatch","Project Coordinator and Dispatcher (crews, equipment, schedule)"],["admin","Administrator (documents, invoices, front desk)"],
+  ["accounting","Accounting and Payroll (bills, payments, payroll)"],["safety","Health and Safety (notices, incidents, inspections)"],["sales","Business Development and Sales (leads, clients, follow-ups)"],
+  ["shop","Shop and Logistics (equipment, loading, rentals)"],["site","Site Superintendent or Supervisor (site, crew, daily logs)"]];
 const RESP = [["company", "Whole company"], ["office", "Office"], ["estimating", "Estimating"], ["field", "Field"], ["custom", "Custom"]];
 const RESP_AREAS = { company:["office","money","payroll","field","assistants"], office:["office","money","payroll","assistants"], estimating:["office","assistants"], field:["field"] };
 const ADM = { list:null, err:null, settings:{ idleHours:8 }, log:[], me:"", idleChoices:[1,4,8,12], loading:false };
@@ -4285,8 +4312,6 @@ VIEWS.people = {
       ["view", "edit", "admin"].map(k => '<dt>' + E(LEVEL_INFO[k].label) + '</dt><dd>' + E(LEVEL_INFO[k].what) + '</dd>').join("") +
       '<dt>Master admin</dt><dd>One level above admin, for Bruce only. Named in Netlify, not here, so nobody can make themselves master. The only person who can see another person\'s mail through View as, and the only one who can change the master admin\'s account.</dd></dl></div>';
 
-    h += '<div class="card"><h2>Project assistant for staff</h2><p class="lede">Built and ready for project managers and field leads, but held back until Craig and Amir have used theirs and vouch for it. Preview it under Admin first.</p>' +
-      '<div class="ac-row"><span class="tag ' + (ADM.settings.projectAssistantLive ? "clear" : "mute") + '">' + (ADM.settings.projectAssistantLive ? "On for staff" : "Off for staff") + '</span><button class="btn ghost" data-ac-pmlive="' + (ADM.settings.projectAssistantLive ? "0" : "1") + '">' + (ADM.settings.projectAssistantLive ? "Switch off" : "Switch on for staff") + '</button></div></div>';
     h += '<div class="card"><h2>Signing out on its own</h2><p class="lede">A computer or phone left open asks for the password again after this long without use. Everybody, on every device.</p>' +
       '<div class="ac-row"><label class="fld"><span>Ask again after</span><select id="acIdle">' + ADM.idleChoices.map(n => '<option value="' + n + '"' + (n === ADM.settings.idleHours ? " selected" : "") + '>' + plural(n, "hour") + ' without use</option>').join("") + '</select></label>' +
       '<button class="btn ghost" data-ac-idle>Save</button></div><p class="sub" id="acIdleMsg"></p></div>';
@@ -4325,8 +4350,8 @@ function acForm(a){
     '<fieldset class="ac-set"><legend>Sees</legend>' + AREA_KEYS.map(k => '<label class="ac-check"><input type="checkbox" name="area" value="' + k + '"' + (a.areas.includes(k) ? " checked" : "") + '><span><b>' + E(AREA_INFO[k].label) + '</b> ' + E(AREA_INFO[k].what) + '</span></label>').join("") + '</fieldset>' +
     '<fieldset class="ac-set"><legend>Can do</legend>' + ["view", "edit", "admin"].map(k => '<label class="ac-check"><input type="radio" name="level" value="' + k + '"' + (a.level === k ? " checked" : "") + (me && k !== "admin" ? " disabled" : "") + '><span><b>' + E(LEVEL_INFO[k].label) + '</b> ' + E(LEVEL_INFO[k].what) + '</span></label>').join("") +
     (me ? '<p class="sub">You cannot take admin away from yourself. Another admin can.</p>' : '') + '</fieldset>' +
-    '<fieldset class="ac-set"><legend>Personal assistant</legend><label class="fld"><span>Assistant</span><select name="assistant">' + [["exec","Executive (leadership)"],["estimator","Estimator (bids, quotes, site visits)"],["project","Project (PMs and field leads)"],["none","None"]].map(o => '<option value="' + o[0] + '"' + ((a.assistant || "none") === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
-      '<label class="fld"><span>Opens on</span><select name="landing"><option value="brief"' + (a.landing === "brief" ? " selected" : "") + '>My day</option><option value="overview"' + (a.landing !== "brief" ? " selected" : "") + '>Overview</option></select></label><p class="sub">The project assistant stays off for staff until it is switched on below the list of people.</p></fieldset>' +
+    '<fieldset class="ac-set"><legend>Personal assistant</legend><label class="fld"><span>Assistant</span><select name="assistant">' + (isNew ? [["", "Picked from their job title"]] : []).concat(ASSIST_ROLES).map(o => '<option value="' + o[0] + '"' + ((isNew ? "" : (a.assistant || "")) === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
+      '<label class="fld"><span>Opens on</span><select name="landing"><option value="brief"' + (a.landing === "brief" ? " selected" : "") + '>My day</option><option value="overview"' + (a.landing !== "brief" ? " selected" : "") + '>Overview</option></select></label><p class="sub">Everyone has an assistant, set up for their position. It starts from their job title; pick another here if it does not fit.</p></fieldset>' +
     '<fieldset class="ac-set"><legend>Claude</legend><label class="ac-check"><input type="checkbox" name="claude"' + (a.claude ? " checked" : "") + '><span><b>Can ask Claude</b> Opens the Ask Claude panel on every page, which answers from what that person can already see. For people with a Claude account, it also hands the question over to their own Claude, and lets them connect their own Claude to the command centre (My account, Your own Claude).</span></label></fieldset>' +
     '<div class="actions">' + (isNew ? '<button type="button" class="btn" data-ac-save="invite">Add and send an invite</button><button type="button" class="btn ghost" data-ac-save="temp">Add with a temporary password</button>' : '<button type="button" class="btn" data-ac-save>Save the changes</button>') + '</div>' +
     (isNew ? '<p class="sub">An invite emails them a link that works once, for seven days, to choose their own password. No password is ever emailed.</p>' : '') + '<p class="sub" id="acMsg" role="status"></p></form>';
