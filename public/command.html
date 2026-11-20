@@ -189,6 +189,10 @@ tr[data-ac-edit]:hover td{background:var(--panel-2)}
 .cct-count{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3)}
 .cct-x{background:var(--panel);border:1px solid var(--rule);color:var(--ink);cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}
 .cct-x:hover{border-color:var(--cyan)}
+.claimbox{border:1px solid var(--rule);border-left:4px solid var(--rule);border-radius:3px;padding:10px 14px;margin-bottom:14px;background:var(--panel-2)}
+.claimbox.mine{border-left-color:#3f8f5a}.claimbox.other{border-left-color:#e0a445;background:var(--cyan-wash)}
+.claimbox p{margin:0 0 8px}.claimbox .actions{margin:4px 0 6px}
+.estjob .nm,.estjob .sm{display:block}.estjob .sm{color:var(--ink-3);font-size:12px}
 .cct-x span{font-size:18px;line-height:1}
 .cct-body{margin:0;font-size:14.5px;line-height:1.55;color:var(--ink-2)}
 .cct-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px}
@@ -967,6 +971,58 @@ const jtUrl = id => "https://app.jobtread.com/jobs/" + encodeURIComponent(id);
 function jobCell(j){
   return '<span class="nm">' + E(j._number) + ' ' + E(j._name) + '</span><span class="sm">' + E(j._cust || j._addr || "") + '</span>';
 }
+/* ---------- Taken by (Craig, 2026-11-20) ----------
+   Estimators and managers help each other, so whoever takes a lead says so
+   and everyone else sees it. Kept in JobTread as an "Estimate" task assigned
+   to that person (server: readClaims and saveClaim in command.mjs). */
+const CL = { data:null, err:null, loading:false, busy:"", msg:"", msgJob:"" };
+function clLoad(fresh){
+  if(CL.loading) return Promise.resolve(); CL.loading = true;
+  return api("claims", fresh).then(d => { CL.data = d.claims || {}; CL.err = null; }).catch(e => { CL.err = e; }).finally(() => { CL.loading = false; render(); });
+}
+const claimable = j => !!j && ["lead","est","out"].includes(stageOf(st(j)));
+const claimOf = j => (CL.data && j && CL.data[j._id]) || null;
+const claimMine = c => !!c && String(c.by || "").toLowerCase().split(",").map(x => x.trim()).includes(String(ME.name || "").toLowerCase());
+function takenTag(j){
+  if(!claimable(j) || !CL.data) return "";
+  const c = claimOf(j);
+  if(!c) return ' <span class="tag mute" title="Nobody has taken this yet">Not taken</span>';
+  return ' <span class="tag ' + (claimMine(c) ? "clear" : "caution") + '" title="Taken ' + E(c.at) + '">' + (claimMine(c) ? "Yours" : E(c.by)) + '</span>';
+}
+function claimPanel(j){
+  if(PLATFORM !== "app" || !claimable(j)) return "";
+  if(CL.err) return '<div class="state" style="margin-bottom:14px">Who has this could not be read from JobTread: ' + E(CL.err.message || "") + '</div>';
+  if(!CL.data){ clLoad(false); return '<div class="state" style="margin-bottom:14px">Checking who has this…</div>'; }
+  const c = claimOf(j), busy = CL.busy === j._id ? " disabled" : "", ro = !!VIEW_AS, id = E(j._id);
+  let h = '<div class="claimbox' + (c && !claimMine(c) ? " other" : c ? " mine" : "") + '">';
+  if(!c) h += '<p><b>Nobody has taken this yet.</b> Take it, so nobody else starts the same estimate.</p>' + (ro ? '' : '<div class="actions"><button class="btn" data-claim-take="' + id + '"' + busy + '>Take it</button></div>');
+  else if(claimMine(c)) h += '<p><b>You have this one</b>, since ' + E(c.at) + '. Everyone else sees it as yours.</p>' + (ro ? '' : '<div class="actions"><button class="btn ghost" data-claim-drop="' + id + '"' + busy + '>Let it go</button></div>');
+  else h += '<p><b>' + E(c.by) + ' has this one</b>, since ' + E(c.at) + '. Talk to them before you start on it.</p>' + (ro ? '' : '<div class="actions"><button class="btn ghost" data-claim-over="' + id + '"' + busy + '>Take it over</button>' + (ME.admin ? '<button class="btn ghost" data-claim-drop="' + id + '"' + busy + '>Free it up</button>' : '') + '</div>');
+  if(CL.msg && CL.busy === "" && CL.msgJob === j._id) h += '<p class="sub" role="status">' + E(CL.msg) + '</p>';
+  return h + '<p class="sub">Kept in JobTread as an Estimate task, assigned to whoever has it.</p></div>';
+}
+function claimDo(jobId, take, force, btn){
+  CL.busy = jobId; CL.msg = ""; CL.msgJob = jobId; if(btn) btn.disabled = true;
+  return apiPost({ claim:{ jobId, take, force } }).then(b => {
+    CL.data = CL.data || {};
+    if(b.claim) CL.data[jobId] = b.claim; else delete CL.data[jobId];
+    CL.msg = take ? (b.from ? "Taken over from " + b.from + "." : "It is yours. Everyone else now sees it as taken.") : "Let go. Anyone can take it now.";
+  }).catch(e => {
+    CL.msg = e.message || "That did not work.";
+    if(e.code === "taken") clLoad(true);
+  }).finally(() => { CL.busy = ""; render(); if(drawerState && drawerState.kind === "job" && drawerState.id === jobId) openJob(jobId); });
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-claim-take],[data-claim-drop],[data-claim-over]"); if(!t) return;
+  const d = t.dataset;
+  if(d.claimTake) return claimDo(d.claimTake, true, false, t);
+  if(d.claimDrop) return claimDo(d.claimDrop, false, false, t);
+  if(d.claimOver){
+    /* Taking it from someone else needs a second press. */
+    if(t.dataset.sure !== "1"){ t.dataset.sure = "1"; t.textContent = "Yes, take it over"; return; }
+    return claimDo(d.claimOver, true, true, t);
+  }
+});
 function stTag(j){
   const g = stageOf(st(j));
   const cls = g === "unknown" ? "stop" : (g === "close" ? "caution" : "mute");
@@ -1276,7 +1332,7 @@ function openJob(id){
   openDrawer('<small>' + E(j._number) + ' · ' + E(st(j)) + '</small>' + E(j._name),
     '<div class="actions"><a class="btn" href="' + jtUrl(j._id) + '" target="_blank" rel="noopener">Open in JobTread</a>' +
     (drawerStateBack ? '<button class="btn ghost" data-back="1">Back to the list</button>' : '') + '</div>' +
-    nextStepPanel(j) +
+    nextStepPanel(j) + claimPanel(j) +
     (gaps.length ? '<div class="state wait" style="margin-bottom:14px">Missing in JobTread: ' + E(gaps.join(", ")) + '. ' + (PLATFORM === "app" ? "Fill them in below and save." : "Fill these in JobTread and press Refresh here.") + '</div>' : '') +
     (PLATFORM === "app" && CAN_EDIT && typeof editForm === "function" ? editForm(j) : '') +
     billingPanel(j) + '<dl class="facts">' + facts + '</dl><h3>Quotes</h3>' + qhtml +
@@ -1778,7 +1834,7 @@ async function startApp(){
   CAN_EDIT = !!me.edit;
   if(VIEW_AS && !me.viewAs){ try{ sessionStorage.removeItem("am.viewAs"); }catch(e){} VIEW_AS = null; }
   if(me.viewAs){ CAN_EDIT = false; viewAsBanner(me); }
-  const asLive = me.assistant === "exec" || (me.assistant === "project" && (me.projectLive || me.admin));
+  const asLive = me.assistant === "exec" || me.assistant === "estimator" || (me.assistant === "project" && (me.projectLive || me.admin));
   const tabs = asLive ? ["brief", "notes", "overview"] : ["notes", "overview"];
   if(has("office")) tabs.push("estimating", "dispatch", "tm");
   if(has("money")) tabs.push("money", "cashflow");
@@ -2068,14 +2124,15 @@ VIEWS.estimating = {
   render(){
     const nr = jobsReady(); if(nr) return head("Estimating", "") + nr;
     const J = live();
-    let h = head("Estimating", "From the first call to the quote going out. Bid dates, site visits, quotes waiting on an answer, and whether we are winning.");
+    if(PLATFORM === "app" && !CL.data && !CL.err) clLoad(false);
+    let h = head("Estimating", "From the first call to the quote going out. Bid dates, site visits, quotes waiting on an answer, and whether we are winning. The tag beside a job says who has taken it; press a job to take it.");
     h += verdictHtml(this.alerts(), "Estimating is on top of everything.", "No bid is about to be missed and no quote has gone quiet.");
     h += '<div class="grid">';
     const due = bidsDue();
     h += '<div class="card wide"><h2>Bids due in the next two weeks</h2><p class="lede">From the Bid Due Date and Time field. Red means it is close and the quote has not gone out.</p>' +
       tbl('<th>Job</th><th>Bid type</th><th>Status</th><th class="r">Due</th>', due.map(x => {
         const sent = stageOf(st(x.j)) === "out", cls = sent ? "clear" : (x.d <= 2 ? "stop" : x.d <= 5 ? "caution" : "mute");
-        return '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td>' + E(F(x.j["Bid Type"]) || "Not set") + '</td><td>' + stTag(x.j) + '</td><td class="r"><span class="tag ' + cls + '">' + (sent ? "Sent" : rel(x.d, false, true)) + '</span><span class="sm">' + E(showWhen(F(x.j["Bid Due Date and Time"]))) + '</span></td></tr>';
+        return '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + takenTag(x.j) + '</td><td>' + E(F(x.j["Bid Type"]) || "Not set") + '</td><td>' + stTag(x.j) + '</td><td class="r"><span class="tag ' + cls + '">' + (sent ? "Sent" : rel(x.d, false, true)) + '</span><span class="sm">' + E(showWhen(F(x.j["Bid Due Date and Time"]))) + '</span></td></tr>';
       }), "No bids due in the next two weeks.") + '</div>';
 
     const q = quotesOut();
@@ -2088,7 +2145,7 @@ VIEWS.estimating = {
         (noDoc.length ? ' Another ' + plural(noDoc.length, "job") + ' <button class="go" data-list="nodoc">See them</button> say a quote went out, but no quote was built in JobTread, so they cannot be timed or valued.' : '') + '</p>' +
         tbl('<th>Job</th><th>Bid type</th><th class="r">Value</th><th class="r">Waiting</th>', q.list.map(x => {
           const cls = x.age > 30 ? "stop" : x.age > 14 ? "caution" : "mute";
-          return '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td>' + E(F(x.j["Bid Type"]) || "") + '<span class="sm">' + E(st(x.j)) + '</span></td><td class="r num">' + M(x.o.price) + '</td><td class="r"><span class="tag ' + cls + '">' + (x.age === null ? "No date" : x.age + " days") + '</span><span class="sm">' + E(showDate(x.o.issueDate) || "") + '</span></td></tr>';
+          return '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + takenTag(x.j) + '</td><td>' + E(F(x.j["Bid Type"]) || "") + '<span class="sm">' + E(st(x.j)) + '</span></td><td class="r num">' + M(x.o.price) + '</td><td class="r"><span class="tag ' + cls + '">' + (x.age === null ? "No date" : x.age + " days") + '</span><span class="sm">' + E(showDate(x.o.issueDate) || "") + '</span></td></tr>';
         }), "No quotes waiting on an answer.", 15);
     }
     h += '</div>';
@@ -2099,7 +2156,7 @@ VIEWS.estimating = {
 
     const visits = J.filter(j => F(j["Site Visit Date and Time"])).map(j => ({ j, d: daysTo(F(j["Site Visit Date and Time"])) })).filter(x => x.d !== null && x.d >= -1 && x.d <= 14).sort((a, b) => a.d - b.d);
     h += '<div class="card"><h2>Site visits coming up</h2><p class="lede">From the Site Visit Date and Time field.</p>' +
-      tbl('<th>Job</th><th class="r">When</th>', visits.map(x => '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + '</td><td class="r"><span class="tag ' + (x.d <= 1 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span><span class="sm">' + E(showWhen(F(x.j["Site Visit Date and Time"]))) + '</span></td></tr>'), "No site visits booked in the next two weeks.") + '</div>';
+      tbl('<th>Job</th><th class="r">When</th>', visits.map(x => '<tr data-job="' + E(x.j._id) + '" tabindex="0"><td>' + jobCell(x.j) + takenTag(x.j) + '</td><td class="r"><span class="tag ' + (x.d <= 1 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span><span class="sm">' + E(showWhen(F(x.j["Site Visit Date and Time"]))) + '</span></td></tr>'), "No site visits booked in the next two weeks.") + '</div>';
 
     const pre = PRE.map(s => [s, J.filter(j => st(j) === s).length, "status:" + s]).filter(x => x[1]);
     h += '<div class="card"><h2>Where every open quote is sitting</h2><p class="lede">Press a line to see the jobs.</p>' + bars(pre) + '</div>';
@@ -2121,7 +2178,7 @@ VIEWS.estimating = {
 
     const leads = J.filter(j => stageOf(st(j)) === "lead").sort((a, b) => String(a._created).localeCompare(String(b._created)));
     h += '<div class="card"><h2>Leads not picked up yet</h2><p class="lede">New leads and uploads, oldest first.</p>' +
-      tbl('<th>Job</th><th class="r">Waiting</th>', leads.map(j => { const d = daysSince(j._created); return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + '</td><td class="r"><span class="tag ' + (d > 3 ? "caution" : "mute") + '">' + d + ' days</span></td></tr>'; }), "Every lead has been picked up.") + '</div>';
+      tbl('<th>Job</th><th class="r">Waiting</th>', leads.map(j => { const d = daysSince(j._created); return '<tr data-job="' + E(j._id) + '" tabindex="0"><td>' + jobCell(j) + takenTag(j) + '</td><td class="r"><span class="tag ' + (d > 3 ? "caution" : "mute") + '">' + d + ' days</span></td></tr>'; }), "Every lead has been picked up.") + '</div>';
     h += leadCard();
     return shortWarn() + h + '</div>';
   }
@@ -2334,16 +2391,18 @@ function asCalendar(){
   return h + '</div>';
 }
 function asInbox(){
-  const d = AS.data, ib = (AS.inbox && AS.inbox.inboxes) || d.inboxes || [];
+  const d = AS.data, own = (AS.inbox && AS.inbox.inboxes) || (d.inboxes || []).filter(x => !x.shared);
+  const ib = own.concat((d.inboxes || []).filter(x => x.shared && !own.some(o => o.email === x.email)));
+  const est = d.role === "estimator";
   const needN = d.triage && d.triage.items ? d.triage.items.filter(x => x.bucket === "needs_you").length : 0;
   let h = '<div class="card wide o-inbox" data-nofold data-tour="as-inbox"><h2>Your inbox' + (needN ? ' <span class="md-count stop">' + needN + ' need you</span>' : '') + '</h2>';
   if(d.triage && d.triage.hidden) return h + '<p class="lede">Their mail stays private. Only the master admin can see another person\'s mail.</p></div>';
-  if(!ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it every half hour through the working day: what needs you (it goes on your hit list), payments, what is just for your information, and what is someone else\'s (estimating mail stays out of your way). It drafts replies for you to check and send yourself. It never sends anything.</p>' +
+  if(!own.length && !ib.length) return h + '<p class="lede">Connect your own work inbox and your assistant sorts it every half hour through the working day: what needs you (it goes on your hit list), payments, what is just for your information, and what is someone else\'s' + (est ? '' : ' (estimating mail stays out of your way)') + '. It drafts replies for you to check and send yourself. It never sends anything.</p>' +
     (AS.inbox && AS.inbox.ready === false ? '<div class="state wait">Google sign-in is not set up in Netlify yet.</div>' : '<button class="btn" data-as-connect>Connect my inbox</button>') + '</div>';
   const t = d.triage || {}, items = t.items || [];
   const group = (b, title, open) => { const g = items.filter(x => x.bucket === b); if(!g.length) return "";
     return '<details class="asmail"' + (open ? " open" : "") + '><summary><b>' + E(title) + '</b> <span class="tag ' + (b === "needs_you" ? "stop" : b === "payment" ? "clear" : "mute") + '">' + g.length + '</span></summary><ul>' + g.map(x =>
-      '<li><div><b>' + E(x.who || x.address) + '</b> <span class="sm">' + E(x.inbox) + '</span><div>' + E(x.subject) + '</div><span class="sm">' + E([x.why, x.action, x.payment ? (x.payment.direction === "in" ? "Money in: " : "Money out: ") + x.payment.name + " " + M(x.payment.amount) : ""].filter(Boolean).join(" · ")) + '</span></div>' +
+      '<li><div><b>' + E(x.who || x.address) + '</b> <span class="sm">' + E(x.inbox) + '</span>' + bidTag(x) + '<div>' + E(x.subject) + '</div><span class="sm">' + E([x.why, x.action, x.payment ? (x.payment.direction === "in" ? "Money in: " : "Money out: ") + x.payment.name + " " + M(x.payment.amount) : ""].filter(Boolean).join(" · ")) + '</span></div>' +
       '<div class="ac">' + (x.draft ? '<a class="btn ghost sm" href="' + E(x.draft.link || "https://mail.google.com/mail/u/0/#drafts") + '" target="_blank" rel="noopener">Draft is in Gmail</a>' : b === "needs_you" ? '<button type="button" class="btn ghost sm" data-as-draft="' + E(x.id) + '">Draft a reply</button>' : '') +
       '<a class="linkish" href="' + E(asMailLink(x.inbox, x.threadId || x.id)) + '" target="_blank" rel="noopener">Open</a> <button type="button" class="linkish" data-as-handled="' + E(x.id) + '">Done</button></div></li>').join("") + '</ul></details>'; };
   const learned = (d.rules && d.rules.notMine) || [], vips = (d.rules && d.rules.vip) || [];
@@ -2351,12 +2410,65 @@ function asInbox(){
     vips.map(v => '<li><div><b>' + E(v) + '</b><span class="sm">Always flagged</span></div><div class="ac"><button type="button" class="linkish" data-as-unvip="' + E(v) + '">Stop</button></div></li>').join("") +
     learned.map(r => '<li><div><b>' + E(r.name || r.address) + '</b><span class="sm">Not yours' + (r.subject ? ': "' + E(r.subject) + '"' : '') + '</span></div><div class="ac"><button type="button" class="linkish" data-as-forget="' + E(r.address) + '" data-subject="' + E(r.subject || "") + '">Forget</button></div></li>').join("") + '</ul></details>' : '';
   h += '<p class="lede">' + (t.at ? "Sorted " + whenSeen(t.at) + ". " : "Not sorted yet. ") + "Sorted every half hour, 7:00 to 5:30 on weekdays. What needs you is at the top of this page under Needs you. Everything else is here.</p>" +
-    '<ul class="plain asboxes">' + ib.map(x => '<li><b>' + E(x.email) + '</b>' + (d.role && !(d.triage && d.triage.hidden) && !VIEW_AS ? ' <button type="button" class="linkish" data-as-rminbox="' + E(x.email) + '">Disconnect</button>' : '') + '</li>').join("") + '</ul>' +
+    '<ul class="plain asboxes">' + ib.map(x => '<li><b>' + E(x.email) + '</b>' + (x.shared ? ' <span class="sm">shared by the estimators, connected by an admin</span>' : d.role && !(d.triage && d.triage.hidden) && !VIEW_AS ? ' <button type="button" class="linkish" data-as-rminbox="' + E(x.email) + '">Disconnect</button>' : '') + '</li>').join("") + '</ul>' +
+    (!own.length ? '<p class="sm">Your own work inbox is not connected yet. <button class="linkish" data-as-connect>Connect my inbox</button></p>' : '') +
     (AS.inbox && AS.inbox.personal ? '<p class="sm">You can also add your personal Gmail: press Add another inbox and pick it on the Google screen.</p>' : '') +
     '<div class="row-btns"><button class="btn ghost" data-as-triage>' + (AS.busy ? "Working…" : "Sort new mail now") + '</button><button class="linkish" data-as-connect>Add another inbox</button></div>' +
     ((t.errors || []).length ? '<div class="state wait">' + t.errors.map(E).join("<br>") + '</div>' : '') +
-    group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", "Someone else is handling it (you are copied)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true) + learnedBox;
+    group("needs_you", "Needs you", true) + group("payment", "Payments", true) + group("fyi", "For your information", false) + group("not_yours", est ? "Someone else has it" : "Someone else is handling it (you are copied)", false) + group("junk", "Junk", false) + group("unsorted", "Not sorted (no Claude key)", true) + learnedBox;
   return h + '</div>';
+}
+/* ---------- Estimator assistant (Craig, 2026-11-20) ----------
+   Same My day as the executive one, with the estimating work beside it:
+   what you have taken, bids closing, quotes with no answer, site visits. */
+const BID_LBL = { invite:"Bid invite", addendum:"Addendum", rfi:"RFI", site_visit:"Site visit", quote_reply:"Quote reply" };
+function bidTag(x){
+  if(!x) return "";
+  let h = "";
+  if(x.bid && BID_LBL[x.bid.kind]) h += ' <span class="tag">' + E(BID_LBL[x.bid.kind]) + (x.bid.closes ? ', ' + E(x.bid.closes) : '') + (x.bid.job ? ' · ' + E(x.bid.job) : '') + '</span>';
+  if(x.takenBy) h += ' <span class="tag ' + (x.takenBy === "you" ? "clear" : "caution") + '">' + (x.takenBy === "you" ? "Yours" : E(x.takenBy) + " has it") + '</span>';
+  return h;
+}
+function estRow(j, right, extra){
+  const c = claimOf(j);
+  const btn = !CL.data || c || VIEW_AS ? "" : '<button type="button" class="btn ghost sm" data-claim-take="' + E(j._id) + '"' + (CL.busy === j._id ? " disabled" : "") + '>Take it</button>';
+  return '<li><div class="estjob" data-job="' + E(j._id) + '" tabindex="0" style="cursor:pointer">' + jobCell(j) + takenTag(j) + (extra ? '<span class="sm">' + extra + '</span>' : '') + '</div><div class="ac">' + (right || "") + btn + '</div></li>';
+}
+function asEstimator(){
+  if(!S.jobs) return '<div class="card wide">' + wait("the jobs") + '</div>';
+  if(PLATFORM === "app" && !CL.data && !CL.err) clLoad(false);
+  let h = "";
+  /* Mine: everything I have taken that is still before the quote is answered. */
+  const mine = live().filter(j => claimable(j) && claimMine(claimOf(j)));
+  h += '<div class="card wide o-est" data-nofold data-tour="as-est"><h2>Taken by you' + (mine.length ? ' <span class="md-count">' + mine.length + '</span>' : '') + '</h2>' +
+    '<p class="lede">Leads and estimates you have taken. Everyone else sees them as yours. Open one to let it go.</p>' +
+    (CL.err ? failBox(CL.err, "Who has what") : !CL.data ? wait("who has what") :
+      mine.length ? '<ul class="plain md-rows">' + mine.map(j => {
+        const due = F(j["Bid Due Date and Time"]), sv = F(j["Site Visit Date and Time"]);
+        return estRow(j, stTag(j), [due ? "Due " + showWhen(due) : "", sv ? "Site visit " + showWhen(sv) : ""].filter(Boolean).join(" · "));
+      }).join("") + '</ul>' : '<div class="md-empty"><b>Nothing taken yet.</b>Take a lead below, or from the Estimating page, so nobody else starts it.</div>') + '</div>';
+  /* Bids closing in the next two weeks, not sent yet. */
+  const due = bidsDue().filter(x => stageOf(st(x.j)) !== "out" && x.d >= 0);
+  h += '<div class="card wide o-bids" data-nofold><h2>Bids closing' + (due.length ? ' <span class="md-count' + (due.some(x => x.d <= 2) ? " stop" : "") + '">' + due.length + '</span>' : '') + '</h2>' +
+    '<p class="lede">Next two weeks, quote not out yet. Take the ones you are doing.</p>' +
+    (due.length ? '<ul class="plain md-rows">' + due.map(x => estRow(x.j, '<span class="tag ' + (x.d <= 2 ? "stop" : x.d <= 5 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span>', F(x.j["Bid Type"]) || "")).join("") + '</ul>' : '<div class="md-empty"><b>No bids closing in the next two weeks.</b></div>') + '</div>';
+  /* New leads nobody has picked up. */
+  const leads = live().filter(j => stageOf(st(j)) === "lead" && !claimOf(j)).sort((a, b) => String(a._created).localeCompare(String(b._created)));
+  if(CL.data && leads.length) h += '<div class="card wide o-leads" data-nofold><h2>Leads nobody has taken <span class="md-count">' + leads.length + '</span></h2><p class="lede">Oldest first.</p><ul class="plain md-rows">' +
+    leads.map(j => estRow(j, '<span class="tag ' + (daysSince(j._created) > 3 ? "caution" : "mute") + '">' + daysSince(j._created) + ' days</span>')).join("") + '</ul></div>';
+  /* Quotes with no answer: follow up on the cadence. */
+  const q = quotesOut();
+  if(q && q.list.length){
+    const mineFirst = q.list.slice().sort((a, b) => (claimMine(claimOf(b.j)) - claimMine(claimOf(a.j))) || ((b.age || 0) - (a.age || 0)));
+    h += '<div class="card wide o-quotes" data-nofold><h2>Quotes with no answer <span class="md-count">' + q.list.length + '</span></h2><p class="lede">Sent from JobTread, not yet approved or turned down. Yours first. Follow up starts a chase: a short note drafted each day for three days, then a call on your list.</p><ul class="plain md-rows">' +
+      mineFirst.slice(0, 15).map(x => estRow(x.j, '<span class="tag ' + (x.age > 30 ? "stop" : x.age > 14 ? "caution" : "mute") + '">' + (x.age === null ? "No date" : x.age + " days") + '</span>' + (VIEW_AS ? "" : '<button type="button" class="btn ghost sm" data-as-chasefor="' + E(x.j._id) + '">Follow up</button>'), M(x.o.price) + " before GST")).join("") + '</ul></div>';
+  }
+  return h;
+}
+function asSiteVisits(){
+  if(!S.jobs) return "";
+  const v = live().filter(j => F(j["Site Visit Date and Time"])).map(j => ({ j, d: daysTo(F(j["Site Visit Date and Time"])) })).filter(x => x.d !== null && x.d >= 0 && x.d <= 7).sort((a, b) => a.d - b.d);
+  return '<div class="card o-visits" data-nofold><h2>Site visits this week</h2>' + (v.length ? '<ul class="plain md-rows">' + v.map(x => estRow(x.j, '<span class="tag ' + (x.d <= 1 ? "caution" : "mute") + '">' + rel(x.d, false, true) + '</span>', showWhen(F(x.j["Site Visit Date and Time"])) + (x.j._addr ? " · " + x.j._addr : ""))).join("") + '</ul>' : '<div class="md-empty"><b>No site visits in the next week.</b></div>') + '</div>';
 }
 function asMoney(){ return mdCash() + mdBank() + mdDue(); }
 function mdCash(){
@@ -2534,6 +2646,8 @@ VIEWS.brief = {
       ((d.doneToday || []).length ? '<details style="margin-top:10px"><summary class="sm">Done today (' + d.doneToday.length + ')</summary><ul class="plain">' + d.doneToday.map(x => '<li>' + E(x.text) + (x.doneWhy ? ' <span class="sm">' + E(x.doneWhy) + '</span>' : '') + ' <button class="linkish" data-as-untick="' + E(x.id) + '">Undo</button></li>').join("") + '</ul></details>' : '') +
       '<div class="md-bar" data-tour="as-checkins"><span>Check in now:</span><button class="md-pill" data-as-checkin="morning">Morning</button><button class="md-pill" data-as-checkin="noon">Noon</button><button class="md-pill" data-as-checkin="end">End of day</button>' +
       '<label><input type="checkbox" data-as-emailme' + (d.settings.emailCheckins === false ? "" : " checked") + '> Email me each check-in</label></div></div>';
+    /* An estimator's bids and quotes come straight after the hit list. */
+    if(d.role === "estimator") main += asEstimator();
     main += mdNotes();
     main += asInbox();
     let side = "";
@@ -2541,6 +2655,8 @@ VIEWS.brief = {
       side += asCalendar();
       if(CFG.qb) side += asMoney();
       if(ME.areas.includes("field") || ME.areas.includes("office")) main += asJobs();
+    } else if(d.role === "estimator"){
+      side += asCalendar() + asSiteVisits();
     } else main += asProject(ME.name);
     main += asChases();
     h += '<div class="md-cols' + (side ? "" : " one") + '"><div class="md-main">' + main + '</div>' + (side ? '<div class="md-side">' + side + '</div>' : '') + '</div>';
@@ -4209,7 +4325,7 @@ function acForm(a){
     '<fieldset class="ac-set"><legend>Sees</legend>' + AREA_KEYS.map(k => '<label class="ac-check"><input type="checkbox" name="area" value="' + k + '"' + (a.areas.includes(k) ? " checked" : "") + '><span><b>' + E(AREA_INFO[k].label) + '</b> ' + E(AREA_INFO[k].what) + '</span></label>').join("") + '</fieldset>' +
     '<fieldset class="ac-set"><legend>Can do</legend>' + ["view", "edit", "admin"].map(k => '<label class="ac-check"><input type="radio" name="level" value="' + k + '"' + (a.level === k ? " checked" : "") + (me && k !== "admin" ? " disabled" : "") + '><span><b>' + E(LEVEL_INFO[k].label) + '</b> ' + E(LEVEL_INFO[k].what) + '</span></label>').join("") +
     (me ? '<p class="sub">You cannot take admin away from yourself. Another admin can.</p>' : '') + '</fieldset>' +
-    '<fieldset class="ac-set"><legend>Personal assistant</legend><label class="fld"><span>Assistant</span><select name="assistant">' + [["exec","Executive (leadership)"],["project","Project (PMs and field leads)"],["none","None"]].map(o => '<option value="' + o[0] + '"' + ((a.assistant || "none") === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
+    '<fieldset class="ac-set"><legend>Personal assistant</legend><label class="fld"><span>Assistant</span><select name="assistant">' + [["exec","Executive (leadership)"],["estimator","Estimator (bids, quotes, site visits)"],["project","Project (PMs and field leads)"],["none","None"]].map(o => '<option value="' + o[0] + '"' + ((a.assistant || "none") === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
       '<label class="fld"><span>Opens on</span><select name="landing"><option value="brief"' + (a.landing === "brief" ? " selected" : "") + '>My day</option><option value="overview"' + (a.landing !== "brief" ? " selected" : "") + '>Overview</option></select></label><p class="sub">The project assistant stays off for staff until it is switched on below the list of people.</p></fieldset>' +
     '<fieldset class="ac-set"><legend>Claude</legend><label class="ac-check"><input type="checkbox" name="claude"' + (a.claude ? " checked" : "") + '><span><b>Can ask Claude</b> Opens the Ask Claude panel on every page, which answers from what that person can already see. For people with a Claude account, it also hands the question over to their own Claude.</span></label></fieldset>' +
     '<div class="actions">' + (isNew ? '<button type="button" class="btn" data-ac-save="invite">Add and send an invite</button><button type="button" class="btn ghost" data-ac-save="temp">Add with a temporary password</button>' : '<button type="button" class="btn" data-ac-save>Save the changes</button>') + '</div>' +
@@ -5282,7 +5398,27 @@ function loadCN(){
   cnCall().then(d => { CN.data = d; CN.err = null; }).catch(e => { CN.err = e; }).then(() => { CN.loading = false; render(); });
   if(ME.areas.includes("assistants")) fetch("/api/mail?action=status", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(m => { CN.mail = m; render(); }).catch(() => {});
   if(ME.claude) fetch("/api/claude", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(c => { CN.claude = c; render(); }).catch(() => {});
+  if(ME.admin) fetch("/api/inbox?shared=estimating", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(e => { CN.est = e; render(); }).catch(() => {});
 }
+/* The shared estimating inbox every estimator's assistant reads (2026-11-20). */
+function estInboxCard(){
+  const e = CN.est; if(!e) return "";
+  const ib = e.inbox;
+  return '<div class="card"><h2><span class="lamp' + (ib ? " on" : "") + '"></span>Estimating inbox</h2><p class="lede">' +
+    (ib ? E(ib.email) + ' is connected' + (ib.addedBy ? ', by ' + E(ib.addedBy) : '') + ', ' + E(whenSeen(ib.addedAt)) + '. Every estimator\'s assistant sorts it with their own inbox, and a lead someone has taken shows as theirs.'
+        : 'Not connected. Connect ' + E(e.address) + ' once, and every estimator\'s assistant sorts it with their own inbox. You need its Google password; pick it on the Google screen.') + '</p>' +
+    (e.ready === false ? '<div class="state wait">Google sign-in is not set up in Netlify yet.</div>' :
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn' + (ib ? " ghost" : "") + '" data-cn-est>' + (ib ? "Connect again" : "Connect the estimating inbox") + '</button>' + (ib ? '<button class="btn ghost" data-cn-estoff>Disconnect</button>' : '') + '</div>') +
+    (CN.estMsg ? '<p class="sub" role="status">' + E(CN.estMsg) + '</p>' : '') + '</div>';
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-cn-est],[data-cn-estoff]"); if(!t || VIEW_AS) return;
+  const call = (q, body) => fetch("/api/inbox" + q, body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" })
+    .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw b; return b; });
+  if(t.dataset.cnEst !== undefined) return call("?action=start&shared=estimating").then(b => { location.assign(b.url); }).catch(e => { CN.estMsg = e.message || "That did not work."; render(); });
+  if(t.dataset.sure !== "1"){ t.dataset.sure = "1"; t.textContent = "Yes, disconnect it"; return; }
+  call("", { action:"removeShared" }).then(() => { CN.est = { ...CN.est, inbox:null }; CN.estMsg = "Disconnected. The estimators' assistants no longer read it."; render(); }).catch(e => { CN.estMsg = e.message || "That did not work."; render(); });
+});
 VIEWS.connections = {
   hold(){ const a = document.activeElement; return !!(a && a.closest && a.closest("[data-cn-form]") && /INPUT/.test(a.tagName)); },
   alerts(){ const d = CN.data; if(!d) return []; const out = [];
@@ -5310,6 +5446,7 @@ VIEWS.connections = {
        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-cn-qb>' + (q.connected ? "Connect again" : "Connect QuickBooks") + '</button>' + (q.connected ? '<button class="btn ghost" data-cn-qbforget>Disconnect</button>' : '') + '</div>') + '</div>';
     if(d.jobtread.working) h += setupCard();
     h += driveAdminCard();
+    h += estInboxCard();
     if(CN.mail) h += '<div class="card"><h2><span class="lamp' + (CN.mail.connected ? " on" : "") + '"></span>Robots\' mailbox</h2><p class="lede">' + (CN.mail.connected ? "Connected to " + E(CN.mail.email || CN.mail.mailbox || "") + "." : "Not connected. The assistants' emails send from it.") + '</p>' + (CN.mail.connected ? '' : '<button class="btn" data-mail-connect>Connect the mailbox</button>') + '</div>';
     if(ME.claude) h += '<div class="card"><h2><span class="lamp' + (CN.claude && CN.claude.ready ? " on" : "") + '"></span>Ask Claude</h2><p class="lede">' + (CN.claude && CN.claude.ready ? "Ready. People with Can ask Claude ticked see the Claude button in the corner of every page." : "Needs ANTHROPIC_API_KEY in Netlify, from A&amp;M's own account at console.anthropic.com. Until then the button still offers Continue in my own Claude.") + '</p></div>';
     h += '</div>';

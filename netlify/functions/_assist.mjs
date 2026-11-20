@@ -85,6 +85,14 @@ export function addItem(doc, value, nowIso, { held = false } = {}) {
    it read "Nothing on your list" while their inbox was full of asks.
    One line per email thread. Once a line has been made for an email it is
    never made again, so ticking or removing it sticks. Returns the new lines. */
+/* What an estimator's assistant picks out of bid mail (2026-11-20). */
+export const BID_KINDS = { invite: "Bid invite", addendum: "Addendum", rfi: "RFI", site_visit: "Site visit", quote_reply: "Quote reply" };
+export function cleanBid(b) {
+  if (!b || typeof b !== "object" || !BID_KINDS[b.kind]) return null;
+  const job = String(b.job || "").trim().match(/^\d{2}-\d{3,6}$/) ? String(b.job).trim() : "";
+  const closes = /^\d{4}-\d{2}-\d{2}$/.test(String(b.closes || "")) ? String(b.closes) : "";
+  return { kind: b.kind, job, project: String(b.project || "").replace(/\s+/g, " ").trim().slice(0, 80), closes };
+}
 export function mailToList(doc, today, nowIso) {
   const added = [];
   doc.items = doc.items || [];
@@ -97,7 +105,10 @@ export function mailToList(doc, today, nowIso) {
     if (same) { m.listed = same.id; continue; }
     const who = String(m.who || m.address || "").trim();
     const what = String(m.action || m.subject || "Email needs you").trim();
-    const ck = cleanEntry({ text: (who ? who + ": " : "") + what, kind: "ask", who, source: "email" }, today);
+    /* An estimator's bid mail says what it is, and a closing date becomes the due date. */
+    const bid = m.bid && BID_KINDS[m.bid.kind] ? m.bid : null;
+    const ck = cleanEntry({ text: (bid ? BID_KINDS[bid.kind] + ": " : "") + (who ? who + ": " : "") + what, kind: "ask", who, source: "email",
+      due: bid && bid.closes ? bid.closes : "", jobNumber: bid && bid.job ? bid.job : "" }, today);
     if (!ck.ok) continue;
     const it = addItem(doc, { ...ck.value, mailId: m.id, mailThread: thread, inbox: m.inbox || "", subject: String(m.subject || "").slice(0, 160) }, nowIso);
     m.listed = it.id; added.push(it);
