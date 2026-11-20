@@ -27,6 +27,10 @@ export const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/gmail
 export const hasCalendar = inbox => !!inbox && String(inbox.scope || "").split(/\s+/).includes(CAL_SCOPE);
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 export const KEY = id => "inbox-" + id;
+/* The shared estimating inbox (2026-11-20): connected once by an admin and
+   read by every estimator's assistant. Kept under its own key, not anyone's. */
+export const SHARED_ESTIMATING = "shared-estimating";
+export const estimatingAddress = () => String(process.env.ESTIMATING_INBOX || "estimating@amabatement.com").trim().toLowerCase();
 
 /* Which addresses a person may connect.
    - A&M work inboxes (INBOX_DOMAINS): anyone, for their own assistant.

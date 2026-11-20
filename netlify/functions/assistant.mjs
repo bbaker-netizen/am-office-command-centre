@@ -35,9 +35,11 @@
 import { getStore } from "@netlify/blobs";
 import { accountGate, sees, canEdit, readAccounts, userOf } from "./_accounts.mjs";
 import { withLock } from "./_lock.mjs";
+import { cleanBid } from "./_assist.mjs";
+import { applyClaims } from "./_claims.mjs";
 import { cleanEntry, addItem, rank, buildCheckin, chaseStep, chaseStatus, chaseDraft, matchPayments, callContext, parseSaying, localNow, KINDS, newId, mailToList, mailDone, listDoneForMail, nextWorkingDay, learnNotMine, setVip, rulesText, afterThread, queueOf } from "./_assist.mjs";
 import { claude, jsonFrom, hasKey, fastModel, draftModel, OUTSIDE_RULE, STYLE } from "./_claudecall.mjs";
-import { readInboxes, tokenFor, recentMail, makeDraft, heardFrom, addressOf, getMessage, threadInfo, sentSamples, updateDraft, sendDraft, sendNow, hasCalendar, calEvents, calRespond } from "./_gmail.mjs";
+import { readInboxes, tokenFor, SHARED_ESTIMATING, recentMail, makeDraft, heardFrom, addressOf, getMessage, threadInfo, sentSamples, updateDraft, sendDraft, sendNow, hasCalendar, calEvents, calRespond } from "./_gmail.mjs";
 import { query as qboQuery } from "./_qbo.mjs";
 import { sendEmail } from "./mail.mjs";
 
@@ -52,6 +54,22 @@ export async function readDoc(s, id) {
 }
 const writeDoc = (s, id, d) => s.setJSON(KEY(id), { ...d, handoffs: (d.handoffs || []).slice(0, 100), items: (d.items || []).slice(0, 400), checkins: (d.checkins || []).slice(0, 40), chases: (d.chases || []).slice(0, 100) });
 async function change(s, id, fn) { return withLock(s, "assist-" + id, async () => { const d = await readDoc(s, id); const out = await fn(d); await writeDoc(s, id, d); return out; }); }
+
+/* ----------------------------------------------------- inboxes
+   An estimator's assistant also reads the shared estimating@ inbox (Craig,
+   2026-11-20). An admin connects it once, under Admin, Connections; it is
+   kept apart from anyone's own inboxes and nobody can remove it from My day. */
+export async function inboxesFor(s, u) {
+  const own = (await readInboxes(s, u.id)).map(x => ({ ...x, owner: u.id }));
+  if (u.assistant !== "estimator") return own;
+  const shared = (await readInboxes(s, SHARED_ESTIMATING)).filter(x => !own.some(o => o.email === x.email)).map(x => ({ ...x, owner: SHARED_ESTIMATING, shared: true }));
+  return own.concat(shared);
+}
+async function tokenOf(s, u, email) {
+  const e = String(email || "").toLowerCase();
+  if (u.assistant === "estimator" && !(await readInboxes(s, u.id)).some(x => x.email === e) && (await readInboxes(s, SHARED_ESTIMATING)).some(x => x.email === e)) return tokenFor(s, SHARED_ESTIMATING, e);
+  return tokenFor(s, u.id, e);
+}
 
 /* ----------------------------------------------------- cash flow links */
 async function planChange(s, fn) {
@@ -104,16 +122,32 @@ export async function recentPayments(sinceDate) {
 /* ----------------------------------------------------- mail sorting */
 const ROLE_WORDS = u => u.assistant === "exec"
   ? `${u.name} is ${u.title || "a leader"} at A&M Abatement Services (hazardous materials abatement, demolition and restoration, Edmonton and Calgary). Owners: Craig and Amir.`
+  : u.assistant === "estimator"
+  ? `${u.name} is ${u.title || "an estimator"} at A&M Abatement Services (hazardous materials abatement, demolition and restoration, Edmonton and Calgary). Their work: bid invites and tenders, closing dates, site visits and walkthroughs, quotes and estimates, following up quotes that have no answer, addenda and RFIs. Mail to the shared estimating inbox is for the estimators.`
   : `${u.name} is ${u.title || "a project manager"} at A&M Abatement Services.`;
+/* For an estimator: what to pick out of bid mail, and who has taken which job. */
+const BID_RULE = (u, taken) => u.assistant !== "estimator" ? "" : `
+This person is an estimator. Add "bid" to each object: null, or {"kind":"invite"|"addendum"|"rfi"|"site_visit"|"quote_reply","job":"the A&M job number if the email names one (like 26-00123), or empty","project":"project or site name, under 8 words","closes":"YYYY-MM-DD the bid closes or the site visit is, or empty"}. invite: a new tender or invitation to bid. addendum and rfi: changes or questions on a bid already open. site_visit: a walkthrough or site visit being set up. quote_reply: a client answering a quote A&M sent. All of these are needs_you, unless someone else has taken that job (below). A bid invite gets draft false: they read the documents first.
+Estimates already taken (job number: who has it): ${taken.length ? taken.join("; ") : "none"}. When an email is about a job someone else has taken, it is not_yours.`;
+async function claimsNow(s) {
+  try {
+    const hit = await s.get("cc-cache-claims", { type: "json" });
+    if (hit && Date.now() - hit.at < 600000) return (hit.data && hit.data.claims) || {};
+    const { readClaims } = await import("./command.mjs");
+    const d = await readClaims(s);
+    await s.setJSON("cc-cache-claims", { at: Date.now(), data: d }).catch(() => {});
+    return d.claims || {};
+  } catch (e) { return {}; }
+}
 export async function triage(s, u, { max = 10, autoDraft = 0 } = {}) {
-  const inboxes = await readInboxes(s, u.id);
+  const inboxes = await inboxesFor(s, u);
   if (!inboxes.length) return { at: null, items: [], note: "No inbox connected yet." };
   const d = await readDoc(s, u.id);
   const seen = new Set(d.triage.seen || []);
   const fresh = [];
   for (const ib of inboxes) {
     try {
-      const tok = await tokenFor(s, u.id, ib.email);
+      const tok = await tokenOf(s, u, ib.email);
       const mail = await recentMail(tok, { max, skip: [...seen] });
       mail.forEach(m => fresh.push({ ...m, inbox: ib.email }));
     } catch (e) { fresh.push({ error: e.message, inbox: ib.email }); }
@@ -124,10 +158,12 @@ export async function triage(s, u, { max = 10, autoDraft = 0 } = {}) {
   const mine = [u.email].concat(inboxes.map(x => x.email)).filter(Boolean).map(x => x.toLowerCase());
   const domains = (process.env.INBOX_DOMAINS || "amabatement.com").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   for (const m of msgs) {
-    try { const tok = await tokenFor(s, u.id, m.inbox); m.thread = await threadInfo(tok, m.threadId, m.id, mine, domains); } catch (e) { m.thread = null; }
+    try { const tok = await tokenOf(s, u, m.inbox); m.thread = await threadInfo(tok, m.threadId, m.id, mine, domains); } catch (e) { m.thread = null; }
   }
   const staff = await staffList(s, u);
   const rules = rulesText(d);
+  const claims = u.assistant === "estimator" ? await claimsNow(s) : {};
+  const taken = Object.values(claims).filter(c => c.jobNumber).slice(0, 80).map(c => c.jobNumber + ": " + c.by);
   const threadLine = m => !m.thread ? "" : "\nConversation: " + (m.thread.count > 1 ? m.thread.count + " emails." : "first email.") + (m.thread.repliedAfter ? " " + u.name.split(" ")[0] + " has ALREADY REPLIED after this email." : "") + (m.thread.othersAfter.length ? " Replied after this email, from A&M: " + m.thread.othersAfter.join(", ") + "." : "");
   let sorted = [];
   if (msgs.length && hasKey()) {
@@ -135,10 +171,10 @@ export async function triage(s, u, { max = 10, autoDraft = 0 } = {}) {
       model: fastModel(), max_tokens: Math.min(8000, 600 + msgs.length * 220),
       system: `You sort a person's email for their personal assistant. ${ROLE_WORDS(u)} Their own addresses: ${[u.email].concat(inboxes.map(x => x.email)).filter((x, i, a) => x && a.indexOf(x) === i).join(", ")}. ${OUTSIDE_RULE}
 Return only a JSON array, one object per email, in the same order: {"id":"...","bucket":"needs_you"|"payment"|"fyi"|"not_yours"|"junk","why":"under 12 words","who":"sender's name","action":"what ${u.name.split(" ")[0]} has to do, starting with a verb, under 12 words, naming the job, person or amount (for example: Send Bryan's $800 LOA for Cana Lloydminster), or empty","payment":null or {"direction":"in"|"out","name":"who paid or was paid","amount":number},"draft":true|false,"handTo":"email address of the one colleague below who should deal with it instead, or empty"}.
-needs_you: a person asking ${u.name.split(" ")[0]} for a decision, an approval, an answer, money, a document or a call. This includes staff and partners at A&M writing to ${u.name.split(" ")[0]} directly (their address is in To), a customer or supplier chasing an invoice or a payment, a bank or insurer asking for something, and a JobTread message posted to ${u.name.split(" ")[0]} that asks for something. If ${u.name.split(" ")[0]} is the one who has to act, it is needs_you even when others are copied. payment: an e-transfer, deposit, bank notice or payment portal notice showing money in or out. not_yours: estimating mail (bid invitations, tenders, addenda, plan downloads), or mail where ${u.name.split(" ")[0]} is only copied (in Cc) and someone else is clearly handling it. Never use not_yours for mail sent To ${u.name.split(" ")[0]} that asks them for something. fyi: worth knowing, nothing to do. junk: marketing, newsletters, automatic notices with nothing to do.
+needs_you: a person asking ${u.name.split(" ")[0]} for a decision, an approval, an answer, money, a document or a call. This includes staff and partners at A&M writing to ${u.name.split(" ")[0]} directly (their address is in To), a customer or supplier chasing an invoice or a payment, a bank or insurer asking for something, and a JobTread message posted to ${u.name.split(" ")[0]} that asks for something. If ${u.name.split(" ")[0]} is the one who has to act, it is needs_you even when others are copied. payment: an e-transfer, deposit, bank notice or payment portal notice showing money in or out. not_yours: ${u.assistant === "estimator" ? "" : "estimating mail (bid invitations, tenders, addenda, plan downloads), or "}mail where ${u.name.split(" ")[0]} is only copied (in Cc) and someone else is clearly handling it. Never use not_yours for mail sent To ${u.name.split(" ")[0]} that asks them for something. fyi: worth knowing, nothing to do. junk: marketing, newsletters, automatic notices with nothing to do.
 draft is true only when a short written reply would help.
 The Conversation line under each email says what has happened since. If ${u.name.split(" ")[0]} has already replied, it is fyi. If someone else at A&M has already replied and is dealing with it, it is not_yours unless ${u.name.split(" ")[0]} is still asked for something only they can give.
-handTo: only when the email is plainly another person's job and they are in this list. Colleagues: ${staff.map(x => `${x.name}${x.title ? " (" + x.title + ")" : ""} <${x.email}>`).join("; ") || "none listed"}.
+handTo: only when the email is plainly another person's job and they are in this list. Colleagues: ${staff.map(x => `${x.name}${x.title ? " (" + x.title + ")" : ""} <${x.email}>`).join("; ") || "none listed"}.${BID_RULE(u, taken)}
 ${rules}`,
       messages: [{ role: "user", content: msgs.map(m => `<email id="${m.id}">\nFrom: ${m.from}\nTo: ${m.to}${m.cc ? "\nCc: " + m.cc : ""}\nSubject: ${m.subject}\nDate: ${m.date}${threadLine(m)}\n\n${(m.body || m.snippet).slice(0, 1200)}\n</email>`).join("\n\n") }]
     }).catch(e => { throw new Error("Sorting the mail did not work: " + e.message); });
@@ -147,10 +183,12 @@ ${rules}`,
   }
   const byId = Object.fromEntries(sorted.filter(x => x && x.id).map(x => [x.id, x]));
   const staffMail = new Set(staff.map(x => x.email));
-  const items = msgs.map(m => { const c = byId[m.id] || {}; return afterThread({ id: m.id, threadId: m.threadId, inbox: m.inbox, from: m.from, address: addressOf(m.from), subject: m.subject, date: m.date, messageId: m.messageId, snippet: (m.snippet || "").slice(0, 240),
+  let items = msgs.map(m => { const c = byId[m.id] || {}; return afterThread({ id: m.id, bid: u.assistant === "estimator" ? cleanBid(c.bid) : null, shared: !!(inboxes.find(x => x.email === m.inbox) || {}).shared, threadId: m.threadId, inbox: m.inbox, from: m.from, address: addressOf(m.from), subject: m.subject, date: m.date, messageId: m.messageId, snippet: (m.snippet || "").slice(0, 240),
     bucket: ["needs_you", "payment", "fyi", "not_yours", "junk"].includes(c.bucket) ? c.bucket : (hasKey() ? "fyi" : "unsorted"), why: String(c.why || "").slice(0, 120), who: String(c.who || "").slice(0, 80), action: String(c.action || "").slice(0, 100),
     payment: c.payment && c.payment.name ? { direction: c.payment.direction === "out" ? "out" : "in", name: String(c.payment.name).slice(0, 80), amount: Number(c.payment.amount) || 0 } : null, wantsDraft: !!c.draft, at: new Date().toISOString(),
     handTo: staffMail.has(String(c.handTo || "").toLowerCase()) ? String(c.handTo).toLowerCase() : "", othersReplied: (m.thread && m.thread.othersAfter) || [] }, m.thread); });
+  /* An estimate someone else has taken is theirs, whatever the sorting said. */
+  if (u.assistant === "estimator") items = applyClaims(items, claims, u.name);
   /* Drafts for the top few that need a reply (scheduled runs only). */
   for (const it of items.filter(x => x.bucket === "needs_you" && x.wantsDraft).slice(0, autoDraft)) {
     try { const m = msgs.find(x => x.id === it.id); const dr = await draftReply(s, u, it, m); it.draft = dr; } catch (e) { it.draftError = e.message; }
@@ -176,12 +214,12 @@ async function voiceFor(s, u, inbox) {
   const d = await readDoc(s, u.id);
   if (d.voice && d.voice.inbox === inbox && Date.now() - Date.parse(d.voice.at) < 7 * 86400000) return d.voice.samples || [];
   let samples = [];
-  try { samples = await sentSamples(await tokenFor(s, u.id, inbox), 5); } catch (e) {}
+  try { samples = await sentSamples(await tokenOf(s, u, inbox), 5); } catch (e) {}
   await change(s, u.id, doc => { doc.voice = { at: new Date().toISOString(), inbox, samples }; });
   return samples;
 }
 async function draftReply(s, u, it, full, note) {
-  const tok = await tokenFor(s, u.id, it.inbox);
+  const tok = await tokenOf(s, u, it.inbox);
   const voice = await voiceFor(s, u, it.inbox);
   const first = u.name.split(" ")[0];
   const body = await claude({ model: draftModel(), max_tokens: 700,
@@ -209,7 +247,7 @@ async function calendarFor(s, u, d, inboxes, fresh) {
   const today = [], invites = [], errors = [];
   for (const ib of withCal) {
     try {
-      const tok = await tokenFor(s, u.id, ib.email);
+      const tok = await tokenOf(s, u, ib.email);
       const ev = await calEvents(tok, dayStart.toISOString(), new Date(dayStart.getTime() + 14 * 86400000).toISOString());
       const endToday = new Date(dayStart.getTime() + 86400000).toISOString();
       for (const e of ev) { const x = { ...e, inbox: ib.email }; if (e.start < endToday) today.push(x); if (e.status === "needsAction") invites.push(x); }
@@ -229,7 +267,7 @@ export async function runChases(s, u, today) {
     if (ch.closed || ch.answeredAt) continue;
     /* answered? */
     if (ch.email && ch.inbox) {
-      try { const tok = await tokenFor(s, u.id, ch.inbox); if (await heardFrom(tok, ch.email, ch.startedOn)) { ch.answeredAt = new Date().toISOString(); notes.push(ch.who + " answered about " + ch.what); continue; } } catch (e) {}
+      try { const tok = await tokenOf(s, u, ch.inbox); if (await heardFrom(tok, ch.email, ch.startedOn)) { ch.answeredAt = new Date().toISOString(); notes.push(ch.who + " answered about " + ch.what); continue; } } catch (e) {}
     }
     const st = chaseStep(ch, today);
     if (st.step === "draft" && ch.email) {
@@ -237,7 +275,7 @@ export async function runChases(s, u, today) {
       try {
         let made;
         if (ch.from === "robots") made = await robotsDraft(s, ch.email, dr.subject, dr.body, u.email);
-        else { const tok = await tokenFor(s, u.id, ch.inbox); made = await makeDraft(tok, { to: ch.email, subject: dr.subject, body: dr.body }); }
+        else { const tok = await tokenOf(s, u, ch.inbox); made = await makeDraft(tok, { to: ch.email, subject: dr.subject, body: dr.body }); }
         ch.drafts = (ch.drafts || []).concat([{ date: today, n: st.day, draftId: made.draftId }]);
         notes.push(`Chase ${st.day} of 3 to ${ch.who} is drafted for you to send.`);
       } catch (e) { ch.lastError = e.message; }
@@ -319,7 +357,7 @@ export default async (req) => {
   const denied = await accountGate(req, s);
   if (denied) return denied;
   const u = req.amUser;
-  const live = u.assistant === "exec" || (u.assistant === "project" && (u.projectLive || u.admin));
+  const live = u.assistant === "exec" || u.assistant === "estimator" || (u.assistant === "project" && (u.projectLive || u.admin));
   if (!live && !u.viewAs) return json({ error: "off", message: u.assistant === "project" ? "Your project assistant is ready but not switched on for staff yet. Craig and Amir switch it on." : "You do not have a personal assistant yet. An admin sets one up on People and access." }, 403);
   const url = new URL(req.url), today = localNow().date;
 
@@ -335,7 +373,7 @@ export default async (req) => {
         return json({ since, lastLook: d.lastBankLook, in: pays.filter(p => p.kind === "in").sort((a, b) => b.amount - a.amount), out: pays.filter(p => p.kind === "out").sort((a, b) => b.amount - a.amount), balances: (bank.history || []).filter(h => h.date >= since).slice(0, 5) });
       }
       const d = await readDoc(s, u.id);
-      const ib = await readInboxes(s, u.id);
+      const ib = await inboxesFor(s, u);
       /* View as shows another person's mail only to the master admin (Bruce,
          2026-11-15). Admins viewing as someone see their list, not their mail.
          It stays look only either way. */
@@ -346,7 +384,7 @@ export default async (req) => {
         doneRecent: d.items.filter(x => x.done && x.doneWhy).slice(0, 10),
         checkins: d.checkins.slice(0, 6),
         chases: (d.chases || []).filter(c => !c.closed).map(c => ({ ...c, status: chaseStatus(c, today), step: chaseStep(c, today).step })),
-        inboxes: ib.map(x => ({ email: x.email, addedAt: x.addedAt })),
+        inboxes: ib.map(x => ({ email: x.email, addedAt: x.addedAt, shared: !!x.shared })),
         queue: hideMail ? [] : queueOf(d, today).slice(0, 40),
         staff: hideMail ? [] : await staffList(s, u),
         rules: hideMail ? { notMine: [], vip: [] } : d.rules,
@@ -409,7 +447,7 @@ export default async (req) => {
     if (A === "draft") {
       const d = await readDoc(s, u.id);
       const it = (d.triage.items || []).find(x => x.id === b.id); if (!it) return json({ error: "missing", message: "That email is not in the sort any more." }, 404);
-      const tok = await tokenFor(s, u.id, it.inbox);
+      const tok = await tokenOf(s, u, it.inbox);
       const full = await getMessage(tok, it.id).catch(() => null);
       const dr = await draftReply(s, u, it, full);
       await change(s, u.id, d2 => { const x = (d2.triage.items || []).find(y => y.id === it.id); if (x) x.draft = dr; });
@@ -421,7 +459,7 @@ export default async (req) => {
       const d0 = await readDoc(s, u.id);
       const it = (d0.triage.items || []).find(x => x.id === b.id);
       if (!it) return json({ error: "missing", message: "That email is not in your queue any more." }, 404);
-      const tok = await tokenFor(s, u.id, it.inbox);
+      const tok = await tokenOf(s, u, it.inbox);
       const finish = (extra, why) => change(s, u.id, d => {
         const x = (d.triage.items || []).find(y => y.id === it.id); if (x) Object.assign(x, { handled: nowIso }, extra || {});
         const li = (d.items || []).find(y => y.mailId === it.id && !y.done); if (li) { li.done = true; li.doneAt = nowIso; li.doneWhy = why; }
@@ -487,11 +525,11 @@ export default async (req) => {
       /* Accept or decline a meeting invite, as this person. */
       const status = { accept: "accepted", decline: "declined", maybe: "tentative" }[b.answer];
       if (!status) return json({ error: "bad", message: "Accept, decline or maybe." }, 400);
-      const ib = (await readInboxes(s, u.id)).find(x => x.email === String(b.inbox || "").toLowerCase() && hasCalendar(x));
+      const ib = (await inboxesFor(s, u)).find(x => x.email === String(b.inbox || "").toLowerCase() && hasCalendar(x));
       if (!ib) return json({ error: "calendar", message: "That calendar is not connected. Connect the inbox again to add its calendar." }, 409);
-      await calRespond(await tokenFor(s, u.id, ib.email), String(b.eventId || ""), status);
+      await calRespond(await tokenOf(s, u, ib.email), String(b.eventId || ""), status);
       const d = await readDoc(s, u.id);
-      const calNow = await calendarFor(s, u, d, await readInboxes(s, u.id), true);
+      const calNow = await calendarFor(s, u, d, await inboxesFor(s, u), true);
       return json({ ok: true, calendar: calNow });
     }
     if (A === "handled") { await change(s, u.id, d => { const x = (d.triage.items || []).find(y => y.id === b.id); if (x) { x.handled = nowIso; listDoneForMail(d, x.id, nowIso); } }); return json({ ok: true }); }
@@ -499,7 +537,7 @@ export default async (req) => {
       const who = String(b.who || "").trim().slice(0, 80), what = String(b.what || "").trim().slice(0, 200), email = String(b.email || "").trim().toLowerCase();
       if (!who || !what) return json({ error: "bad", message: "Say who owes the information and what it is." }, 400);
       if (email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) return json({ error: "bad", message: "That email address does not look right." }, 400);
-      const ib = await readInboxes(s, u.id);
+      const ib = await inboxesFor(s, u);
       const from = b.from === "robots" ? "robots" : "me";
       if (email && from === "me" && !ib.length) return json({ error: "inbox", message: "Connect your inbox under My day first, so the chase drafts go into your own Gmail. Or choose the robots' mailbox." }, 409);
       const ch = { id: newId(), jobId: String(b.jobId || ""), jobNumber: String(b.jobNumber || ""), jobName: String(b.jobName || "").slice(0, 80), who, email, what, from, inbox: ib[0] ? ib[0].email : "", startedOn: today, startedAt: nowIso, drafts: [] };
@@ -530,7 +568,7 @@ function countBuckets(items) { const c = {}; for (const x of items || []) if (!x
 /* Everyone who has a live assistant, for the scheduled check-ins. */
 export async function assistantPeople(s) {
   const { accounts, settings } = await readAccounts(s);
-  return Object.values(accounts).filter(a => a.active !== false).map(a => userOf(a, settings)).filter(u => u.assistant === "exec" || (u.assistant === "project" && u.projectLive));
+  return Object.values(accounts).filter(a => a.active !== false).map(a => userOf(a, settings)).filter(u => u.assistant === "exec" || u.assistant === "estimator" || (u.assistant === "project" && u.projectLive));
 }
 
 export const config = { path: "/api/assistant" };

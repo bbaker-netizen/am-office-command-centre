@@ -38,7 +38,7 @@ import { readFails, addFail, clearFails, lockedFor, ipKey, ipBlocked, ipFail, ch
 import {
   AREAS, LEVELS, PRESETS, IDLE_CHOICES, ACCOUNTS_LOG, normEmail, okEmail, hashPassword, checkPassword, needsRehash,
   passwordProblem, tempPassword, readAccounts, changeAccounts, logAccount, publicAccount, activeAdmins,
-  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS, isMaster, TOUR_KEY, toursOf
+  accountToken, accountGate, isAdmin, ASSISTANTS, LANDINGS, isMaster, TOUR_KEY, toursOf, signedInBeforeTours, MAIN_TOUR, TOURS_KEPT_FROM
 } from "./_accounts.mjs";
 
 function json(body, status = 200) {
@@ -172,6 +172,8 @@ export default async (req) => {
       const fresh = needsRehash(a.pw) ? await hashPassword(pw) : null;
       const saved = await changeAccounts(s, doc => {
         const x = doc.accounts[a.id]; if (!x) return a;
+        /* Keep the "already shown the walkthrough" evidence before lastSignIn moves on. */
+        if (signedInBeforeTours(x) && !(x.tours && x.tours[MAIN_TOUR])) x.tours = { ...(x.tours || {}), [MAIN_TOUR]: "before " + TOURS_KEPT_FROM.slice(0, 10) };
         x.lastSignIn = new Date().toISOString();
         if (fresh) x.pw = fresh;
         return x;

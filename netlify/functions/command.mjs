@@ -24,6 +24,7 @@ import { KEY as BANK_KEY, cleanActual, readBankAccounts, lastEntryDate, pickCash
 import { readAging, readBalanceSheet, readProfitAndLoss, readPayableDetail, readVendorSpend } from "./_qboreports.mjs";
 import { buildFeed, localDay } from "./_derive.mjs";
 import { pickTask, readInBatches } from "./_crew.mjs";
+import { CLAIM_TASK, CLAIM_TASK_RE, claimsFromTasks, membershipFor, decide, cleanClaimBody, claimText, releaseText } from "./_claims.mjs";
 import { closeoutCheck } from "./_closeout.mjs";
 import { SWEEP_KEY as ENCIRCLE_SWEEP } from "./_encircle.mjs";
 
@@ -47,9 +48,10 @@ const ACCESS = {
   field: u => sees(u, "office", "field", "money"),
   billing: u => sees(u, "office", "field", "money"),
   encircle: u => sees(u, "office", "field"),
-  closeout: u => sees(u, "office", "field")
+  closeout: u => sees(u, "office", "field"),
+  claims: u => sees(u, "office", "field")
 };
-const TTL = { jobs: 120000, money: 300000, inventory: 60000, buying: 300000, people: 3600000, billing: 1800000, field: 300000 };
+const TTL = { claims: 45000, jobs: 120000, money: 300000, inventory: 60000, buying: 300000, people: 3600000, billing: 1800000, field: 300000 };
 
 async function cached(s, part, build, fresh) {
   const key = "cc-cache-" + part;
@@ -430,6 +432,65 @@ async function saveCrew(s, req, body) {
   return json({ ok: true, taskId, created: !t });
 }
 
+/* ---------------------------------------------------------- taken by
+   Who has taken a lead or estimate: an "Estimate" task on the job, assigned
+   to them. See _claims.mjs. */
+const whenLocal = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Edmonton", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()).replace(",", "");
+export async function readClaims(s) {
+  const c = (await s.get("jobtread-key", { type: "json" })) || {};
+  if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
+  const tasks = []; let page = null, guard = 0;
+  do {
+    const args = { size: 100, where: { and: [["name", "like", CLAIM_TASK + "%"], [["job", "id"], "!=", null]] }, sortBy: [{ field: "createdAt", order: "desc" }] };
+    if (page) args.page = page;
+    const res = await pave({ organization: { $: { id: c.organizationId }, tasks: { $: args, nextPage: {}, nodes: { id: {}, name: {}, description: {}, createdAt: {},
+      job: { id: {}, number: {} }, assignedMemberships: { nodes: { id: {}, user: { name: {} } } } } } } }, c.grantKey);
+    const t = res.organization && res.organization.tasks; if (!t) break;
+    tasks.push(...(t.nodes || []));
+    page = t.nextPage || null;
+  } while (page && ++guard < 5);
+  return { claims: claimsFromTasks(tasks) };
+}
+async function saveClaim(s, req, body) {
+  const u = req.amUser;
+  if (!sees(u, "office", "field")) return json({ error: "role", message: "Taking a lead is for the office and field leads." }, 403);
+  const b = cleanClaimBody(body.claim);
+  if (!b) return json({ error: "bad_job", message: "That job id does not look right." }, 400);
+  const c = (await s.get("jobtread-key", { type: "json" })) || {};
+  if (!c.grantKey) return json({ error: "not_connected", message: "JobTread is not connected yet." }, 409);
+  const res = await pave({
+    job: { $: { id: b.jobId }, id: {}, number: {}, tasks: { $: { size: 50 }, nodes: { id: {}, name: {}, description: {}, createdAt: {}, assignedMemberships: { nodes: { id: {}, user: { name: {} } } } } } },
+    organization: { $: { id: c.organizationId }, memberships: { $: { size: 100 }, nodes: { id: {}, role: { name: {} }, user: { name: {} } } } }
+  }, c.grantKey);
+  const job = res && res.job; if (!job) return json({ error: "bad_job", message: "JobTread does not know that job." }, 404);
+  const me = membershipFor(u.name, res.organization && res.organization.memberships && res.organization.memberships.nodes);
+  if (!me) return json({ error: "no_member", message: `${u.name} is not a JobTread user under that name, so JobTread cannot show who has it. Ask an admin to match the name in JobTread.` }, 409);
+  const tasks = ((job.tasks && job.tasks.nodes) || []).filter(t => CLAIM_TASK_RE.test(t.name || "")).sort((a, x) => String(x.createdAt).localeCompare(String(a.createdAt)));
+  const task = tasks[0] || null;
+  const current = claimsFromTasks(task ? [{ ...task, job: { id: job.id, number: job.number } }] : [])[job.id] || null;
+  const ok = decide({ take: b.take, force: b.force, mine: me.id, current, admin: !!u.admin });
+  if (!ok.ok) return json({ error: ok.error, message: ok.message, by: ok.by || "", claim: current }, ok.status);
+  if (ok.nothing) return json({ ok: true, claim: current, job: job.number });
+  const when = whenLocal();
+  if (b.take) {
+    const desc = claimText(u.name, when, task && task.description);
+    if (task) await pave({ updateTask: { $: { id: task.id, assignedMembershipIds: [me.id], description: desc } } }, c.grantKey);
+    else await pave({ createTask: { $: { targetId: job.id, targetType: "job", name: CLAIM_TASK, assignedMembershipIds: [me.id], description: desc }, createdTask: { id: {} } } }, c.grantKey);
+  } else {
+    await pave({ updateTask: { $: { id: task.id, assignedMembershipIds: [], description: releaseText(u.name, when, task.description) } } }, c.grantKey);
+  }
+  try {
+    const logDoc = (await s.get("jobtread-log", { type: "json" })) || { entries: [] };
+    logDoc.entries.unshift({ at: new Date().toISOString(), action: b.take ? "take estimate" : "let go of estimate", by: u.name, jobId: job.id,
+      changes: [b.take ? (ok.from ? `taken over from ${ok.from}` : "taken") : "let go"] });
+    logDoc.entries = logDoc.entries.slice(0, 300);
+    await s.setJSON("jobtread-log", logDoc);
+  } catch (e) {}
+  try { await s.delete("cc-cache-claims"); } catch (e) {}
+  const claim = b.take ? { jobId: job.id, jobNumber: job.number, by: u.name, byIds: [me.id], at: when } : null;
+  return json({ ok: true, claim, job: job.number, from: ok.from || "" });
+}
+
 /* ---------------------------------------------------------- field record
    The last three weeks of JobTread timesheets and daily logs, read once every
    five minutes for everyone. Used for the daily log check on Sites, the T&M
@@ -533,6 +594,9 @@ export default async (req) => {
     if (peek && Object.prototype.hasOwnProperty.call(peek, "bankActual")) {
       try { return await saveBankActual(s, req, peek); } catch (e) { return json({ error: "upstream", message: e.message }, 502); }
     }
+    /* Taking a lead is open to anyone in the office or field, even look-only
+       accounts: it only says who is working on it. */
+    if (peek && peek.claim) { try { return await saveClaim(s, req, peek); } catch (e) { return json({ error: "upstream", message: e.message }, 502); } }
     if (!canEdit(u) || !sees(u, "office", "field")) return json({ error: "role", message: "Your account can look but not change jobs. Ask an admin if you need to." }, 403);
     try {
       const body = await req.clone().json().catch(() => ({}));
@@ -562,6 +626,7 @@ export default async (req) => {
     if (part === "buying") return json(await cached(s, "buying", () => readBuying(s), fresh));
     if (part === "people") return json(await cached(s, "people", () => readPeople(s), fresh));
     if (part === "crew") return json(await readCrew(s, url.searchParams.get("ids")));
+    if (part === "claims") return json(await cached(s, "claims", () => readClaims(s), fresh));
     if (part === "closeout") return json(await readCloseout(s, url.searchParams.get("ids"), url.searchParams.get("po")));
     if (part === "field") return json(await cached(s, "field", () => readField(s), fresh));
     if (part === "billing") return json(await cached(s, "billing", () => readBilling(s), fresh));

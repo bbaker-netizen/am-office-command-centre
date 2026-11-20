@@ -4,6 +4,10 @@
    GET  /api/inbox?action=start&hint=..  where to sign in to Google (returns a URL);
                                          another=1 shows Google's account chooser
    POST /api/inbox { action:"remove", email }
+   GET  /api/inbox?action=start&shared=estimating   admins: connect the shared
+                                         estimating@ inbox every estimator's assistant reads
+   GET  /api/inbox?shared=estimating    admins: is it connected
+   POST /api/inbox { action:"removeShared" }   admins
 
    The Google sign-in comes back through the robots' mailbox callback
    (GOOGLE_REDIRECT_URI, /api/mail?action=callback), which hands it here when
@@ -12,7 +16,7 @@
 
 import { getStore } from "@netlify/blobs";
 import { accountGate, readAccounts } from "./_accounts.mjs";
-import { SCOPES, readInboxes, writeInboxes, allowedAddress, personalAllowed, hasCalendar } from "./_gmail.mjs";
+import { SCOPES, readInboxes, writeInboxes, allowedAddress, personalAllowed, hasCalendar, SHARED_ESTIMATING, estimatingAddress } from "./_gmail.mjs";
 import { withLock } from "./_lock.mjs";
 
 const store = () => getStore({ name: "am-inventory", consistency: "strong" });
@@ -35,6 +39,17 @@ export async function inboxCallback(url) {
   if (!r.ok || !t.refresh_token) return page("That did not work", "Google did not hand over a lasting sign-in. " + (t.error_description || t.error || "") + " Try again from My day.");
   const prof = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: { authorization: "Bearer " + t.access_token } }).then(x => x.json()).catch(() => ({}));
   const email = String(prof.emailAddress || "").toLowerCase();
+  /* The shared estimating inbox: only that one address, by an admin. */
+  if (saved.shared === "estimating") {
+    const { accounts } = await readAccounts(s);
+    const by = accounts[saved.by];
+    if (!by || by.active === false || by.level !== "admin") return page("Not connected", "Only an admin can connect the shared estimating inbox.");
+    if (email !== estimatingAddress()) return page("Not connected", `Google signed in as ${email || "another account"}, not ${estimatingAddress()}. Start again from Admin, Connections, and pick ${estimatingAddress()} in Google's list.`);
+    await withLock(s, "inbox-" + SHARED_ESTIMATING, async () => {
+      await writeInboxes(s, SHARED_ESTIMATING, [{ email, refresh_token: t.refresh_token, access_token: t.access_token, expires_at: Date.now() + (t.expires_in || 3600) * 1000, addedAt: new Date().toISOString(), addedBy: by.name, scope: String(t.scope || "") }]);
+    });
+    return page(email + " is connected", "Every estimator's assistant now sorts this inbox with their own, every half hour through the working day. A lead someone has taken shows as theirs, so two people do not start the same estimate.");
+  }
   /* Whose assistant this is decides what may be connected: A&M work inboxes
      for everyone, a personal Gmail for Craig and Amir only. */
   const { accounts } = await readAccounts(s);
@@ -54,6 +69,12 @@ export default async (req) => {
   const denied = await accountGate(req, s);
   if (denied) return denied;
   const u = req.amUser, url = new URL(req.url), action = url.searchParams.get("action") || "";
+  const shared = url.searchParams.get("shared") === "estimating";
+  if (shared && !u.admin) return json({ error: "role", message: "Only an admin can connect the shared estimating inbox." }, 403);
+  if (req.method === "GET" && !action && shared) {
+    const list = await readInboxes(s, SHARED_ESTIMATING);
+    return json({ address: estimatingAddress(), inbox: list[0] ? { email: list[0].email, addedAt: list[0].addedAt, addedBy: list[0].addedBy || "", calendar: hasCalendar(list[0]) } : null, ready: !missing().length, missing: missing() });
+  }
   if (req.method === "GET" && !action) {
     const list = await readInboxes(s, u.id);
     const { accounts } = await readAccounts(s);
@@ -62,6 +83,11 @@ export default async (req) => {
   if (req.method === "GET" && action === "start") {
     if (missing().length) return json({ error: "setup", message: "Google sign-in is not set up in Netlify yet: " + missing().join(", ") }, 409);
     const nonce = crypto.randomUUID();
+    if (shared) {
+      await s.setJSON(STATE(nonce), { userId: SHARED_ESTIMATING, shared: "estimating", by: u.id, at: Date.now() });
+      const q = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: process.env.GOOGLE_REDIRECT_URI, response_type: "code", scope: SCOPES.join(" "), access_type: "offline", prompt: "select_account consent", state: "inbox." + nonce, login_hint: estimatingAddress() });
+      return json({ url: "https://accounts.google.com/o/oauth2/v2/auth?" + q });
+    }
     await s.setJSON(STATE(nonce), { userId: u.id, at: Date.now() });
     /* The first inbox: Google is pointed at the person's own work address.
        "Add another inbox": Google shows its account chooser instead, so a
@@ -75,6 +101,11 @@ export default async (req) => {
   }
   if (req.method === "POST") {
     const b = await req.json().catch(() => ({}));
+    if (b.action === "removeShared") {
+      if (!u.admin) return json({ error: "role", message: "Only an admin can remove the shared estimating inbox." }, 403);
+      await withLock(s, "inbox-" + SHARED_ESTIMATING, async () => writeInboxes(s, SHARED_ESTIMATING, []));
+      return json({ ok: true });
+    }
     if (b.action === "remove") {
       await withLock(s, "inbox-" + u.id, async () => writeInboxes(s, u.id, (await readInboxes(s, u.id)).filter(x => x.email !== String(b.email || "").toLowerCase())));
       return json({ ok: true });

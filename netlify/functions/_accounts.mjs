@@ -48,7 +48,7 @@ export const IDLE_CHOICES = [1, 4, 8, 12];
    "project" for project managers and field leads (built, held back until
    Craig and Amir switch it on for staff), "none". Craig and Amir start as
    executive assistants and open on their briefing. */
-export const ASSISTANTS = ["exec", "project", "none"];
+export const ASSISTANTS = ["exec", "estimator", "project", "none"];
 /* The master admin (Bruce, 2026-11-15): one level above admin. Named only in
    Netlify (MASTER_ADMINS, comma-separated email addresses), so nobody can
    make themselves master from inside the app. Only a master admin can:
@@ -69,10 +69,22 @@ export function assistantOf(a) {
    tour does not open again on another computer, in another browser, or after
    a browser forgets what it was told. Key: which walkthrough. Value: when. */
 export const TOUR_KEY = /^[a-z0-9][a-z0-9.\-]{0,59}$/;
+/* Before 2026-11-20 (v92) "seen" was kept only in one browser, so some
+   people (Amir) were shown the walkthrough over and over. Anyone who had
+   already signed in before v92 went live has been shown it, so it counts as
+   seen for them on every computer. Craig asked, 2026-11-20. Not What's new:
+   that is once per release and is marked as it opens. */
+export const TOURS_KEPT_FROM = "2026-11-20T18:53:43Z";
+export const MAIN_TOUR = "command-tour.v1";
+export function signedInBeforeTours(a) {
+  if (!a) return false;
+  if (a.lastSignIn && a.lastSignIn < TOURS_KEPT_FROM) return true;
+  return !!(a.pwv && a.pwv < TOURS_KEPT_FROM && !a.mustChange && a.lastSignIn);
+}
 export function toursOf(a) {
   const t = a && a.tours, out = {};
-  if (!t || typeof t !== "object") return out;
-  for (const k of Object.keys(t)) if (TOUR_KEY.test(k) && typeof t[k] === "string") out[k] = t[k];
+  if (t && typeof t === "object") for (const k of Object.keys(t)) if (TOUR_KEY.test(k) && typeof t[k] === "string") out[k] = t[k];
+  if (!out[MAIN_TOUR] && signedInBeforeTours(a)) out[MAIN_TOUR] = "before " + TOURS_KEPT_FROM.slice(0, 10);
   return out;
 }
 export function landingOf(a) {

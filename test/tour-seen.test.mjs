@@ -65,4 +65,22 @@ await post({ action: "tourReset" }, amir);
 assert.deepEqual((await me(amir)).tours, {});
 ok("a person can reset their own");
 
+/* Anyone who signed in before v92 has been shown it: it stays shut for them,
+   on every computer, even after their next sign-in moves lastSignIn on. */
+const { signedInBeforeTours, MAIN_TOUR } = await import("../netlify/functions/_accounts.mjs");
+assert.ok(toursOf({ lastSignIn: "2026-11-18T15:00:00Z" })[MAIN_TOUR]);
+assert.ok(!toursOf({ lastSignIn: "2026-11-21T15:00:00Z" })[MAIN_TOUR]);
+assert.ok(!toursOf({ createdAt: "2026-11-01", mustChange: true, pwv: "2026-11-01T00:00:00Z" })[MAIN_TOUR]);
+assert.ok(!signedInBeforeTours({}));
+ok("signed in before today's update counts as seen; a brand new person does not");
+
+const before = await s.get(ACCOUNTS, { type: "json" });
+before.accounts.c1.lastSignIn = "2026-11-18T15:00:00Z"; delete before.accounts.c1.tours;
+await s.setJSON(ACCOUNTS, before);
+const craig2 = await login("craig@amabatement.com");
+const after = await s.get(ACCOUNTS, { type: "json" });
+assert.ok(after.accounts.c1.lastSignIn > "2026-11-20");
+assert.ok((await me(craig2)).tours[MAIN_TOUR]);
+ok("signing in again keeps it shut: the evidence is written before lastSignIn moves");
+
 console.log(`\n${n} tour-seen checks passed`);
