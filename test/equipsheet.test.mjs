@@ -130,15 +130,31 @@ ok("an admin adds the skipped one anyway; a repeated serial can only be fixed on
 
 sheetCsv = sheetCsv.replace("AMV-9123,Air Mover,Air Movers,#9123,S-1,,,In service", "AMV-9123,Air Mover,Air Movers,#9123,S-1-NEW,,Actuvate,Out of service");
 r = await post("m1", { action: "check" });
-assert.equal(r.body.result.changedCount, 1); assert.deepEqual(r.body.result.changed[0].diffs.map(d => d.field), ["Serial", "Make and model", "Status"]);
+assert.equal(r.body.result.changedCount, 1); assert.deepEqual(r.body.result.changed[0].diffs.map(d => d.field), ["Serial", "Status"]);
+assert.deepEqual(r.body.result.filled, ["AMV-9123"]);
 c = await s.get("catalog", { type: "json" });
 assert.equal(c.units.find(u => u.id === "AMV-9123").serial, "S-1");
+assert.equal(c.units.find(u => u.id === "AMV-9123").model, "Actuvate");
+ok("a blank in the app (make and model) is filled from the sheet at the check, with no press");
 r = await post("c1", { action: "useSheet", tags: ["AMV-9123"] });
 assert.deepEqual(r.body.updated, ["AMV-9123"]);
 c = await s.get("catalog", { type: "json" });
 const u23 = c.units.find(u => u.id === "AMV-9123");
 assert.equal(u23.serial, "S-1-NEW"); assert.equal(u23.status, "Out of service"); assert.equal(r.body.result.changedCount, 0);
 ok("a changed row is listed, never applied on its own; Use the sheet writes it once an admin presses it");
+
+/* A machine with no serial in the app gets the sheet's serial on its own;
+   a serial already on another machine is never copied. */
+c = await s.get("catalog", { type: "json" });
+c.units.find(u => u.id === "AMV-9125").serial = ""; c.units.find(u => u.id === "TVAC-1T").serial = "";
+await s.setJSON("catalog", c);
+sheetCsv = sheetCsv.replace("TVAC-1T,Tiger Vacuum,Vacuums,#1T,,", "TVAC-1T,Tiger Vacuum,Vacuums,#1T,S-1-NEW,");
+r = await post("m1", { action: "check" });
+c = await s.get("catalog", { type: "json" });
+assert.equal(c.units.find(u => u.id === "AMV-9125").serial, "S-25");
+assert.equal(c.units.find(u => u.id === "TVAC-1T").serial || "", "");
+assert.ok(r.body.result.changed.some(x => x.tag === "TVAC-1T" && x.diffs.some(d => d.field === "Serial")));
+ok("a missing serial is filled from the sheet on its own; one already on another machine waits for a person");
 
 c.units.push({ id: "HVAC-02", group: "Vacuums", name: "HEPA Vacuum" }); await s.setJSON("catalog", c);
 r = await post("m1", { action: "check" });
