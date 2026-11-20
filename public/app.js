@@ -1698,8 +1698,12 @@ function renderTabs() {
     `<button class="tab-set" data-h="#/setup" ${AM.isSettings(S.route) ? 'aria-current="true"' : ''}>Settings</button>`;
   /* The command centre lives in this same app, one page over. Shown to the
      office, the field leads and the owner; the server decides who that is. */
-  const command = (S.role && S.role !== 'crew')
-    ? `<button class="tab-set" data-href="/command.html#equipment">${narrow ? 'Command' : 'Command centre'}</button>` : '';
+  /* One way back to the command centre, not two (Craig, 2026-11-20). The
+     "← Command centre" link at the left of the bar is it; it is shown here
+     for the office, field leads and the owner, and by shop.html for anyone
+     signed in to the command centre on this device. */
+  const command = '';
+  if (S.role && S.role !== 'crew') { const cc = document.getElementById('ccBack'); if (cc) cc.hidden = false; }
   /* On a phone these used to wrap onto four lines and eat a third of the
      screen before any of the work showed. The tabs now scroll sideways in one
      line, and Settings and the door to the other side are pinned outside the
@@ -1753,6 +1757,17 @@ function renderTabs() {
   // Keep the tab you are on in view when the bar is scrolled.
   const cur = $('#tabs .tab-scroll button[aria-current="true"]');
   if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  /* Tabs that do not fit used to slide out of sight under Settings with no
+     sign they were there (Certificates, 2026-11-20). The strip now fades at
+     whichever end has more, so it reads as something to scroll. */
+  const sc = $('#tabs .tab-scroll');
+  if (sc) {
+    const edge = () => {
+      sc.classList.toggle('more-r', sc.scrollLeft + sc.clientWidth < sc.scrollWidth - 2);
+      sc.classList.toggle('more-l', sc.scrollLeft > 2);
+    };
+    sc.onscroll = edge; edge();
+  }
 }
 
 function renderStatus() {

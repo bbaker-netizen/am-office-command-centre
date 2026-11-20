@@ -249,19 +249,23 @@
     gateOk = false;
 
     const pass = () => { if (!gateOk) { gateOk = true; paint(); } };
+    /* Doing what the step asked moves the tour on by itself (2026-11-20): a
+       press or a scan used to only light up Next, and people saw nothing
+       happen. Typing still waits for Next, so nobody is moved on mid-word. */
+    const did = () => { if (gateOk || !live || steps[i] !== step) return; gateOk = true; clearGate(); setTimeout(() => { if (live && steps[i] === step) go(i + 1); }, 350); };
 
     if (g.click || g.input) {
       const sel = g.click || g.input;
       const evt = g.click ? 'click' : 'input';
       // Document level, capture phase, so the feature code needs to know
       // nothing about the tour and cannot swallow the event first.
-      const h = e => { if (e.target && e.target.closest && e.target.closest(sel)) pass(); };
+      const h = e => { if (e.target && e.target.closest && e.target.closest(sel)) (g.click ? did : pass)(); };
       document.addEventListener(evt, h, true);
       gateOff = () => document.removeEventListener(evt, h, true);
     }
 
     if (g.present) {
-      presentTimer = setInterval(() => { if ($(g.present)) pass(); }, 400);
+      presentTimer = setInterval(() => { if ($(g.present)) did(); }, 400);
       if ($(g.present)) pass();
     }
 

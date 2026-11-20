@@ -189,6 +189,8 @@ tr[data-ac-edit]:hover td{background:var(--panel-2)}
 .cct-count{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3)}
 .cct-x{background:var(--panel);border:1px solid var(--rule);color:var(--ink);cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}
 .cct-x:hover{border-color:var(--cyan)}
+a.joblink{color:inherit;text-decoration:underline;text-decoration-color:var(--cyan);text-underline-offset:2px;font-weight:600}
+a.joblink:hover{color:var(--cyan-deep)}
 .claimbox{border:1px solid var(--rule);border-left:4px solid var(--rule);border-radius:3px;padding:10px 14px;margin-bottom:14px;background:var(--panel-2)}
 .claimbox.mine{border-left-color:#3f8f5a}.claimbox.other{border-left-color:#e0a445;background:var(--cyan-wash)}
 .claimbox p{margin:0 0 8px}.claimbox .actions{margin:4px 0 6px}
@@ -1067,6 +1069,15 @@ const S = { mcp:null, jobs:null, jobTotal:null, jobsShort:false, jobsErr:null, s
 let unsubs = [];
 let current = null;
 
+/* A person who works for one branch sees that branch's jobs only (Craig,
+   2026-11-20). The JobTread field "Estimating branch"; no branch set counts
+   as Edmonton, as on Payroll and Expenses. Applied once, where the jobs come
+   in, so every page agrees. */
+function scopeJobs(rows){
+  const b = ME && ME.branch; if(!b) return rows;
+  const cal = j => /calgary/i.test(String(j["Estimating branch"] || ""));
+  return rows.filter(j => b === "calgary" ? cal(j) : !cal(j));
+}
 function flat(job){
   const o = {};
   const n = (job.customFieldValues && job.customFieldValues.nodes) || [];
@@ -1134,7 +1145,7 @@ function grabDrafts(token, acc, pages){
 function loadAll(){
   unsubs.forEach(u => { try{ u(); }catch(e){} }); unsubs = [];
   grabJobs(null, { rows:[], total:null, stamp:null }).then(acc => {
-    S.jobs = acc.rows.map(flat); S.jobTotal = acc.total; S.stamp = acc.stamp; S.jobsErr = null;
+    S.jobs = scopeJobs(acc.rows.map(flat)); S.jobTotal = acc.total; S.stamp = acc.stamp; S.jobsErr = null;
     S.jobsShort = acc.total !== null && acc.rows.length < acc.total;
     render();
   }).catch(e => { S.jobsErr = e; render(); });
@@ -1172,11 +1183,19 @@ function alertsFor(tab){
   try{ return (VIEWS[tab] && VIEWS[tab].alerts) ? VIEWS[tab].alerts().map(a => Object.assign({ tab }, a)) : []; }
   catch(e){ return []; }
 }
+/* Job numbers in a warning open that job in JobTread (Craig, 2026-11-20:
+   "26-20026, 26-20097" said which jobs but went nowhere). Only numbers of
+   jobs the page knows are linked. Takes text already made safe by E(). */
+function linkNums(html){
+  if(!S.jobs || !html) return html;
+  return String(html).replace(/\b(\d{2}-\d{5})\b/g, n => { const j = S.jobs.find(x => x._number === n);
+    return j ? '<a class="joblink" href="' + jtUrl(j._id) + '" target="_blank" rel="noopener" title="Open ' + n + ' ' + E(j._name || "") + ' in JobTread">' + n + '</a>' : n; });
+}
 function verdictHtml(list, calm, calmMeta){
   const a = list.slice().sort((x, y) => LV[x.lvl] - LV[y.lvl]);
   if(!a.length) return '<div class="verdict clear"><p>' + ico("clear") + '<span>' + E(calm) + '</span></p>' + (calmMeta ? '<div class="meta">' + E(calmMeta) + '</div>' : '') + '</div>';
   const top = a[0];
-  return '<div class="verdict ' + top.lvl + '"><p>' + ico(top.lvl === "stop" ? "stop" : top.lvl === "caution" ? "caution" : "info") + '<span>' + E(top.text) + '</span></p><div class="meta">' + E(top.meta || "") +
+  return '<div class="verdict ' + top.lvl + '"><p>' + ico(top.lvl === "stop" ? "stop" : top.lvl === "caution" ? "caution" : "info") + '<span>' + linkNums(E(top.text)) + '</span></p><div class="meta">' + linkNums(E(top.meta || "")) +
     (a.length > 1 ? (top.meta ? " " : "") + plural(a.length - 1, "more thing") + " below." : "") + '</div></div>';
 }
 function head(title, lede){ return '<div class="tabhead" data-tour="page"><h1>' + E(title) + '</h1><p>' + E(lede) + '</p></div>'; }
@@ -1757,7 +1776,7 @@ function appLoad(fresh){
   waits.push(api("jobs", fresh).then(async d => {
     let rows = d.nodes || [], next = d.nextPage, guard = 0;
     const show = () => {
-      S.jobs = rows.map(flat); S.jobTotal = d.total; S.stamp = d.storedAt;
+      S.jobs = scopeJobs(rows.map(flat)); S.jobTotal = d.total; S.stamp = d.storedAt;
       S.jobsShort = d.total != null && rows.length < d.total; S.jobsMore = !!next;
       S.orders = d.orders || []; S.jobsErr = S.ordersErr = null; render();
     };
@@ -1836,7 +1855,8 @@ async function startApp(){
   if(me.viewAs){ CAN_EDIT = false; viewAsBanner(me); }
   const asLive = !!me.assistant && me.assistant !== "none";
   const tabs = asLive ? ["brief", "notes", "overview"] : ["notes", "overview"];
-  if(has("office")) tabs.push("estimating", "dispatch", "tm");
+  /* Estimators do not dispatch crews (Craig, 2026-11-20). */
+  if(has("office")) tabs.push(...["estimating", "dispatch", "tm"].filter(t => !(t === "dispatch" && me.assistant === "estimator")));
   if(has("money")) tabs.push("money", "cashflow");
   if(has("payroll")) tabs.push("payroll", "expenses");
   if(has("money")) tabs.push("buying");
@@ -1849,7 +1869,7 @@ async function startApp(){
   if(me.admin) tabs.push("people", "connections", "scorecards");
   /* The project assistant preview is gone: everyone has their own assistant now (2026-11-20). */
   const first = String(me.name || "").split(" ")[0];
-  CFG = { title: (first ? first + "'s" : "Your") + " command centre", who: [me.title, respLabel(me.areas), LEVEL_INFO[me.level] ? LEVEL_INFO[me.level].label : ""].filter(Boolean).join(" · "), tabs, qb: has("money"), gmail:false };
+  CFG = { title: (first ? first + "'s" : "Your") + " command centre", who: [me.title, respLabel(me.areas), me.branch ? (me.branch === "calgary" ? "Calgary jobs" : "Edmonton jobs") : "", LEVEL_INFO[me.level] ? LEVEL_INFO[me.level].label : ""].filter(Boolean).join(" · "), tabs, qb: has("money"), gmail:false };
   S.meName = first;
   document.title = CFG.title;
   $("roleTitle").textContent = CFG.title; $("roleWho").textContent = CFG.who; sizeTop();
@@ -1931,7 +1951,7 @@ document.addEventListener("click", ev => {
     msg.textContent = "Saved: " + (r.changed || []).join("; ") + ".";
     const id = form.dataset.id;
     LAST_SAVED = { id, at: Date.now(), text: (r.changed || []).join("; ") + "." };
-    api("jobs", true).then(d => { S.jobs = (d.nodes || []).map(flat); S.stamp = d.storedAt; S.orders = d.orders || S.orders; render(); if(drawerState && drawerState.kind === "job" && drawerState.id === id) openJob(id); });
+    api("jobs", true).then(d => { S.jobs = scopeJobs((d.nodes || []).map(flat)); S.stamp = d.storedAt; S.orders = d.orders || S.orders; render(); if(drawerState && drawerState.kind === "job" && drawerState.id === id) openJob(id); });
   }).catch(e => { msg.textContent = errCopy(e); b.disabled = false; });
 });
 
@@ -2033,7 +2053,7 @@ VIEWS.overview = {
     if(!all.length) html += S.jobs ? '<div class="state ok">Nothing waiting on anybody.</div>' : wait("the systems");
     else html += '<ul class="alerts">' + all.slice(0, 14).map(a =>
       '<li><span class="tag ' + (a.lvl === "stop" ? "stop" : a.lvl === "caution" ? "caution" : "mute") + '">' + (a.lvl === "stop" ? "Now" : a.lvl === "caution" ? "Soon" : "Note") + '</span>' +
-      '<div><div class="t">' + E(a.text) + '</div>' + (a.meta ? '<div class="m">' + E(a.meta) + '</div>' : '') + '</div>' +
+      '<div><div class="t">' + linkNums(E(a.text)) + '</div>' + (a.meta ? '<div class="m">' + linkNums(E(a.meta)) + '</div>' : '') + '</div>' +
       '<button class="go" data-go="' + a.tab + '">' + E(TABS[a.tab].label) + '</button></li>').join("") + '</ul>' +
       (all.length > 14 ? '<div class="more">' + (all.length - 14) + ' more on the tabs.</div>' : '');
     html += '</div>';
@@ -2477,7 +2497,7 @@ function asPages(info){
   if(!all.length) return h + (S.jobs ? '<div class="md-empty"><b>Nothing flagged on your pages.</b></div>' : wait("your pages")) + '</div>';
   return h + '<ul class="alerts">' + all.slice(0, 10).map(a =>
     '<li><span class="tag ' + (a.lvl === "stop" ? "stop" : a.lvl === "caution" ? "caution" : "mute") + '">' + (a.lvl === "stop" ? "Now" : a.lvl === "caution" ? "Soon" : "Note") + '</span>' +
-    '<div><div class="t">' + E(a.text) + '</div>' + (a.meta ? '<div class="m">' + E(a.meta) + '</div>' : '') + '</div>' +
+    '<div><div class="t">' + linkNums(E(a.text)) + '</div>' + (a.meta ? '<div class="m">' + linkNums(E(a.meta)) + '</div>' : '') + '</div>' +
     '<button class="go" data-go="' + a.tab + '">' + E(TABS[a.tab].label) + '</button></li>').join("") + '</ul>' +
     (all.length > 10 ? '<div class="more">' + (all.length - 10) + ' more on those pages.</div>' : '') + '</div>';
 }
@@ -3587,14 +3607,14 @@ VIEWS.equipment = {
       const low = ((S.inv.shelf || {}).low || []).length;
       if(low) a.push({ lvl:"caution", text: plural(low, "shelf item is", "shelf items are") + " at or below the minimum.", meta:"Order before the next job needs it." });
     }
-    return a;
+    return a.concat(eqsAlerts());
   },
   render(){
     let h = head("Equipment and shop", PLATFORM === "app" ? "Machines, shelf stock and gear on jobs, read straight from the shop screens, matched to JobTread." : "Machines, shelf stock and kits. The inventory app owns this list; this tab shows what JobTread knows about it.");
     const nr = jobsReady(); if(nr) return h + nr;
     h += verdictHtml(this.alerts(), "Every job starting this week is set up in the inventory app.", "");
     h += '<div class="grid">';
-    if(PLATFORM === "app") h += invCards();
+    if(PLATFORM === "app") h += eqsCard() + invCards();
     const won = live().filter(j => POST.includes(st(j)));
     const linked = won.filter(j => F(j["Inventory Job ID"]));
     const notYet = won.filter(j => !F(j["Inventory Job ID"]) && ["won","sched","site"].includes(stageOf(st(j))))
@@ -4193,7 +4213,7 @@ document.addEventListener("click", ev => {
     pmSave(true).then(() => {
       done.push("Saved");
       return note ? pmCall("", { action:"note", jobId }).then(() => { done.push("summary posted to JobTread"); PM.rec.notePostedAt = new Date().toISOString(); }).catch(e => done.push("the JobTread note did not post (" + errCopy(e) + ")")) : null;
-    }).then(() => close ? apiPost({ jobId, changes:{ Status:"Closed Won" } }).then(() => { done.push("job moved to Closed Won"); return api("jobs", true).then(d => { S.jobs = (d.nodes || []).map(flat); S.stamp = d.storedAt; }); }).catch(e => done.push("the status did not change (" + errCopy(e) + ")")) : null)
+    }).then(() => close ? apiPost({ jobId, changes:{ Status:"Closed Won" } }).then(() => { done.push("job moved to Closed Won"); return api("jobs", true).then(d => { S.jobs = scopeJobs((d.nodes || []).map(flat)); S.stamp = d.storedAt; }); }).catch(e => done.push("the status did not change (" + errCopy(e) + ")")) : null)
       .then(() => { PM.msg = done.join(", ") + "."; pmRedraw(); })
       .catch(() => { t.disabled = false; });
   }
@@ -4351,6 +4371,7 @@ function acForm(a){
     '<fieldset class="ac-set"><legend>Can do</legend>' + ["view", "edit", "admin"].map(k => '<label class="ac-check"><input type="radio" name="level" value="' + k + '"' + (a.level === k ? " checked" : "") + (me && k !== "admin" ? " disabled" : "") + '><span><b>' + E(LEVEL_INFO[k].label) + '</b> ' + E(LEVEL_INFO[k].what) + '</span></label>').join("") +
     (me ? '<p class="sub">You cannot take admin away from yourself. Another admin can.</p>' : '') + '</fieldset>' +
     '<fieldset class="ac-set"><legend>Personal assistant</legend><label class="fld"><span>Assistant</span><select name="assistant">' + (isNew ? [["", "Picked from their job title"]] : []).concat(ASSIST_ROLES).map(o => '<option value="' + o[0] + '"' + ((isNew ? "" : (a.assistant || "")) === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
+      '<label class="fld"><span>Branch</span><select name="branch">' + (isNew ? [["", "From their job title"]] : []).concat([["all","Edmonton and Calgary"],["edmonton","Edmonton"],["calgary","Calgary"]]).map(o => '<option value="' + o[0] + '"' + ((isNew ? "" : (a.branch || "all")) === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
       '<label class="fld"><span>Opens on</span><select name="landing"><option value="brief"' + (a.landing === "brief" ? " selected" : "") + '>My day</option><option value="overview"' + (a.landing !== "brief" ? " selected" : "") + '>Overview</option></select></label><p class="sub">Everyone has an assistant, set up for their position. It starts from their job title; pick another here if it does not fit.</p></fieldset>' +
     '<fieldset class="ac-set"><legend>Claude</legend><label class="ac-check"><input type="checkbox" name="claude"' + (a.claude ? " checked" : "") + '><span><b>Can ask Claude</b> Opens the Ask Claude panel on every page, which answers from what that person can already see. For people with a Claude account, it also hands the question over to their own Claude, and lets them connect their own Claude to the command centre (My account, Your own Claude).</span></label></fieldset>' +
     '<div class="actions">' + (isNew ? '<button type="button" class="btn" data-ac-save="invite">Add and send an invite</button><button type="button" class="btn ghost" data-ac-save="temp">Add with a temporary password</button>' : '<button type="button" class="btn" data-ac-save>Save the changes</button>') + '</div>' +
@@ -4374,7 +4395,7 @@ function acOpen(id){
 function acRead(){
   const f = $("acForm"); const v = n => (f.querySelector('[name="' + n + '"]') || {}).value || "";
   const lv = f.querySelector('[name="level"]:checked');
-  return { name: v("name").trim(), email: v("email").trim(), title: v("title").trim(), areas: [...f.querySelectorAll('[name="area"]:checked')].map(x => x.value), level: lv ? lv.value : "", claude: !!(f.querySelector('[name="claude"]') || {}).checked, assistant: v("assistant") || "none", landing: v("landing") || "overview" };
+  return { name: v("name").trim(), email: v("email").trim(), title: v("title").trim(), areas: [...f.querySelectorAll('[name="area"]:checked')].map(x => x.value), level: lv ? lv.value : "", claude: !!(f.querySelector('[name="claude"]') || {}).checked, assistant: v("assistant") || "none", landing: v("landing") || "overview", branch: v("branch") };
 }
 function acTemp(a, temp, why){
   const first = a.name.split(" ")[0];
@@ -5445,6 +5466,92 @@ function loadCN(){
   if(ME.claude) fetch("/api/claude", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(c => { CN.claude = c; render(); }).catch(() => {});
   if(ME.admin) fetch("/api/inbox?shared=estimating", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json()).then(e => { CN.est = e; render(); }).catch(() => {});
 }
+/* ---------- The equipment Google Sheet as the master list (Craig, 2026-11-20) ----------
+   Server: equipment-sheet.mjs and _equipsheet.mjs. New rows on the sheet are
+   added to the shop every 15 minutes in working hours if they pass the
+   checks (tag, name, group, unit number, serial, and next in sequence);
+   the rest wait here with the reason. */
+const EQS = { d:null, err:null, loading:false, busy:"", msg:"", url:"" };
+function eqsLoad(){
+  if(EQS.loading || PLATFORM !== "app") return; EQS.loading = true;
+  fetch("/api/equipment-sheet", { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw b; EQS.d = b; EQS.err = null; })
+    .catch(e => { EQS.err = e; }).finally(() => { EQS.loading = false; render(); });
+}
+function eqsDo(body, btnLabel){
+  EQS.busy = body.action + (body.tag || ""); EQS.msg = ""; render();
+  return fetch("/api/equipment-sheet", { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) })
+    .then(async r => { const b = await r.json().catch(() => ({})); if(!r.ok) throw b; return b; })
+    .then(b => { const res = b.result || {};
+      EQS.msg = body.action === "useSheet" ? "The sheet's values are on " + plural((b.updated || []).length, "machine") + "."
+        : res.applied ? (res.added && res.added.length ? "Added " + res.added.join(", ") + "." : "Checked. Nothing new to add.") : res.wouldAdd ? "Read the sheet: " + plural(res.rows, "row") + "." : "Done.";
+      if(body.action === "disconnect") EQS.msg = "Disconnected. The shop keeps every machine it has."; })
+    .catch(e => { EQS.msg = e.message || "That did not work."; })
+    .finally(() => { EQS.busy = ""; EQS.d = null; eqsLoad(); });
+}
+function eqsAlerts(){
+  const d = EQS.d; if(!d){ if(PLATFORM === "app" && !EQS.err) eqsLoad(); return []; }
+  if(!d.connected) return [];
+  const L = d.last || {}, a = [];
+  if(L.error) a.push({ lvl:"stop", text:"The equipment sheet could not be checked.", meta: L.error });
+  if((L.held || []).length) a.push({ lvl:"caution", text: plural(L.held.length, "new row on the equipment sheet is", "new rows on the equipment sheet are") + " waiting, not added.", meta: L.held.slice(0, 3).map(h => h.tag + ": " + h.why[0]).join("; ") });
+  if(L.changedCount) a.push({ lvl:"info", text:"The equipment sheet and the shop disagree on " + plural(L.changedCount, "machine") + ".", meta:"Serials, models or status. Confirm them on Equipment." });
+  if(!d.auto) a.push({ lvl:"info", text:"The equipment sheet is connected but not checking on its own yet.", meta:"An admin presses Start on Equipment or Connections." });
+  return a;
+}
+const eqsBtn = (action, label, extra, ghost) => '<button type="button" class="btn' + (ghost ? " ghost" : "") + ' sm" data-eqs="' + action + '"' + (extra || "") + (EQS.busy === action ? " disabled" : "") + '>' + (EQS.busy === action ? "Working…" : label) + '</button>';
+function eqsCard(){
+  const d = EQS.d;
+  let h = '<div class="card wide" data-nofold data-tour="eqs"><h2>Equipment sheet</h2>';
+  if(EQS.err) return h + failBox(EQS.err, "The equipment sheet") + '</div>';
+  if(!d){ eqsLoad(); return h + wait("the equipment sheet") + '</div>'; }
+  if(!d.connected) return h + '<p class="lede">The Google Sheet with every machine can be the master list: new rows are added to the shop every 15 minutes, in sequence. ' + (d.admin ? 'Connect it under Admin, Connections.' : 'An admin connects it under Admin, Connections.') + '</p></div>';
+  const L = d.last || {}, held = L.held || [], ch = L.changed || [], only = L.appOnly || [];
+  h += '<p class="lede"><a href="' + E(d.link) + '" target="_blank" rel="noopener">The equipment sheet</a> is the master list of machines. ' +
+    (d.auto ? 'New rows are added to the shop every 15 minutes, 7:00 to 5:30 on weekdays, if they pass the checks.' : 'It is connected but not checking on its own yet.') +
+    ' Last checked ' + E(L.at ? whenSeen(L.at) : "never") + (d.connectedByName ? ', read with ' + E(d.connectedByName) + '\'s Google Drive' : '') + '.</p>';
+  if(L.error) h += '<div class="state err" style="margin-bottom:10px">' + E(L.error) + '</div>';
+  if(!d.auto && L.wouldAdd) h += '<div class="state wait" style="margin-bottom:10px">Ready to start: ' + (L.wouldAdd.length ? plural(L.wouldAdd.length, "new machine") + ' to add (' + E(L.wouldAdd.slice(0, 12).join(", ")) + (L.wouldAdd.length > 12 ? ", …" : "") + ')' : 'nothing new to add') + '.</div>';
+  const acts = [];
+  if(d.admin && !d.auto) acts.push(eqsBtn("start", "Start: add these and check every 15 minutes"));
+  if(CAN_EDIT) acts.push(eqsBtn("check", "Check now", "", true));
+  if(acts.length) h += '<div class="actions">' + acts.join("") + '</div>';
+  if(EQS.msg) h += '<p class="sub" role="status">' + E(EQS.msg) + '</p>';
+  const added = (d.addedLog || []).slice(0, 12);
+  if(added.length) h += '<h3>Added from the sheet</h3><p class="sub">' + added.map(x => '<b>' + E(x.tag) + '</b> ' + E(whenSeen(x.at))).join(" · ") + '</p>';
+  if(held.length) h += '<h3>Waiting, not added <span class="tag caution">' + held.length + '</span></h3><p class="sub">Fix the row on the sheet and it is picked up at the next check' + (d.admin ? ', or add it anyway where that is allowed' : '') + '.</p>' +
+    tbl('<th>Row</th><th>Tag</th><th>Machine</th><th>Why it is waiting</th><th></th>', held.map(x => '<tr><td class="num">' + x.line + '</td><td><b>' + E(x.tag || "(none)") + '</b></td><td>' + E(x.name || "") + '<span class="sm">' + E(x.group || "") + '</span></td><td>' + E(x.why.join("; ")) + '</td><td>' +
+      (d.admin && x.canApprove ? eqsBtn("approve", "Add anyway", ' data-tag="' + E(x.tag) + '"', true) : '') + '</td></tr>'), "", 20);
+  if(L.changedCount) h += '<h3>The sheet and the shop disagree <span class="tag mute">' + L.changedCount + '</span></h3><p class="sub">Never changed on their own. ' + (d.admin ? 'Check a few, then use the sheet\'s values.' : 'An admin confirms these.') + '</p>' +
+    (d.admin ? '<div class="actions">' + eqsBtn("useSheet", "Use the sheet\'s values for all " + L.changedCount) + '</div>' : '') +
+    tbl('<th>Tag</th><th>What differs</th><th></th>', ch.map(c => '<tr><td><b>' + E(c.tag) + '</b><span class="sm">row ' + c.line + '</span></td><td>' + c.diffs.map(x => E(x.field) + ': sheet <b>' + E(x.sheet || "(blank)") + '</b>, shop <b>' + E(x.app || "(blank)") + '</b>').join("<br>") + '</td><td>' +
+      (d.admin ? eqsBtn("useSheet", "Use the sheet", ' data-tag="' + E(c.tag) + '"', true) : '') + '</td></tr>'), "", 15);
+  if(L.appOnlyCount) h += '<h3>In the shop, not on the sheet <span class="tag mute">' + L.appOnlyCount + '</span></h3><p class="sub">Added in the shop app. Put them on the sheet so it stays the full list.</p><p class="sub">' + only.slice(0, 40).map(x => '<b>' + E(x.tag) + '</b> ' + E(x.name || "")).join(" · ") + (L.appOnlyCount > 40 ? " · …" : "") + '</p>';
+  return h + '</div>';
+}
+function eqsConnectCard(){
+  const d = EQS.d; if(!d){ eqsLoad(); return ""; }
+  let h = '<div class="card" data-cn-form><h2><span class="lamp' + (d.connected && d.auto && !(d.last && d.last.error) ? " on" : "") + '"></span>Equipment sheet</h2>';
+  if(d.connected){
+    h += '<p class="lede"><a href="' + E(d.link) + '" target="_blank" rel="noopener">The equipment sheet</a> is connected' + (d.connectedByName ? ' by ' + E(d.connectedByName) + ', read with their Google Drive' : '') + '. ' + (d.auto ? 'Checked every 15 minutes in working hours.' : 'Not checking on its own yet: press Start on the Equipment page.') + ' The results are on Equipment.</p>' +
+      '<div class="actions"><button class="btn ghost" data-go="equipment">Open Equipment</button>' + (d.auto ? eqsBtn("stop", "Stop checking", "", true) : '') + eqsBtn("disconnect", "Disconnect", "", true) + '</div>';
+  } else {
+    h += '<p class="lede">Make the Google Sheet with every machine the master list. New rows are added to the shop every 15 minutes, 7:00 to 5:30 on weekdays, only if they are next in sequence and their tag, unit number and serial check out. It is read with your Google Drive, read only.</p>' +
+      (d.myDrive ? '' : '<div class="state wait" style="margin-bottom:10px">Connect Google Drive under My account first.</div>') +
+      '<label class="fld"><b>The sheet\'s link</b><input id="eqsUrl" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off" value="' + E(EQS.url) + '"></label>' +
+      '<div class="actions">' + eqsBtn("connect", "Read it and show what it would add") + '</div><p class="sm">Nothing is added until you press Start.</p>';
+  }
+  if(EQS.msg) h += '<p class="sub" role="status">' + E(EQS.msg) + '</p>';
+  return h + '</div>';
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-eqs]"); if(!t || VIEW_AS || t.disabled) return;
+  const a = t.dataset.eqs, body = { action: a };
+  if(t.dataset.tag) body[a === "useSheet" ? "tags" : "tag"] = a === "useSheet" ? [t.dataset.tag] : t.dataset.tag;
+  if(a === "connect"){ const i = $("eqsUrl"); EQS.url = i ? i.value.trim() : ""; body.url = EQS.url; }
+  if((a === "disconnect" || a === "stop" || (a === "useSheet" && !t.dataset.tag)) && t.dataset.sure !== "1"){ t.dataset.sure = "1"; t.textContent = a === "useSheet" ? "Yes, use the sheet for all of them" : a === "stop" ? "Yes, stop checking" : "Yes, disconnect"; return; }
+  eqsDo(body);
+});
+
 /* The shared estimating inbox every estimator's assistant reads (2026-11-20). */
 function estInboxCard(){
   const e = CN.est; if(!e) return "";
@@ -5492,6 +5599,7 @@ VIEWS.connections = {
     if(d.jobtread.working) h += setupCard();
     h += driveAdminCard();
     h += estInboxCard();
+    h += eqsConnectCard();
     if(CN.mail) h += '<div class="card"><h2><span class="lamp' + (CN.mail.connected ? " on" : "") + '"></span>Robots\' mailbox</h2><p class="lede">' + (CN.mail.connected ? "Connected to " + E(CN.mail.email || CN.mail.mailbox || "") + "." : "Not connected. The assistants' emails send from it.") + '</p>' + (CN.mail.connected ? '' : '<button class="btn" data-mail-connect>Connect the mailbox</button>') + '</div>';
     if(ME.claude) h += '<div class="card"><h2><span class="lamp' + (CN.claude && CN.claude.ready ? " on" : "") + '"></span>Ask Claude</h2><p class="lede">' + (CN.claude && CN.claude.ready ? "Ready. People with Can ask Claude ticked see the Claude button in the corner of every page." : "Needs ANTHROPIC_API_KEY in Netlify, from A&amp;M's own account at console.anthropic.com. Until then the button still offers Continue in my own Claude.") + '</p></div>';
     h += '</div>';
@@ -6651,7 +6759,12 @@ const CCTOUR = (function(){
     if(!step.gate){ gateOk = true; return; }
     gateOk = false;
     const pass = () => { if(!gateOk){ gateOk = true; paint(); } };
-    const h = e => { if(e.target && e.target.closest && e.target.closest(step.gate.click)) setTimeout(pass, 250); };
+    /* Doing what the step asked moves the tour on by itself (2026-11-20).
+       Before, pressing a step on the flow strip opened the job list under
+       the tour's dark shade and only lit up Next, so people pressed and
+       saw nothing happen. The next step is the one that shows what opened. */
+    const did = () => { if(gateOk || !liveTour || steps[i] !== step) return; gateOk = true; clearGate(); show(i + 1, 1); };
+    const h = e => { if(e.target && e.target.closest && e.target.closest(step.gate.click)) setTimeout(did, 350); };
     document.addEventListener("click", h, true);
     gateOff = () => document.removeEventListener("click", h, true);
     releaseTimer = setTimeout(pass, RELEASE_MS);   /* a nudge, never a lock */
@@ -6670,7 +6783,7 @@ const CCTOUR = (function(){
       '<div class="cct-foot"><button class="cct-mute" id="cctMute">' + (muted ? "Play the voice" : "Stop the voice") + '</button>' +
       '<div class="cct-nav">' + (i > 0 ? '<button class="cct-back" id="cctBack">Back</button>' : '') +
       '<button class="cct-next" id="cctNext"' + (gateOk ? '' : ' disabled') + '>' + (last ? "Finish" : "Next") + '</button></div></div>' +
-      (gateOk ? '' : '<div class="cct-wait">Have a go at it, then Next opens.</div>');
+      (gateOk ? '' : '<div class="cct-wait">Go ahead and press it. The tour moves on by itself.</div>');
     q("#cctSkip").onclick = finish;
     q("#cctMute").onclick = () => setMuted(!muted);
     const b = q("#cctBack"); if(b) b.onclick = () => show(i - 1, -1);

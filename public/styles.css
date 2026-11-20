@@ -58,6 +58,9 @@ nav.tabs { display: flex; gap: 6px; flex: 1; align-items: center; min-width: 0; 
   overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
 }
 .tab-scroll::-webkit-scrollbar { display: none; }
+.tab-scroll.more-r { -webkit-mask-image: linear-gradient(to right, #000 85%, transparent); mask-image: linear-gradient(to right, #000 85%, transparent); }
+.tab-scroll.more-l { -webkit-mask-image: linear-gradient(to left, #000 85%, transparent); mask-image: linear-gradient(to left, #000 85%, transparent); }
+.tab-scroll.more-l.more-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent); }
 .tab-fixed { display: flex; gap: 6px; align-items: center; flex: none; }
 nav.tabs button {
   background: transparent; border: 0; color: rgba(255,255,255,.74);
@@ -80,11 +83,22 @@ nav.tabs .tab-swap:hover { background: #3fb2d1; color: #fff; }
    Note the `flex: 1 1 100%` rather than `flex-basis`. This block has to come
    after `nav.tabs { flex: 1 }` above, because that shorthand resets the basis
    to zero and quietly undoes the whole thing. */
+/* Below 1400 pixels wide the tabs, Settings and the door to the office get a
+   line of their own under the logo and the name (2026-11-20): on a laptop the
+   right-hand buttons were sitting on top of Certificates. */
+@media (max-width: 1400px) {
+  .topbar-inner { row-gap: 4px; padding-bottom: 6px; flex-wrap: wrap; }
+  .brandmark { order: 1; }
+  .cc-back { order: 2; }
+  .statusbar { order: 3; margin-left: auto; }
+  nav.tabs { order: 4; flex: 1 1 100%; width: 100%; min-width: 0; }
+}
 @media (max-width: 700px) {
   .topbar-inner { row-gap: 4px; padding-bottom: 6px; }
   .brandmark { order: 1; }
-  .statusbar { order: 2; margin-left: auto; }
-  nav.tabs { order: 3; flex: 1 1 100%; width: 100%; min-width: 0; }
+  .cc-back { order: 2; }
+  .statusbar { order: 3; margin-left: auto; }
+  nav.tabs { order: 4; flex: 1 1 100%; width: 100%; min-width: 0; }
   /* Every pixel these two give back is a pixel of tab the crew can read. */
   nav.tabs .tab-swap { font-size: 12px; padding: 8px 11px; }
   nav.tabs .tab-set { font-size: 12px; padding: 7px 10px; }
@@ -106,6 +120,9 @@ nav.tabs .tab-swap:hover { background: #3fb2d1; color: #fff; }
   background: rgba(255,255,255,.14); border: 0; color: #fff; font-size: 13px;
   padding: 6px 11px; border-radius: 20px; cursor: pointer;
 }
+/* On a phone, Sign out does what tapping your name does, so the name gives
+   way and the bar stays on two lines. */
+@media (max-width: 480px) { .statusbar .who:not(.out) { display: none; } }
 .who.out { background: transparent; border: 1px solid var(--brand-2); color: #fff; font-weight: bold; }
 .pill { font-size: 12px; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
 .pill.good { background: rgba(18,128,92,.9); color: #fff; }
