@@ -4327,7 +4327,7 @@ function acForm(a){
     (me ? '<p class="sub">You cannot take admin away from yourself. Another admin can.</p>' : '') + '</fieldset>' +
     '<fieldset class="ac-set"><legend>Personal assistant</legend><label class="fld"><span>Assistant</span><select name="assistant">' + [["exec","Executive (leadership)"],["estimator","Estimator (bids, quotes, site visits)"],["project","Project (PMs and field leads)"],["none","None"]].map(o => '<option value="' + o[0] + '"' + ((a.assistant || "none") === o[0] ? " selected" : "") + '>' + o[1] + '</option>').join("") + '</select></label>' +
       '<label class="fld"><span>Opens on</span><select name="landing"><option value="brief"' + (a.landing === "brief" ? " selected" : "") + '>My day</option><option value="overview"' + (a.landing !== "brief" ? " selected" : "") + '>Overview</option></select></label><p class="sub">The project assistant stays off for staff until it is switched on below the list of people.</p></fieldset>' +
-    '<fieldset class="ac-set"><legend>Claude</legend><label class="ac-check"><input type="checkbox" name="claude"' + (a.claude ? " checked" : "") + '><span><b>Can ask Claude</b> Opens the Ask Claude panel on every page, which answers from what that person can already see. For people with a Claude account, it also hands the question over to their own Claude.</span></label></fieldset>' +
+    '<fieldset class="ac-set"><legend>Claude</legend><label class="ac-check"><input type="checkbox" name="claude"' + (a.claude ? " checked" : "") + '><span><b>Can ask Claude</b> Opens the Ask Claude panel on every page, which answers from what that person can already see. For people with a Claude account, it also hands the question over to their own Claude, and lets them connect their own Claude to the command centre (My account, Your own Claude).</span></label></fieldset>' +
     '<div class="actions">' + (isNew ? '<button type="button" class="btn" data-ac-save="invite">Add and send an invite</button><button type="button" class="btn ghost" data-ac-save="temp">Add with a temporary password</button>' : '<button type="button" class="btn" data-ac-save>Save the changes</button>') + '</div>' +
     (isNew ? '<p class="sub">An invite emails them a link that works once, for seven days, to choose their own password. No password is ever emailed.</p>' : '') + '<p class="sub" id="acMsg" role="status"></p></form>';
   if(!isNew && !me){
@@ -4496,13 +4496,33 @@ function meOpen(){
     '<p class="sub">To see more or less, ask an admin' + (ME.admin ? ' (you are one: Admin, People and access)' : '') + '.</p>' +
     '<div class="actions"><button type="button" class="btn" onclick="toDoor(true)">Sign out on this device</button></div>' +
     driveBlock() +
+    (ME.claude && !VIEW_AS ? '<h3>Your own Claude</h3><div id="meClaude"><p class="sub">Checking…</p></div>' : '') +
     '<h3>Change my password</h3><form id="meForm" class="ac-form" onsubmit="return false">' +
     '<input type="email" autocomplete="username" value="' + E(ME.email) + '" hidden>' +
     '<label class="fld"><span>Current password</span><input type="password" name="cur" autocomplete="current-password"></label>' +
     '<label class="fld"><span>New password</span><input type="password" name="n1" autocomplete="new-password"></label>' +
     '<label class="fld"><span>Type it again</span><input type="password" name="n2" autocomplete="new-password"></label>' +
     '<div class="actions"><button type="button" class="btn" data-me-save>Change my password</button></div><p class="sub" id="meMsg" role="status">At least 10 characters. Changing it signs you out on every other device.</p></form>');
+  if(ME.claude && !VIEW_AS) setTimeout(() => meClaudeFill(), 0);
 }
+/* Your own Claude, connected to the command centre (2026-11-20). The address
+   to add in Claude, and the connections made, each with Disconnect. */
+function meClaudeFill(after){
+  const box = $("meClaude"); if(!box) return;
+  const call = body => fetch("/api/claude-connections", body ? { method:"POST", headers:{ authorization:"Bearer " + TOKEN, "content-type":"application/json" }, body: JSON.stringify(body) } : { headers:{ authorization:"Bearer " + TOKEN }, cache:"no-store" }).then(r => r.json());
+  (after ? call(after) : call()).then(d => {
+    const list = d.connections || [];
+    box.innerHTML = '<p class="sub">Add the command centre to your own Claude as a custom connector, then sign in with this email and password when Claude asks. Your Claude then sees and does only what you can here: jobs, the estimating board, who has which estimate, your My day and your hit list. It cannot send email, pay anyone or change job fields.</p>' +
+      '<dl class="facts"><dt>Connector address</dt><dd><code>' + E(d.address || "") + '</code> <button type="button" class="linkish" data-me-copyaddr="' + E(d.address || "") + '">Copy</button></dd></dl>' +
+      (list.length ? '<ul class="plain">' + list.map(c => '<li><b>' + E(c.name || "Claude") + '</b> <span class="sm">connected ' + E(whenSeen(c.since)) + ', last used ' + E(whenSeen(c.lastUsed)) + '</span> <button type="button" class="linkish" data-me-claudeoff="' + E(c.id) + '">Disconnect</button></li>').join("") + '</ul>'
+        : '<p class="sub">Not connected yet.</p>');
+  }).catch(() => { box.innerHTML = '<p class="sub">Could not check your Claude connections just now.</p>'; });
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-me-copyaddr],[data-me-claudeoff]"); if(!t) return;
+  if(t.dataset.meCopyaddr){ try{ navigator.clipboard.writeText(t.dataset.meCopyaddr); t.textContent = "Copied"; }catch(e){} return; }
+  if(t.dataset.meClaudeoff){ meClaudeFill({ id: t.dataset.meClaudeoff }); }
+});
 function meSave(btn){
   const f = $("meForm"), v = n => f.querySelector('[name="' + n + '"]').value, m = $("meMsg");
   if(v("n1").length < 10) return m.textContent = "Use at least 10 characters.";
