@@ -440,15 +440,19 @@ export async function readClaims(s) {
   const c = (await s.get("jobtread-key", { type: "json" })) || {};
   if (!c.grantKey) { const e = new Error("JobTread is not connected yet."); e.status = 409; throw e; }
   const tasks = []; let page = null, guard = 0;
+  /* JobTread sizes a request by its worst case before it runs it: 100 tasks,
+     each with up to 100 assigned people, was refused as "Request Entity Too
+     Large" even with no tasks to send (Dennis's My day, 2026-11-20). So 50
+     tasks a page, 5 people each, and up to 10 pages. */
   do {
-    const args = { size: 100, where: { and: [["name", "like", CLAIM_TASK + "%"], [["job", "id"], "!=", null]] }, sortBy: [{ field: "createdAt", order: "desc" }] };
+    const args = { size: 50, where: { and: [["name", "like", CLAIM_TASK + "%"], [["job", "id"], "!=", null]] }, sortBy: [{ field: "createdAt", order: "desc" }] };
     if (page) args.page = page;
     const res = await pave({ organization: { $: { id: c.organizationId }, tasks: { $: args, nextPage: {}, nodes: { id: {}, name: {}, description: {}, createdAt: {},
-      job: { id: {}, number: {} }, assignedMemberships: { nodes: { id: {}, user: { name: {} } } } } } } }, c.grantKey);
+      job: { id: {}, number: {} }, assignedMemberships: { $: { size: 5 }, nodes: { id: {}, user: { name: {} } } } } } } }, c.grantKey);
     const t = res.organization && res.organization.tasks; if (!t) break;
     tasks.push(...(t.nodes || []));
     page = t.nextPage || null;
-  } while (page && ++guard < 5);
+  } while (page && ++guard < 10);
   return { claims: claimsFromTasks(tasks) };
 }
 async function saveClaim(s, req, body) {
@@ -459,7 +463,7 @@ async function saveClaim(s, req, body) {
   const c = (await s.get("jobtread-key", { type: "json" })) || {};
   if (!c.grantKey) return json({ error: "not_connected", message: "JobTread is not connected yet." }, 409);
   const res = await pave({
-    job: { $: { id: b.jobId }, id: {}, number: {}, tasks: { $: { size: 50 }, nodes: { id: {}, name: {}, description: {}, createdAt: {}, assignedMemberships: { nodes: { id: {}, user: { name: {} } } } } } },
+    job: { $: { id: b.jobId }, id: {}, number: {}, tasks: { $: { size: 50 }, nodes: { id: {}, name: {}, description: {}, createdAt: {}, assignedMemberships: { $: { size: 5 }, nodes: { id: {}, user: { name: {} } } } } } },
     organization: { $: { id: c.organizationId }, memberships: { $: { size: 100 }, nodes: { id: {}, role: { name: {} }, user: { name: {} } } } }
   }, c.grantKey);
   const job = res && res.job; if (!job) return json({ error: "bad_job", message: "JobTread does not know that job." }, 404);

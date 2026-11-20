@@ -905,3 +905,11 @@ textarea.paste { width: 100%; font-family: var(--font); font-variant-numeric: ta
 .lb-pick input[type="checkbox"] { width: 22px; height: 22px; }
 .nowrap { white-space: nowrap; }
 .clear-note.bad { color: var(--bad); }
+
+/* Pressed (2026-11-20): every press shows a colour change held for a moment,
+   so it is seen even with Windows animation effects switched off. */
+button, .btn, .btn-ghost, .btn-alt, [role="button"] { -webkit-tap-highlight-color: transparent; }
+.am-pressed { box-shadow: 0 0 0 3px rgba(50,157,187,.45) !important; }
+.btn.am-pressed { background: #17566a !important; }
+.btn-ghost.am-pressed, button.am-pressed:not(.btn):not(.btn-alt) { background: #e6f2f6 !important; border-color: var(--brand-2) !important; color: var(--brand-deep) !important; }
+.btn-alt.am-pressed { background: rgba(255,255,255,.32) !important; }
