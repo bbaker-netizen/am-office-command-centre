@@ -126,8 +126,8 @@ let m = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {
 assert.equal(m.body.result.protocolVersion, "2025-06-18"); assert.ok(m.body.result.capabilities.tools); assert.match(m.body.result.instructions, /as Dennis Vries/);
 assert.equal((await rpc("notifications/initialized")).status, 202);
 const tools = (await rpc("tools/list")).body.result.tools.map(x => x.name);
-assert.deepEqual(tools, ["who_am_i", "find_jobs", "get_job", "estimating_board", "take_estimate", "let_go_of_estimate", "my_day", "add_to_my_list", "tick_off_my_list"]);
-ok("Claude starts a session and sees nine tools");
+assert.deepEqual(tools, ["who_am_i", "find_jobs", "get_job", "estimating_board", "take_estimate", "let_go_of_estimate", "my_day", "add_to_my_list", "list_inventory_items", "tick_off_my_list"]);
+ok("Claude starts a session and sees ten tools");
 
 const call = async (name, args) => { const x = (await rpc("tools/call", { name, arguments: args })).body.result; return { ...x, data: x.structuredContent }; };
 let c = await call("who_am_i", {});
@@ -159,6 +159,28 @@ await call("tick_off_my_list", { item_id: itemId });
 c = await call("my_day", {});
 assert.ok(!c.data.list.some(x => x.id === itemId));
 ok("it adds to and ticks off Dennis's own hit list");
+
+/* ---------- the inventory, read only (Jen, 2026-11-25) ---------- */
+await s.setJSON("catalog", { stock: [
+    { id: "GLV-01", name: "Nitrile Gloves L", group: "PPE - gloves", uom: "BX", packSize: 100, min: 5, max: 20, shelf: "Bay 2" },
+    { id: "SUIT-01", name: "Tyvek Suit L/XL", group: "PPE - coveralls", uom: "EA" }],
+  units: [{ id: "DEH-801", name: "Dehumidifier - Large", group: "Dehumidifiers", unitNo: "#801", serial: "230784094770013", model: "Actuvate OLR190B", status: "Active" }],
+  jobs: [{ id: "J1", jobtreadNumber: "26-00140", name: "Westmount" }] });
+await s.setJSON("ev-index", { months: ["ev-2026-11"] });
+await s.setJSON("ev-2026-11", { events: [
+  { id: "e1", type: "COUNT", itemId: "GLV-01", qty: 7, at: "2026-11-20T15:00:00Z", by: "Jen" },
+  { id: "e2", type: "ISSUE", itemId: "DEH-801", jobId: "J1", qty: 1, at: "2026-11-21T15:00:00Z", by: "Zach" }] });
+c = await call("list_inventory_items", {});
+assert.equal(c.isError, false);
+assert.equal(c.data.materialCount, 2); assert.equal(c.data.equipmentCount, 1);
+const glv = c.data.materials.find(x => x.tag === "GLV-01");
+assert.equal(glv.unit, "box"); assert.equal(glv.inOne, 100); assert.equal(glv.onHand, 7); assert.equal(glv.shelf, "Bay 2");
+assert.match(c.data.equipment[0].where, /^Out on 26-00140/);
+c = await call("list_inventory_items", { kind: "materials", search: "nitrile" });
+assert.equal(c.data.materialCount, 1); assert.equal(c.data.equipment, undefined);
+c = await call("list_inventory_items", { kind: "equipment", group: "Dehumidifiers" });
+assert.equal(c.data.equipmentCount, 1); assert.equal(c.data.materials, undefined);
+ok("it lists the shop's materials with their units and counts, and the machines with where they are, read only");
 
 /* ---------- the token is for this and nothing else ---------- */
 assert.ok(await accountGate(new Request("https://am.test/api/command?part=me", { headers: { authorization: "Bearer " + t.access_token } }), s));

@@ -176,5 +176,31 @@ c = await s.get("catalog", { type: "json" });
 assert.ok(!c.settings.equipmentSheet); assert.ok(c.units.find(u => u.id === "AMV-9128"));
 ok("disconnecting stops it and keeps every machine already added");
 
+/* ---------- serials the spreadsheet shortened (2026-11-25) ---------- */
+{
+  const cat = { units: [
+    { id: "PVAC-13", name: "Puck Vacuum", group: "Vacuums", unitNo: "#13", serial: "3520253201977", status: "Active" },
+    { id: "PVAC-17", name: "Puck Vacuum", group: "Vacuums", unitNo: "#17", serial: "", status: "Active" } ] };
+  const rows = readRows("Tag,Machine,Group,Unit number,Serial\nPVAC-13,Puck Vacuum,Vacuums,#13,3.5202E+12\nPVAC-17,Puck Vacuum,Vacuums,#17,3.52025E+12\nPVAC-18,Puck Vacuum,Vacuums,#18,3.52E+12\nPVAC-19,Puck Vacuum,Vacuums,#19, 100950429").rows;
+  const q = plan(rows, cat);
+  assert.deepEqual(q.badSerial.map(x => x.tag), ["PVAC-13", "PVAC-17"]);
+  const { mangledSerial } = await import("../netlify/functions/_equipsheet.mjs");
+  assert.equal(mangledSerial("7017E00025"), false); assert.equal(mangledSerial("2.41E+14"), true); assert.equal(mangledSerial("3.5202E+12"), true);
+  assert.ok(!q.changed.some(c => c.diffs.some(d => d.field === "Serial")));
+  assert.deepEqual(q.add.map(u => u.id), []);
+  assert.equal(q.held[0].tag, "PVAC-18"); assert.equal(q.held[0].canApprove, false); assert.match(q.held[0].why[0], /short number form/);
+  assert.equal(q.held[1].tag, "PVAC-19"); assert.match(q.held[1].why.join(" "), /skips|PVAC-18/);
+  ok("a serial the spreadsheet shortened to 3.52E+12 is never copied onto a machine or used to add one, and is listed to retype");
+}
+{
+  /* The same serial on two new rows: the first is added, the second waits. */
+  const cat = { units: [{ id: "NEG-64", name: "Negative Air Machine", group: "Negative Air", unitNo: "#64", serial: "A1", status: "Active" }, { id: "PVAC-17", name: "Puck Vacuum", group: "Vacuums", unitNo: "#17", serial: "B1", status: "Active" }] };
+  const rows = readRows("Tag,Machine,Group,Unit number,Serial\nNEG-65,Negative Air Machine,Negative Air,#65,204871\nPVAC-18,Puck Vacuum,Vacuums,#18,204871").rows;
+  const q = plan(rows, cat);
+  assert.deepEqual(q.add.map(u => u.id), ["NEG-65"]);
+  assert.equal(q.held[0].tag, "PVAC-18"); assert.match(q.held[0].why[0], /already on NEG-65/); assert.equal(q.held[0].canApprove, false);
+  ok("NEG-65 and PVAC-18 with one serial between them: the first is added, the second waits to be fixed on the sheet");
+}
+
 globalThis.fetch = realFetch;
 console.log(`\n${n} equipment sheet checks passed`);
