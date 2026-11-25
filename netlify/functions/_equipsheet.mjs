@@ -35,7 +35,7 @@ const noSerial = v => !norm(v) || /^(n\/?a|none|-+|unknown|tbd)$/i.test(norm(v))
    a machine: the sheet's own copy (AM_equipment_list, 2026-11-25) had these on
    puck vacuums and dehumidifiers, and "Use the sheet's values" would have
    written them over the good serials. */
-export const mangledSerial = v => /^\d+(\.\d+)?e\+?\d+$/i.test(norm(v));
+export const mangledSerial = v => /^\d(\.\d+)?e\+\d+$/i.test(norm(v));   /* 3.5202E+12, never a real serial like 7017E00025 */
 
 /* The sheet's link or id, to its id. */
 export function sheetIdFrom(text) {

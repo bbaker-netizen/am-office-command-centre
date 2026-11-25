@@ -184,6 +184,8 @@ ok("disconnecting stops it and keeps every machine already added");
   const rows = readRows("Tag,Machine,Group,Unit number,Serial\nPVAC-13,Puck Vacuum,Vacuums,#13,3.5202E+12\nPVAC-17,Puck Vacuum,Vacuums,#17,3.52025E+12\nPVAC-18,Puck Vacuum,Vacuums,#18,3.52E+12\nPVAC-19,Puck Vacuum,Vacuums,#19, 100950429").rows;
   const q = plan(rows, cat);
   assert.deepEqual(q.badSerial.map(x => x.tag), ["PVAC-13", "PVAC-17"]);
+  const { mangledSerial } = await import("../netlify/functions/_equipsheet.mjs");
+  assert.equal(mangledSerial("7017E00025"), false); assert.equal(mangledSerial("2.41E+14"), true); assert.equal(mangledSerial("3.5202E+12"), true);
   assert.ok(!q.changed.some(c => c.diffs.some(d => d.field === "Serial")));
   assert.deepEqual(q.add.map(u => u.id), []);
   assert.equal(q.held[0].tag, "PVAC-18"); assert.equal(q.held[0].canApprove, false); assert.match(q.held[0].why[0], /short number form/);
