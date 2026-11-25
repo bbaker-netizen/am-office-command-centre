@@ -725,6 +725,13 @@ nav.tabs .tab-set[aria-current="true"] { background: #fff; color: var(--brand); 
 .lb-nm.big { font-size: 13pt; font-weight: bold; line-height: 1.1; }
 .lb-ser { font-family: var(--font); font-variant-numeric: tabular-nums; font-size: 6.5pt; }
 .lb-own { font-size: 5pt; text-transform: uppercase; letter-spacing: .04em; margin-top: 1px; }
+/* What one scan takes, on a material sticker: big and black, so it reads from
+   arm's length at the shelf (Jen, 2026-11-25). */
+.lb-unit { display: inline-block; font-size: 15pt; font-weight: 800; line-height: 1; letter-spacing: .02em;
+  padding: 0.03in 0.06in; margin-bottom: 0.03in; border: 2px solid #000; border-radius: 3px; text-transform: uppercase; }
+.lb.lg .lb-unit { font-size: 22pt; }
+.lb-unit span { font-size: 7pt; font-weight: bold; letter-spacing: 0; margin-left: 0.05in; vertical-align: middle; text-transform: none; }
+.lb-pack { font-size: 8pt; font-weight: bold; margin-bottom: 0.02in; }
 textarea.paste { width: 100%; font-family: var(--font); font-variant-numeric: tabular-nums; font-size: 13px;
   padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
 
@@ -902,6 +909,7 @@ textarea.paste { width: 100%; font-family: var(--font); font-variant-numeric: ta
 /* Labels: the pick list scrolls inside its own box, so ticking the four you
    want does not mean scrolling past them to reach Build and Print. */
 .lb-pick { max-height: 420px; overflow-y: auto; }
+.lb-search { margin: 4px 0 10px; font-size: 16px; }
 .lb-pick input[type="checkbox"] { width: 22px; height: 22px; }
 .nowrap { white-space: nowrap; }
 .clear-note.bad { color: var(--bad); }

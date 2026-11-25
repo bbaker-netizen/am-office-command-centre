@@ -2004,7 +2004,7 @@ function mailCall(params, body){
 function loadMail(){
   return mailCall("action=status").then(st => {
     S.mailStatus = st; S.mailErr = null; render();
-    if(st.connected) return mailCall("action=list").then(l => { S.drafts = l.drafts; S.draftsErr = null; render(); });
+    if(st.connected) return mailCall("action=list").then(l => { S.drafts = l.drafts; S.mailKinds = l.kinds || null; S.draftsErr = null; render(); });
   }).catch(e => { S.mailErr = e; S.draftsErr = e; render(); });
 }
 function mailConnect(){
@@ -2026,6 +2026,27 @@ function openMail(id){
       '<p class="sub" id="mailMsg"></p>';
   }).catch(e => { $("dbody").innerHTML = '<div class="state err">' + E(errCopy(e)) + '</div>'; });
 }
+/* Holding a kind back, or showing it again. Saved for everyone, with who
+   changed it, so the office sees the same list. */
+document.addEventListener("change", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-mail-kind]"); if(!t) return;
+  const hold = new Set((S.mailKinds && S.mailKinds.hold) || []);
+  if(t.checked) hold.delete(t.dataset.mailKind); else hold.add(t.dataset.mailKind);
+  t.disabled = true;
+  mailCall("", { action:"setKinds", hold:[...hold] }).then(k => { S.mailKinds = k; render(); })
+    .catch(e => { t.disabled = false; t.checked = !t.checked; alert(errCopy(e)); });
+});
+/* Throwing away everything held back: asks once, then goes one at a time so
+   one failure does not stop the rest, and says how many went. */
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-mail-dumpheld]"); if(!t) return;
+  if(t.dataset.sure !== "1"){ t.dataset.sure = "1"; t.textContent = "Yes, throw away all " + t.dataset.mailDumpheld + " held back"; return; }
+  const ids = draftSplit().held.map(x => x.d.id);
+  t.disabled = true; t.textContent = "Throwing them away…";
+  let done = 0, failed = 0;
+  ids.reduce((p, id) => p.then(() => mailCall("", { action:"discard", id }).then(() => { done++; S.drafts = (S.drafts || []).filter(x => x.id !== id); }, () => { failed++; })), Promise.resolve())
+    .then(() => { S.mailNote = done + " thrown away" + (failed ? ", " + failed + " could not be. Try those again" : "") + "."; render(); });
+});
 document.addEventListener("click", ev => {
   const t = ev.target.closest && ev.target.closest("[data-mail-open],[data-mail-send],[data-mail-discard],[data-mail-yes],[data-mail-connect]");
   if(!t) return;
@@ -3836,6 +3857,44 @@ function invCards(){
 }
 
 /* ================= DRAFTS (Craig) ================= */
+/* What kind of email a robot draft is, read off its subject and first line.
+   The robots run as scheduled tasks in the A&M Automation Claude account; the
+   app cannot see their instructions, only what they wrote. Jen (2026-11-25):
+   most of the 26 waiting were chasers for signed POs, which A&M does not get
+   on every job yet, and some were for jobs already finished. */
+const DRAFT_KINDS = [
+  /* Insurance first: those emails say "our subcontractor files", which the
+     purchase order test below would otherwise catch. */
+  { id:"coi",     label:"Insurance and WCB paperwork from subtrades", test:/certificate of insurance|\bCOI\b|\bWCB\b|clearance letter/i },
+  { id:"po",      label:"Purchase order and contract chasers", test:/purchase order|\bP\.?O\.?s?\b|subcontract(?!or)|work order|signed contract/i },
+  { id:"payment", label:"Payment reminders", test:/payment|past due|overdue|remittance|statement of account|outstanding invoice|invoice .*(reminder|outstanding)/i },
+  { id:"quote",   label:"Quote follow-ups and site visits", test:/quote|estimate|proposal|bid|site visit|follow[ -]?up/i },
+  { id:"other",   label:"Everything else", test:/./ }
+];
+const draftKind = d => DRAFT_KINDS.find(k => k.test.test((d.subject || "") + " " + (d.snippet || ""))) || DRAFT_KINDS[DRAFT_KINDS.length - 1];
+/* A job that is finished in JobTread needs no chaser. Only the plainly done
+   statuses count; a job still being invoiced is left alone. */
+const FINISHED = ["Job Post Mortem", "Closed Won", "Not Bid", "File Closed Bid Lost"];
+function draftJobDone(d){
+  if(!S.jobs) return null;
+  const nums = ((d.subject || "") + " " + (d.snippet || "")).match(/\b\d{2}-\d{5}\b/g) || [];
+  for(const n of nums){ const j = S.jobs.find(x => x._number === n); if(j && (j._closed || FINISHED.includes(st(j)))) return { n, why: j._closed ? "closed" : st(j) }; }
+  return null;
+}
+/* The drafts to people outside A&M, split into what the office has to look at
+   and what is held back, each with the reason. */
+function draftSplit(){
+  const hold = new Set((S.mailKinds && S.mailKinds.hold) || []);
+  const out = (S.drafts || []).filter(d => recips(d).some(x => !isInside(x)));
+  const shown = [], held = [];
+  for(const d of out){
+    const k = draftKind(d), done = draftJobDone(d);
+    if(done) held.push({ d, k, why: "Job " + done.n + " is " + (done.why === "closed" ? "closed" : "at " + done.why) + " in JobTread" });
+    else if(S.mailKinds && hold.has(k.id)) held.push({ d, k, why: k.label + " are held back" });
+    else shown.push({ d, k });
+  }
+  return { out, shown, held };
+}
 function mailAppView(view){
   const st = S.mailStatus;
   let h = head("To send", "Emails the morning assistants have written. They never send on their own. Read each one, then send or discard it here.");
@@ -3843,25 +3902,44 @@ function mailAppView(view){
   if(!st.connected) return h + '<div class="card"><h2>Connect the assistants\' mailbox</h2><p class="sub">The assistants write into ' + E(st.mailbox) + '. Connect it once, signed in to Google as that account, and its drafts show here.</p>' +
     (st.missingEnv && st.missingEnv.length ? '<div class="state wait">Netlify still needs: ' + E(st.missingEnv.join(", ")) + '.</div>' : '<button class="btn" data-mail-connect>Connect ' + E(st.mailbox) + '</button>') + '</div>';
   if(!S.drafts) return h + (S.draftsErr ? failBox(S.draftsErr, "Mail") : wait("the drafts"));
-  const out = S.drafts.filter(d => String(d.to || "").split(",").some(x => x.trim() && !/@amabatement\.com>?$/i.test(x.trim())));
-  const inside = S.drafts.filter(d => !out.includes(d));
+  const { shown, held } = draftSplit();
+  const inside = S.drafts.filter(d => !recips(d).some(x => !isInside(x)));
   h += verdictHtml(view.alerts(), "Nothing to a client is waiting.", plural(inside.length, "assistant report") + " waiting.");
-  const row = d => { const age = daysSince(d.date); return '<tr data-mail-open="' + E(d.id) + '" style="cursor:pointer" tabindex="0"><td><span class="nm">' + E(d.subject || "(no subject)") + '</span><span class="sm">' + E((d.snippet || "").slice(0, 110)) + '</span></td><td>' + E(d.to || "Nobody yet") + '</td>' +
+  if(S.mailNote){ h += '<div class="state ok" style="margin-bottom:12px">' + E(S.mailNote) + '</div>'; S.mailNote = ""; }
+  const row = (d, extra) => { const age = daysSince(d.date); return '<tr data-mail-open="' + E(d.id) + '" style="cursor:pointer" tabindex="0"><td><span class="nm">' + E(d.subject || "(no subject)") + '</span><span class="sm">' + E((d.snippet || "").slice(0, 110)) + '</span>' + (extra ? '<span class="sm"><span class="tag mute">' + E(extra) + '</span></span>' : '') + '</td><td>' + E(d.to || "Nobody yet") + '</td>' +
     '<td class="r"><span class="tag ' + (age >= 3 ? "stop" : age >= 1 ? "caution" : "mute") + '">' + (age === 0 ? "Today" : plural(age, "day")) + '</span></td><td class="r"><span class="go">Read</span></td></tr>'; };
-  h += '<div class="grid"><div class="card wide"><h2>To clients and others outside A&amp;M</h2><p class="lede">Oldest first. Press one to read it, then send or discard.</p>' +
-    tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', out.slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).map(row), "Nothing waiting to go to a client.", 40) + '</div>' +
-    '<div class="card wide"><h2>Assistant reports</h2><p class="lede">Morning summaries addressed inside A&amp;M.</p>' +
-    tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', inside.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(row), "No assistant reports waiting.", 15) + '</div></div>';
+  const oldest = (a, b) => String(a.d.date).localeCompare(String(b.d.date));
+  h += '<div class="grid"><div class="card wide"><h2>To clients and others outside A&amp;M</h2><p class="lede">Oldest first. Press one to read it, then send or discard.' + (held.length ? ' ' + plural(held.length, "more is", "more are") + ' held back, below.' : '') + '</p>' +
+    tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', shown.slice().sort(oldest).map(x => row(x.d, x.k.id === "other" ? "" : x.k.label)), "Nothing waiting to go to a client.", 60) + '</div>';
+  if(held.length) h += '<div class="card wide"><h2>Held back</h2>' +
+    '<p class="lede">Not deleted. Each one is a kind you chose to hold back, or is about a job that is already finished in JobTread. Press one to read it, send it or discard it.</p>' +
+    tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', held.slice().sort(oldest).map(x => row(x.d, x.why)), "", 200) +
+    (CAN_EDIT ? '<div class="actions"><button class="btn ghost" data-mail-dumpheld="' + held.length + '">Throw away all ' + held.length + ' held back</button></div>' : '') + '</div>';
+  /* The kinds, with a switch each, and plain words on where the instructions
+     really live, which Ask Claude could not tell Jen. */
+  const hold = new Set((S.mailKinds && S.mailKinds.hold) || []);
+  const allOut = shown.concat(held);
+  h += '<div class="card wide"><h2>What the assistants write, and what shows here</h2>' +
+    '<p class="lede">The emails are written by A&amp;M\'s morning assistants: scheduled Claude tasks in the A&amp;M Automation account, which write drafts into ' + E(st.mailbox) + '. Their instructions live in those scheduled tasks, not in the command centre. To change what they write, or stop one, ask Bruce or Craig. Here you decide which kinds the office has to look at.</p>' +
+    '<table><thead><tr><th>Kind</th><th class="r">Waiting now</th><th class="r">Show on To send</th></tr></thead><tbody>' +
+    DRAFT_KINDS.map(k => '<tr><td>' + E(k.label) + '</td><td class="r num">' + allOut.filter(x => x.k.id === k.id).length + '</td><td class="r"><label style="cursor:pointer"><input type="checkbox" data-mail-kind="' + k.id + '" ' + (hold.has(k.id) ? '' : 'checked') + (CAN_EDIT ? '' : ' disabled') + '> ' + (hold.has(k.id) ? 'Held back' : 'Shown') + '</label></td></tr>').join("") +
+    '</tbody></table>' +
+    '<p class="sub">Emails about a job that is closed, or at Job Post Mortem or Closed Won in JobTread, are always held back.' + (S.mailKinds && S.mailKinds.by ? ' Last changed by ' + E(S.mailKinds.by) + (S.mailKinds.at ? ' on ' + E(showDate(S.mailKinds.at)) : '') + '.' : ' Purchase order chasers start held back, until signed POs are normal on every job.') + '</p></div>';
+  h += '<div class="card wide"><h2>Assistant reports</h2><p class="lede">Morning summaries addressed inside A&amp;M.</p>' +
+    tbl('<th>Email</th><th>To</th><th class="r">Waiting</th><th></th>', inside.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(d => row(d)), "No assistant reports waiting.", 15) + '</div></div>';
   return h;
 }
 const isInside = a => /@amabatement\.com>?$/i.test(String(a || "").trim());
 const recips = d => d.toRecipients || String(d.to || "").split(",").map(x => x.trim()).filter(Boolean);
 VIEWS.drafts = {
   alerts(){
+    /* One number on the banner and the same number on the list (Jen saw 26
+       on the banner and 40 on the list: the banner counted only the ones over
+       a day old). Held-back drafts are not counted at all. */
     const a = []; if(!S.drafts) return a;
-    const out = S.drafts.filter(d => recips(d).some(x => !isInside(x)));
-    const old = out.filter(d => daysSince(d.date) >= 1);
-    if(old.length){ const oldest = Math.max(...old.map(d => daysSince(d.date))); a.push({ lvl:"stop", text: plural(old.length, "email to a client is", "emails to clients are") + " written and waiting to be sent.", meta:"The oldest has waited " + plural(oldest, "day") + ". The assistants draft, they never send. Somebody has to open each one and press Send." }); }
+    const { shown, held } = draftSplit();
+    const old = shown.filter(x => daysSince(x.d.date) >= 1);
+    if(old.length){ const oldest = Math.max(...old.map(x => daysSince(x.d.date))); a.push({ lvl:"stop", text: plural(shown.length, "email to a client is", "emails to clients are") + " written and waiting to be sent.", meta: plural(old.length, "has", "have") + " waited a day or more; the oldest " + plural(oldest, "day") + ". The assistants draft, they never send. Somebody has to open each one and press Send or Discard." + (held.length ? " " + plural(held.length, "more is", "more are") + " held back." : "") }); }
     return a;
   },
   render(){
@@ -5728,6 +5806,11 @@ function eqsCard(){
   if(held.length) h += '<h3>Waiting, not added <span class="tag caution">' + held.length + '</span></h3><p class="sub">Fix the row on the sheet and it is picked up at the next check' + (d.admin ? ', or add it anyway where that is allowed' : '') + '.</p>' +
     tbl('<th>Row</th><th>Tag</th><th>Machine</th><th>Why it is waiting</th><th></th>', held.map(x => '<tr><td class="num">' + x.line + '</td><td><b>' + E(x.tag || "(none)") + '</b></td><td>' + E(x.name || "") + '<span class="sm">' + E(x.group || "") + '</span></td><td>' + E(x.why.join("; ")) + '</td><td>' +
       (d.admin && x.canApprove ? eqsBtn("approve", "Add anyway", ' data-tag="' + E(x.tag) + '"', true) : '') + '</td></tr>'), "", 20);
+  /* Serials the sheet holds as a short number (2.41E+14): never copied, listed
+     so somebody retypes them on the sheet as text (2026-11-25). */
+  const bad = L.badSerial || [];
+  if(bad.length) h += '<h3>Serials to retype on the sheet <span class="tag caution">' + bad.length + '</span></h3><p class="sub">The sheet shows these serials as short numbers (like 2.41E+14), so the real digits are lost there. The app kept its own serial and copies nothing. On the sheet, type each serial again with an apostrophe in front (\'230784094770013) so it stays as text.</p><p class="sub">' +
+    bad.slice(0, 40).map(x => '<b>' + E(x.tag) + '</b> row ' + E(x.line) + ': sheet ' + E(x.sheet) + (x.app ? ', app ' + E(x.app) : ', app has none') ).join(" · ") + (bad.length > 40 ? " · …" : "") + '</p>';
   if(L.changedCount) h += '<h3>The sheet and the shop disagree <span class="tag mute">' + L.changedCount + '</span></h3><p class="sub">Never changed on their own. ' + (d.admin ? 'Check a few, then use the sheet\'s values.' : 'An admin confirms these.') + '</p>' +
     (d.admin ? '<div class="actions">' + eqsBtn("useSheet", "Use the sheet\'s values for all " + L.changedCount) + '</div>' : '') +
     tbl('<th>Tag</th><th>What differs</th><th></th>', ch.map(c => '<tr><td><b>' + E(c.tag) + '</b><span class="sm">row ' + c.line + '</span></td><td>' + c.diffs.map(x => E(x.field) + ': sheet <b>' + E(x.sheet || "(blank)") + '</b>, shop <b>' + E(x.app || "(blank)") + '</b>').join("<br>") + '</td><td>' +

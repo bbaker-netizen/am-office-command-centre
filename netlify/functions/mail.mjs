@@ -27,7 +27,28 @@ import { withLock } from "./_lock.mjs";
 import { inboxCallback } from "./inbox.mjs";
 
 const store = () => getStore({ name: "am-inventory", consistency: "strong" });
-const TOKENS = "google-tokens", STATE = "google-state", LOG = "mail-log";
+const TOKENS = "google-tokens", STATE = "google-state", LOG = "mail-log", KINDS = "mail-kinds";
+
+/* Which kinds of robot email are held back off the To send list (Jen,
+   2026-11-25). The robots that write them run as scheduled tasks in the A&M
+   Automation Claude account, so the app cannot change what they write; it can
+   only decide what the office has to wade through. Held drafts are not
+   deleted: they sit under "Held back", where they can be read, sent or thrown
+   away. PO and contract paperwork chasers start held, because A&M does not
+   get a signed PO on every job yet. */
+export const KIND_IDS = ["po", "coi", "quote", "payment", "other"];
+export const DEFAULT_HOLD = ["po"];
+export async function readKinds(s) {
+  const k = await s.get(KINDS, { type: "json" });
+  return k && Array.isArray(k.hold) ? k : { hold: DEFAULT_HOLD.slice(), by: "", at: "" };
+}
+
+/* Gmail's snippet comes HTML-escaped ("A&amp;M"), and the page escapes it
+   again, so the list showed "A&amp;M Abatement" (Jen's screenshot,
+   2026-11-25). Turned back into plain text here, once. */
+export function unescapeSnippet(t) {
+  return String(t || "").replace(/&(amp|lt|gt|quot|#39|#x27|nbsp);/g, (m, k) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", "#x27": "'", nbsp: " " })[k]);
+}
 const SCOPE = "https://www.googleapis.com/auth/gmail.compose";
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const mailbox = () => (process.env.MAILBOX || "automation@amabatement.com").toLowerCase();
@@ -192,6 +213,16 @@ export default async (req) => {
   if ((action === "send" || action === "discard") && !canEdit(req.amUser)) return json({ error: "role", message: "Your account can read these but not send them." }, 403);
   if ((action === "connect" || action === "disconnect") && !isAdmin(req.amUser)) return json({ error: "role", message: "Connecting the mailbox is for an admin." }, 403);
 
+  if (action === "kinds") return json(await readKinds(s));
+  if (action === "setKinds") {
+    if (!canEdit(req.amUser) || req.amUser.viewAs) return json({ error: "role", message: "Your account can look but not change which emails are held back." }, 403);
+    const hold = [...new Set((Array.isArray(body.hold) ? body.hold : []).map(String).filter(k => KIND_IDS.includes(k)))];
+    const next = { hold, by: req.amUser.name, at: new Date().toISOString() };
+    await withLock(s, KINDS, async () => { await s.setJSON(KINDS, next); });
+    await log(s, { action: "hold", by: req.amUser.name, subject: "Held back: " + (hold.join(", ") || "nothing") });
+    return json(next);
+  }
+
   try {
     if (action === "status") {
       const t = await s.get(TOKENS, { type: "json" });
@@ -215,10 +246,10 @@ export default async (req) => {
         for (const d of got) if (d && d.message) out.push({
           id: d.id, messageId: d.message.id, threadId: d.message.threadId, subject: header(d.message, "Subject"),
           to: header(d.message, "To"), cc: header(d.message, "Cc"), date: d.message.internalDate ? new Date(Number(d.message.internalDate)).toISOString() : header(d.message, "Date"),
-          snippet: d.message.snippet || ""
+          snippet: unescapeSnippet(d.message.snippet || "")
         });
       }
-      return json({ mailbox: mailbox(), drafts: out });
+      return json({ mailbox: mailbox(), drafts: out, kinds: await readKinds(s) });
     }
     if (action === "get") {
       const id = url.searchParams.get("id") || "";

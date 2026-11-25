@@ -30,6 +30,12 @@ const norm = v => String(v == null ? "" : v).replace(/\s+/g, " ").trim();
 const low = v => norm(v).toLowerCase();
 const alnum = v => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const noSerial = v => !norm(v) || /^(n\/?a|none|-+|unknown|tbd)$/i.test(norm(v));
+/* A long serial that Excel or Sheets turned into a short number, like
+   2.41E+14 or 3.5202E+12. The real digits are gone, so it is never copied onto
+   a machine: the sheet's own copy (AM_equipment_list, 2026-11-25) had these on
+   puck vacuums and dehumidifiers, and "Use the sheet's values" would have
+   written them over the good serials. */
+export const mangledSerial = v => /^\d+(\.\d+)?e\+?\d+$/i.test(norm(v));
 
 /* The sheet's link or id, to its id. */
 export function sheetIdFrom(text) {
@@ -89,12 +95,12 @@ export function plan(rows, catalog, approved = []) {
   const serials = new Map(units.filter(u => !noSerial(u.serial)).map(u => [alnum(u.serial), u.id]));
   /* A machine the app has with no serial will take the sheet's serial at
      this check, so that serial counts as taken for any new row too. */
-  for (const r of rows) { const u = byTag.get(String(r.tag || "").toUpperCase()); if (u && noSerial(u.serial) && !noSerial(r.serial) && !serials.has(alnum(r.serial))) serials.set(alnum(r.serial), u.id); }
+  for (const r of rows) { const u = byTag.get(String(r.tag || "").toUpperCase()); if (u && noSerial(u.serial) && !noSerial(r.serial) && !mangledSerial(r.serial) && !serials.has(alnum(r.serial))) serials.set(alnum(r.serial), u.id); }
   const ok = new Set((approved || []).map(x => String(x).toUpperCase()));
   const max = {};
   for (const id of [...byTag.keys(), ...deleted]) { const pn = prefixNum(id); if (pn) max[pn.p] = Math.max(max[pn.p] || 0, pn.n); }
   const seen = new Set();
-  const out = { add: [], held: [], changed: [], appOnly: [], deletedOnSheet: [] };
+  const out = { add: [], held: [], changed: [], appOnly: [], deletedOnSheet: [], badSerial: [] };
 
   for (const r of rows) {
     const T = r.tag.toUpperCase();
@@ -104,7 +110,9 @@ export function plan(rows, catalog, approved = []) {
       const u = byTag.get(T), diffs = [];
       const cmp = (label, sheet, app) => { if (low(sheet) !== low(app) && !(noSerial(sheet) && noSerial(app))) diffs.push({ field: label, sheet: norm(sheet), app: norm(app) }); };
       cmp("Name", r.name, u.name); cmp("Group", r.group, u.group); cmp("Unit number", r.unitNo, u.unitNo);
-      cmp("Serial", r.serial, u.serial); cmp("Make and model", r.model, u.model);
+      if (mangledSerial(r.serial)) { if (low(r.serial) !== low(u.serial)) out.badSerial.push({ tag: u.id, line: r.line, sheet: norm(r.serial), app: norm(u.serial) }); }
+      else cmp("Serial", r.serial, u.serial);
+      cmp("Make and model", r.model, u.model);
       if (statusOf(r.status) !== statusOf(u.status)) diffs.push({ field: "Status", sheet: r.status || "In service", app: u.status || "Active" });
       if (diffs.length) out.changed.push({ tag: u.id, line: r.line, diffs });
       seen.add(T); continue;
@@ -120,7 +128,8 @@ export function plan(rows, catalog, approved = []) {
       const suffix = alnum(r.tag.split("-").slice(1).join("-")), no = alnum(r.unitNo);
       if (no && suffix && suffix !== no && !suffix.endsWith(no)) why.push(`the tag ${r.tag} and unit number ${r.unitNo} do not agree`);
     }
-    if (!noSerial(r.serial) && serials.has(alnum(r.serial))) never.push(`serial ${r.serial} is already on ${serials.get(alnum(r.serial))}`);
+    if (mangledSerial(r.serial)) never.push(`serial ${r.serial} is in the spreadsheet's short number form, so the real digits are lost. Type the serial again as text, starting with an apostrophe`);
+    else if (!noSerial(r.serial) && serials.has(alnum(r.serial))) never.push(`serial ${r.serial} is already on ${serials.get(alnum(r.serial))}`);
     const pn = prefixNum(r.tag);
     if (pn && max[pn.p] && pn.n > max[pn.p] + 1) why.push(`${r.tag} skips ${pn.p}-${max[pn.p] + 1}${pn.n > max[pn.p] + 2 ? " to " + pn.p + "-" + (pn.n - 1) : ""}: the last ${pn.p} is ${pn.p}-${max[pn.p]}`);
     if (r.tag) seen.add(T);
@@ -237,7 +246,7 @@ export async function runCheck(s, { token, apply, by = "Equipment sheet" }) {
   const changed = apply ? rest : p.changed;
   const result = { at: new Date().toISOString(), applied: !!apply, rows: rows.length, added, wouldAdd: apply ? [] : p.add.map(u => u.id),
     filled, wouldFill: apply ? [] : fills.map(f => f.tag), fillCount: fills.length,
-    held: p.held, changed: changed.slice(0, 100), changedCount: changed.length, appOnly: p.appOnly.slice(0, 200), appOnlyCount: p.appOnly.length, deletedOnSheet: p.deletedOnSheet };
+    held: p.held, badSerial: p.badSerial, changed: changed.slice(0, 100), changedCount: changed.length, appOnly: p.appOnly.slice(0, 200), appOnlyCount: p.appOnly.length, deletedOnSheet: p.deletedOnSheet };
   Object.defineProperty(result, "changedAll", { value: changed, enumerable: false });
   return result;
 }

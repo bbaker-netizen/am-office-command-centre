@@ -167,6 +167,7 @@ function toolsFor() {
     { name: "let_go_of_estimate", title: "Let go of an estimate", description: "Free up a lead or estimate this person has taken, so someone else can take it.", inputSchema: { type: "object", properties: { job: str("Job number or id") }, required: ["job"] }, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
     { name: "my_day", title: "My day", description: "This person's own assistant: their hit list, the latest check-in, emails that need them (sender, subject, what to do) and today's meetings.", inputSchema: { type: "object", properties: {} }, annotations: ro },
     { name: "add_to_my_list", title: "Add to my list", description: "Put a line on this person's hit list in My day.", inputSchema: { type: "object", properties: { text: str("What to do, short"), due: str("YYYY-MM-DD, optional"), who: str("Person or company it is about, optional") }, required: ["text"] }, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } },
+    { name: "list_inventory_items", title: "List inventory items", description: "Every item in A&M's shop inventory app, read only. Materials (shelf stock: PPE, poly, tape, chemicals, filters and the like) come with their tag, name, group, the unit one scan takes (each, box, roll, case, pair, jug), how many are in one, the count on hand, minimum and maximum. Equipment (scanned machines: air movers, dehumidifiers, negative air machines, vacuums, tools) comes with tag, name, group, unit number, serial, make and model, status and where it is now. Use the exact names and units when building mobilization sheets or orders.", inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["materials", "equipment", "both"], description: "Which list. Default both." }, search: str("Optional words to narrow it down, for example gloves, DEH or Negative Air. Every word must match."), group: str("Optional group name, for example PPE - gloves or Air Movers") } }, annotations: ro },
     { name: "tick_off_my_list", title: "Tick off my list", description: "Mark a line on this person's hit list as done, by its id from my_day.", inputSchema: { type: "object", properties: { item_id: str("The id from my_day") }, required: ["item_id"] }, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } }
   ];
 }
@@ -235,6 +236,17 @@ async function runTool(name, args, tok, me) {
     await asPerson(assistantHandler, tok, "/api/assistant", { action: "tick", id: String(A.item_id || "") });
     return { ticked: A.item_id };
   }
+  if (name === "list_inventory_items") {
+    const d = await asPerson(commandHandler, tok, "/api/command?part=items");
+    const kind = ["materials", "equipment"].includes(A.kind) ? A.kind : "both";
+    const words = String(A.search || "").toLowerCase().split(/\s+/).filter(Boolean);
+    const grp = String(A.group || "").trim().toLowerCase();
+    const keep = x => (!grp || String(x.group).toLowerCase() === grp) && words.every(w => Object.values(x).join(" ").toLowerCase().includes(w));
+    const out = { asOf: d.storedAt ? new Date(d.storedAt).toISOString() : "" };
+    if (kind !== "equipment") { const m = (d.materials || []).filter(keep); out.materials = m; out.materialCount = m.length; }
+    if (kind !== "materials") { const e = (d.equipment || []).filter(keep); out.equipment = e; out.equipmentCount = e.length; }
+    return out;
+  }
   throw new Error("Unknown tool " + name + ".");
 }
 
@@ -244,7 +256,7 @@ async function rpc(msg, tok, me) {
   if (msg.method === "initialize") {
     const asked = msg.params && msg.params.protocolVersion;
     return ok({ protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[1], capabilities: { tools: { listChanged: false } }, serverInfo: { name: "am-command-centre", title: "A&M Office Command Centre", version: "1.0.0" },
-      instructions: `You are connected to the A&M Abatement Services command centre as ${me.name}. Everything here is what ${me.name.split(" ")[0]} can see and do on their own screen. Before starting work on a lead or estimate, check who has taken it (find_jobs or get_job); take_estimate marks it as theirs. Never use take_over unless ${me.name.split(" ")[0]} asked to take it from someone. All money is Canadian dollars, before GST unless it says otherwise.` });
+      instructions: `You are connected to the A&M Abatement Services command centre as ${me.name}. Everything here is what ${me.name.split(" ")[0]} can see and do on their own screen. Before starting work on a lead or estimate, check who has taken it (find_jobs or get_job); take_estimate marks it as theirs. Never use take_over unless ${me.name.split(" ")[0]} asked to take it from someone. For anything about the shop's materials or machines (mobilization sheets, orders, what is on the shelf), read list_inventory_items and use its exact names and units. All money is Canadian dollars, before GST unless it says otherwise.` });
   }
   if (msg.method === "ping") return ok({});
   if (msg.method === "tools/list") return ok({ tools: toolsFor() });

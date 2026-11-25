@@ -88,7 +88,7 @@ export default async (req) => {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: MODEL(), max_tokens: 900, stream: true, system: SYSTEM(u, false), messages })
+    body: JSON.stringify({ model: MODEL(), max_tokens: 2000, stream: true, system: SYSTEM(u, false), messages })
   });
   if (!r.ok || !r.body) {
     const t = await r.text().catch(() => "");
@@ -100,7 +100,8 @@ export default async (req) => {
   const enc = new TextEncoder(), dec = new TextDecoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const reader = r.body.getReader(); let buf = "";
+      const reader = r.body.getReader(); let buf = "", words = 0, stop = "";
+      const say = t => { words += t.length; controller.enqueue(enc.encode(t)); };
       try {
         for (;;) {
           const { value, done } = await reader.read();
@@ -112,16 +113,33 @@ export default async (req) => {
             const line = chunk.split("\n").find(l => l.startsWith("data: "));
             if (!line) continue;
             let ev; try { ev = JSON.parse(line.slice(6)); } catch (e) { continue; }
-            if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") controller.enqueue(enc.encode(ev.delta.text));
-            if (ev.type === "error") controller.enqueue(enc.encode("\n\n(Claude stopped: " + ((ev.error && ev.error.message) || "an error") + ")"));
+            if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") say(ev.delta.text);
+            if (ev.type === "message_delta" && ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
+            if (ev.type === "error") say("\n\n(Claude stopped: " + ((ev.error && ev.error.message) || "an error") + ")");
           }
         }
-      } catch (e) { controller.enqueue(enc.encode("\n\n(The answer was cut off. Ask again.)")); }
+      } catch (e) { say("\n\n(The answer was cut off. Ask again.)"); }
+      /* An answer with no words at all used to reach the page as nothing, and
+         the page could only say "I did not get an answer back" (Jen, twice,
+         2026-11-25). Now the reason goes back with it, and into the function
+         log, so the next one can be traced. */
+      if (!words) {
+        console.log("ask-claude: no words back", JSON.stringify({ who: u.name, stop: stop || "none", model: MODEL() }));
+        say(emptyAnswer(stop));
+      }
       controller.close();
     }
   });
   return new Response(stream, { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-claude-left": String(Math.max(0, LIMIT() - n)) } });
 };
+
+/* What to tell the person when Claude sent back no words, by the reason the
+   API gave. */
+export function emptyAnswer(stop) {
+  if (stop === "max_tokens") return "Claude used up its room thinking before it wrote anything. Ask a shorter or narrower question, for example one email or one job at a time.";
+  if (stop === "refusal") return "Claude would not answer that one. Ask it a different way, or ask Bruce.";
+  return "Claude sent back no words" + (stop ? " (it stopped with \"" + stop + "\")" : "") + ". Ask again. If it keeps happening, tell Bruce the time you asked.";
+}
 
 const TOOLS = [
   { name: "search_drive", description: "Search A&M's Google Drive, with the asking person's own access, for documents whose name or text contains the words. Returns up to 10 files with id, name, type, link and last change. Use short searches: SOP Manual, Your Role Estimator, Organization Chart, Naming Standard.",
@@ -133,7 +151,7 @@ async function withDrive(s, u, messages, n) {
   const call = async msgs => {
     const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
       headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: MODEL(), max_tokens: 1200, system: SYSTEM(u, true), tools: TOOLS, messages: msgs }) });
+      body: JSON.stringify({ model: MODEL(), max_tokens: 2000, system: SYSTEM(u, true), tools: TOOLS, messages: msgs }) });
     const b = await r.json().catch(() => ({}));
     if (!r.ok) { const k = keyTrouble(r.status); throw new Error(k ? k.message : ((b.error && b.error.message) || "HTTP " + r.status)); }
     return b;
@@ -157,7 +175,8 @@ async function withDrive(s, u, messages, n) {
     msgs = msgs.concat([{ role: "assistant", content: b.content }, { role: "user", content: results }]);
   }
   const text = out ? (out.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim() : "I looked, but ran out of steps before I had an answer. Ask a narrower question.";
-  return new Response(text || "I could not find an answer.", { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store",
+  if (!text) console.log("ask-claude: no words back (Drive)", JSON.stringify({ who: u.name, stop: (out && out.stop_reason) || "none", model: MODEL() }));
+  return new Response(text || emptyAnswer(out && out.stop_reason), { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store",
     "x-claude-left": String(Math.max(0, LIMIT() - n)), "x-claude-looked": encodeURIComponent(looked.join("; ").slice(0, 300)) } });
 }
 

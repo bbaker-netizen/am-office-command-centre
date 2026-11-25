@@ -1661,7 +1661,10 @@ const CREW_TABS = [
 const OFFICE_TABS = [
   ['#/dash', 'Today'],
   ['#/jobs', 'Jobs'],
-  ['#/shelf', 'Shelf'],
+  /* Called Materials since 2026-11-25 (Jen): the crew think of it as the
+     materials they pull, not as a shelf. The route stays #/shelf so old
+     links and bookmarks still land. */
+  ['#/shelf', 'Materials'],
   ['#/gear', 'Equipment'],
   ['#/order', 'Order'],
   ['#/dop', 'Certificates']
@@ -1885,10 +1888,27 @@ function render() {
   const keepPick = new Map();
   if (sameRoute) for (const el of view.querySelectorAll('select[id]')) if (el.dataset.picked === '1') keepPick.set(el.id, el.value);
 
+  /* Where the person was on the screen. A background sync redraws the whole
+     view every minute, and before 2026-11-25 that threw every scroll box back
+     to its top and shut every open group, so a list being scrolled jumped back
+     to the start, sometimes mid-scroll (Jen, printing shelf stickers). A
+     redraw of the same screen now puts the scroll and the open groups back. */
+  const scrolled = [], opened = new Set();
+  let winY = 0;
+  if (sameRoute) {
+    winY = window.scrollY || 0;
+    const boxes = [...view.querySelectorAll('.tbl-scroll, [id]')];
+    boxes.forEach((el, i) => {
+      if (el.scrollTop > 0 || el.scrollLeft > 0) scrolled.push({ key: el.id ? '#' + el.id : null, i, cls: el.className, top: el.scrollTop, left: el.scrollLeft });
+    });
+    view.querySelectorAll('details[data-g]').forEach(d => { if (d.open) opened.add(d.dataset.g); });
+  }
+
   const fn = AM.screens[r] || AM.screens['#/'];
   try {
     view.innerHTML = fn();
     wrapTables(view);
+    if (sameRoute && opened.size) view.querySelectorAll('details[data-g]').forEach(d => { if (opened.has(d.dataset.g)) d.open = true; });
     for (const [id, v] of keep) {
       const el = view.querySelector('[id="' + id.replace(/"/g, '\\"') + '"]');
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
@@ -1902,6 +1922,16 @@ function render() {
     }
     const after = AM.after[r];
     if (after) after();
+    if (sameRoute) {
+      if (scrolled.length) {
+        const boxes = [...view.querySelectorAll('.tbl-scroll, [id]')];
+        for (const s of scrolled) {
+          const el = s.key ? view.querySelector('[id="' + s.key.slice(1).replace(/"/g, '\\"') + '"]') : (boxes[s.i] && boxes[s.i].className === s.cls ? boxes[s.i] : null);
+          if (el) { el.scrollTop = s.top; el.scrollLeft = s.left; }
+        }
+      }
+      if (winY && Math.abs((window.scrollY || 0) - winY) > 1) window.scrollTo(0, winY);
+    }
   } catch (e) {
     view.innerHTML = `<div class="panel"><h2>Something went wrong on this screen</h2><p class="muted">${esc(e.message)}</p></div>`;
     console.error(e);

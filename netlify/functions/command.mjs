@@ -22,7 +22,7 @@ import { CUSTOMER_FIELDS, fieldIds } from "./_jtfields.mjs";
 import { qboGet, query as qboQuery } from "./_qbo.mjs";
 import { KEY as BANK_KEY, cleanActual, readBankAccounts, lastEntryDate, pickCash, addActual, clearActual } from "./_bank.mjs";
 import { readAging, readBalanceSheet, readProfitAndLoss, readPayableDetail, readVendorSpend } from "./_qboreports.mjs";
-import { buildFeed, localDay } from "./_derive.mjs";
+import { buildFeed, deriveShop, localDay } from "./_derive.mjs";
 import { pickTask, readInBatches } from "./_crew.mjs";
 import { CLAIM_TASK, CLAIM_TASK_RE, claimsFromTasks, membershipFor, decide, cleanClaimBody, claimText, releaseText } from "./_claims.mjs";
 import { closeoutCheck } from "./_closeout.mjs";
@@ -42,6 +42,7 @@ const ACCESS = {
   jobs: u => sees(u, "office", "field", "money"),
   money: u => sees(u, "money"),
   inventory: u => sees(u, "office", "field", "money"),
+  items: u => sees(u, "office", "field", "money"),
   buying: u => sees(u, "money"),
   people: u => sees(u, "office", "field"),
   crew: u => sees(u, "office", "field"),
@@ -51,7 +52,7 @@ const ACCESS = {
   closeout: u => sees(u, "office", "field"),
   claims: u => sees(u, "office", "field")
 };
-const TTL = { claims: 45000, jobs: 120000, money: 300000, inventory: 60000, buying: 300000, people: 3600000, billing: 1800000, field: 300000 };
+const TTL = { claims: 45000, jobs: 120000, money: 300000, inventory: 60000, items: 60000, buying: 300000, people: 3600000, billing: 1800000, field: 300000 };
 
 async function cached(s, part, build, fresh) {
   const key = "cc-cache-" + part;
@@ -238,6 +239,27 @@ async function readInventory(s) {
     if (doc && Array.isArray(doc.events)) events.push(...doc.events);
   }
   return buildFeed(catalog || {}, events);
+}
+
+/* Every item in the shop app, for each person's own Claude (Jen,
+   2026-11-25: her Claude could not see the inventory side at all, so it could
+   not build the mob sheet lines with the app's own names and units). Read
+   only. Materials carry the unit one scan takes; machines carry where they
+   are now. */
+const UNIT_WORDS = { EA: "each", PR: "pair", BX: "box", CS: "case", RL: "roll", PL: "pail", BALE: "bale", PKG: "pack", PK: "pack", GL: "jug", CT: "carton", BG: "bag" };
+async function readItems(s) {
+  const catalog = (await s.get("catalog", { type: "json" })) || {};
+  const idx = (await s.get("ev-index", { type: "json" })) || { months: [] };
+  const events = [];
+  for (const m of [...idx.months].sort()) { const doc = await s.get(m, { type: "json" }); if (doc && Array.isArray(doc.events)) events.push(...doc.events); }
+  const d = deriveShop(catalog, events);
+  const jobName = new Map((catalog.jobs || []).map(j => [j.id, (j.jobtreadNumber || j.number || "") + (j.name ? " " + j.name : "")]));
+  const whereNow = id => { const a = d.unitAt.get(id); if (!a || a.where === "shop") return "Shop"; if (a.where === "job") return "Out on " + (jobName.get(a.jobId) || "a job").trim(); return { repair: "Out for repair", missing: "Missing", writeoff: "Written off" }[a.where] || a.where; };
+  return {
+    materials: (catalog.stock || []).map(x => ({ tag: x.id, name: x.name || "", group: x.group || "", unit: UNIT_WORDS[String(x.uom || "").toUpperCase()] || String(x.uom || "each").toLowerCase(), unitCode: String(x.uom || "EA").toUpperCase(),
+      inOne: x.packSize || null, onHand: d.onHand.has(x.id) ? d.onHand.get(x.id) : null, min: x.min ?? null, max: x.max ?? null, shelf: x.shelf || "" })),
+    equipment: (catalog.units || []).map(u => ({ tag: u.id, name: u.name || "", group: u.group || "", unitNumber: u.unitNo || "", serial: u.serial || "", model: u.model || "", status: u.status || "Active", where: whereNow(u.id) }))
+  };
 }
 
 /* ------------------------------------------------------- changing a job
@@ -629,6 +651,7 @@ export default async (req) => {
     if (part === "jobs") return json(await cached(s, "jobs", () => readJobs(s), fresh));
     if (part === "money") return json(await withCash(s, await cached(s, "money", () => readMoney(), fresh)));
     if (part === "inventory") return json(await cached(s, "inventory", () => readInventory(s), fresh));
+    if (part === "items") return json(await cached(s, "items", () => readItems(s), fresh));
     if (part === "buying") return json(await cached(s, "buying", () => readBuying(s), fresh));
     if (part === "people") return json(await cached(s, "people", () => readPeople(s), fresh));
     if (part === "crew") return json(await readCrew(s, url.searchParams.get("ids")));
